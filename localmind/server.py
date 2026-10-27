@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .settings import ROOT, settings
@@ -18,6 +20,7 @@ from .devices import device_catalog
 log = logging.getLogger('localmind.voice')
 
 app = FastAPI(title='LocalMind', version='0.1.1', docs_url=None, redoc_url=None)
+app.mount('/assets', StaticFiles(directory=ROOT / 'static' / 'assets'), name='assets')
 
 class ChatRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)

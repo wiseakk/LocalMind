@@ -1,0 +1,24 @@
+/* Rich messages are opt-in for assistant output; user messages remain plain text. */
+.bubble.assistant { white-space: normal; min-width: 0; }
+.rendered-message { white-space: normal; overflow-wrap: anywhere; line-height: 1.62; }
+.rendered-message > :first-child { margin-top: 0; }
+.rendered-message > :last-child { margin-bottom: 0; }
+.rendered-message p { margin: .55em 0; }
+.rendered-message h1, .rendered-message h2, .rendered-message h3, .rendered-message h4 { line-height: 1.25; letter-spacing: -.025em; margin: .9em 0 .4em; }
+.rendered-message h1 { font-size: 1.35rem; }
+.rendered-message h2 { font-size: 1.2rem; }
+.rendered-message h3 { font-size: 1.08rem; }
+.rendered-message ul, .rendered-message ol { padding-left: 1.45em; margin: .55em 0; }
+.rendered-message li { padding-left: .1em; margin: .18em 0; }
+.rendered-message li > p { margin: .2em 0; }
+.rendered-message blockquote { border-left: 3px solid var(--accent, #83b8ff); margin: .8em 0; padding: .3em .8em; color: #b8c7dc; background: #1d293b; border-radius: 0 7px 7px 0; }
+.rendered-message code { color: #9be5d5; background: #0a1423; padding: .12em .4em; border-radius: .35em; font-family: Consolas, 'Cascadia Code', monospace; font-size: .92em; }
+.rendered-message pre { overflow-x: auto; max-width: 100%; margin: .75em 0; padding: 12px 14px; border: 1px solid #32425b; border-radius: 11px; background: #0a1423; }
+.rendered-message pre code { padding: 0; background: none; color: #c9dffa; white-space: pre; }
+.rendered-message a { color: #9dc6ff; text-decoration: underline; }
+.rendered-message table { border-collapse: collapse; display: block; overflow-x: auto; width: max-content; max-width: 100%; margin: .8em 0; }
+.rendered-message th, .rendered-message td { border: 1px solid #41526b; padding: 5px 9px; }
+.rendered-message th { background: #263754; }
+.rendered-message .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; padding: .6em 0; margin: .6em 0; }
+.rendered-message .katex { max-width: none; }
+.rendered-message hr { border: 0; border-top: 1px solid #3a4c64; margin: .9em 0; }

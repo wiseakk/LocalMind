@@ -21,6 +21,8 @@
     @media(max-width:810px){.grid{grid-template-columns:1fr}.thread{height:350px}aside{display:grid;grid-template-columns:1fr 1fr}.side-last{grid-column:1/-1}}
     @media(max-width:520px){aside{display:flex}.shell{padding:15px 12px 25px}.bubble{max-width:98%}.top{align-items:flex-start}.pill{font-size:11px}}
   </style>
+  <link rel="stylesheet" href="/assets/katex.min.css"/>
+  <link rel="stylesheet" href="/assets/localmind-rich.css"/>
 </head>
 <body><div class="shell">
   <div class="top">
@@ -49,6 +51,10 @@
   </div>
   <p class="warning">Прототип 0.1. В режиме DEMO физические устройства не управляются. Озвучка браузера может использовать системные/сетевые голоса; полную офлайн-озвучку добавим через Piper. Микрофон доступен на localhost или через защищённый HTTPS.</p>
 </div>
+<script src="/assets/marked.umd.js"></script>
+<script src="/assets/purify.min.js"></script>
+<script src="/assets/katex.min.js"></script>
+<script src="/assets/localmind-rich.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const history = []; let recording = null; let recordingStartedAt = 0;
@@ -56,7 +62,11 @@ $('key').value = sessionStorage.getItem('lm_key') || '';
 $('key').addEventListener('input', () => {sessionStorage.setItem('lm_key', $('key').value); refresh();});
 const headers = () => ({'X-LocalMind-Key':$('key').value});
 function bubble(text, who, meta=''){
-  const el=document.createElement('div');el.className='bubble '+who;el.textContent=text;
+  const el=document.createElement('div');el.className='bubble '+who;
+  if (who === 'assistant') {
+    const content = document.createElement('div');content.className='rendered-message';
+    renderLocalMindMessage(content, text);el.append(content);
+  } else {el.textContent=text;}
   if(meta){let m=document.createElement('div');m.className='meta';m.textContent=meta;el.append(m)}
   $('thread').append(el);$('thread').scrollTop=$('thread').scrollHeight;
 }
@@ -81,11 +91,12 @@ async function sendText(value){
   try{
     const r=await fetch('/api/chat',{method:'POST',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({text,history:history.slice(-8),actions_authorized:true})});
     if(!r.ok)throw Error(`HTTP ${r.status}: ${await r.text()}`);
-    const v=await r.json();bubble(v.answer,'assistant',`Движок: ${v.engine} · ${v.latency_ms} мс`);
+    const v=await r.json();const shown=friendlyRuleAnswer(v.answer,v.engine);
+    bubble(shown,'assistant',`Движок: ${v.engine} · ${v.latency_ms} мс`);
     history.push({role:'user',content:text},{role:'assistant',content:v.answer});
     if(history.length>16)history.splice(0,history.length-16);
     $('trace').textContent=`1. Ввод: ${text}\n2. Движок: ${v.engine}\n3. Действия: ${v.actions.length?v.actions.join('; '):'нет'}\n4. Ответ готов: ${v.latency_ms} мс`;
-    if($('speak').checked && 'speechSynthesis' in window){speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(v.answer);utterance.lang='ru-RU';speechSynthesis.speak(utterance)}
+    if($('speak').checked && 'speechSynthesis' in window){speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(shown);utterance.lang='ru-RU';speechSynthesis.speak(utterance)}
     await refresh();
   }catch(e){bubble('Ошибка: '+e.message,'assistant');$('trace').textContent='Ошибка запроса: '+e.message;}
   finally{$('send').disabled=false;$('message').focus()}

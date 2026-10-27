@@ -1,0 +1,14 @@
+{
+  "name": "localmind-rich-ui-assets",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Offline UI rendering dependencies for LocalMind",
+  "scripts": {
+    "vendor-ui": "node scripts/vendor_ui.mjs"
+  },
+  "dependencies": {
+    "dompurify": "3.4.10",
+    "katex": "0.16.22",
+    "marked": "15.0.12"
+  }
+}
