@@ -1,0 +1,19 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.wav
+*.webm
+
+benchmark_actual.csv
+# DevCrew handoff local artifacts
+*.log
+*.mp3
+*.ogg
+*.m4a
+*.sqlite3
+coverage.xml
+htmlcov/
+results/private/
+.DS_Store
