@@ -1,13 +1,14 @@
 """FastAPI server for browser terminal and future hardware satellite."""
 import hmac
+import ipaddress
 import logging
 import os
 import tempfile
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, File, Header, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from .settings import ROOT, settings
@@ -21,6 +22,26 @@ app = FastAPI(title='LocalMind', version='0.1.1', docs_url=None, redoc_url=None)
 class ChatRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     history: list[dict] = Field(default_factory=list, max_length=8)
+    # Calling /api/chat is the explicit submission boundary used by existing
+    # clients. Set false only when a client deliberately requests a preview.
+    actions_authorized: bool = True
+
+
+def is_loopback_address(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host.split('%', 1)[0]).is_loopback
+    except ValueError:
+        return False
+
+
+@app.middleware('http')
+async def loopback_only(request: Request, call_next):
+    """Defence in depth if somebody starts Uvicorn with an unsafe bind."""
+
+    client_host = request.client.host if request.client else ''
+    if not is_loopback_address(client_host):
+        return JSONResponse({'detail': 'LocalMind доступен только с этого компьютера'}, status_code=403)
+    return await call_next(request)
 
 def authorize(key: str | None):
     if settings.key and not hmac.compare_digest(key or '', settings.key):
@@ -47,7 +68,7 @@ def _voice_installed():
 @app.post('/api/chat')
 def chat(data: ChatRequest, x_localmind_key: Annotated[str | None, Header()] = None):
     authorize(x_localmind_key)
-    return reply(data.text, data.history)
+    return reply(data.text, data.history, actions_authorized=data.actions_authorized)
 
 @app.post('/api/transcribe')
 async def transcribe(audio: Annotated[UploadFile, File()],

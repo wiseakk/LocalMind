@@ -79,7 +79,7 @@ async function sendText(value){
   bubble(text,'me','Пользователь');$('message').value='';$('send').disabled=true;
   $('trace').textContent='1. Команда получена\n2. Определение маршрута...';
   try{
-    const r=await fetch('/api/chat',{method:'POST',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({text,history:history.slice(-8)})});
+    const r=await fetch('/api/chat',{method:'POST',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({text,history:history.slice(-8),actions_authorized:true})});
     if(!r.ok)throw Error(`HTTP ${r.status}: ${await r.text()}`);
     const v=await r.json();bubble(v.answer,'assistant',`Движок: ${v.engine} · ${v.latency_ms} мс`);
     history.push({role:'user',content:text},{role:'assistant',content:v.answer});
@@ -118,7 +118,12 @@ $('mic').addEventListener('click',async()=>{
       try{ $('trace').textContent='Распознавание голоса на ПК...';
         const response=await fetch('/api/transcribe',{method:'POST',headers:headers(),body:form});
         if(!response.ok)throw Error(`Распознавание: ${response.status} ${await response.text()}`);
-        const r=await response.json();if(r.text)sendText(r.text);else bubble('Речь не распознана.','assistant');
+        const r=await response.json();
+        if(r.text){
+          $('message').value=r.text;$('message').focus();$('message').select();
+          bubble(r.text,'me','Черновик распознавания — проверь и исправь перед отправкой');
+          $('trace').textContent='Речь распознана. Текст НЕ отправлен и действия НЕ выполнялись. Проверь поле ввода и нажми «Отправить».';
+        }else bubble('Речь не распознана.','assistant');
       }catch(e){bubble('Ошибка микрофона: '+e.message,'assistant')}
     };
     mr.start();

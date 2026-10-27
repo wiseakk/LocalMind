@@ -9,7 +9,9 @@ load_dotenv(ROOT / '.env')
 
 @dataclass(frozen=True)
 class Settings:
-    host: str = os.getenv('LOCALMIND_HOST', '127.0.0.1')
+    # This release is deliberately local-only. Do not make the listener host
+    # configurable until authenticated and encrypted pairing exists.
+    host: str = '127.0.0.1'
     port: int = int(os.getenv('LOCALMIND_PORT', '8765'))
     key: str = os.getenv('LOCALMIND_KEY', '')
     model: str = os.getenv('OLLAMA_MODEL', 'qwen3:4b')
