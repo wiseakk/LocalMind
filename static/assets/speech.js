@@ -8,6 +8,7 @@ class LocalMindSpeech {
   }
   start() {
     this.cancel();
+    if(this.enabled())window.LocalMindAudio?.unlock();
     this.session={epoch:this.epoch,token:crypto.randomUUID().replaceAll('-',''),buffer:'',texts:[],audio:[],controller:null,current:null,url:null,
       synthesizing:false,playing:false,paused:false,done:false,sequence:0,started:performance.now(),
       metrics:{first_synthesis_ms:null,first_playback_ms:null,chunks:0,cancelled:false}};
@@ -16,7 +17,7 @@ class LocalMindSpeech {
   cancel() {
     this.epoch++;
     const s=this.session;
-    if(s){s.metrics.cancelled=true;s.controller?.abort();s.current?.pause();
+    if(s){s.metrics.cancelled=true;s.controller?.abort();s.current?.pause();s.releaseAmplitude?.();
       if(s.synthesizing)this.cancelRequest?.(s.token).catch(()=>{});
       if(s.current){s.current.onended=null;s.current.onerror=null;}
       if(s.url)URL.revokeObjectURL(s.url);
@@ -83,8 +84,10 @@ class LocalMindSpeech {
     s.playing=true;
     const chunk=s.audio.shift();s.url=URL.createObjectURL(chunk.blob);
     const audio=new Audio(s.url);s.current=audio;
+    s.releaseAmplitude=window.LocalMindAudio?.start(audio,'speaking');
     const complete=()=>{
       if(!this.valid(s))return;
+      s.releaseAmplitude?.();s.releaseAmplitude=null;
       URL.revokeObjectURL(s.url);s.url=null;s.current=null;s.playing=false;
       this.pump(s);
     };

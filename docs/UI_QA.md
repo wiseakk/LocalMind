@@ -1,5 +1,11 @@
 ﻿# UI verification и ручная визуальная приёмка
 
+Актуальный этап Constellation:28 DOM-проверок и76 локальных/HTTP ресурсов
+проверены; браузерная визуальная приёмка остаётся заблокированной. Полный отчёт,
+before/after и команды: [CONSTELLATION_UI.md](CONSTELLATION_UI.md).
+
+## Архив предыдущей проверки
+
 В этом запуске реальный браузер не предоставлен CUA. `npx playwright install
 chromium` и `npm run test:ui` остановились с `spawn EPERM` до выполнения тестов.
 Нет подтверждённых скриншотов и наблюдений реального 100/125/140% zoom.
@@ -54,3 +60,13 @@ DEMO endpoint с отключённой генерацией. Внешние и�
 Записывайте браузер/версию, zoom, размер окна, пройденные пункты и дефекты.
 Настоящий browser zoom и CSS zoom в automated screenshot — разные проверки;
 оба полезны, один не следует выдавать за другой.
+
+## Constellation current run — 2026-10-28
+
+The preceding notes describe earlier UI runs. Current implementation, actual
+28 DOM checks,76 local/HTTP asset checks, before/after report, commands and
+browser/hardware blockers are documented in [CONSTELLATION_UI.md](CONSTELLATION_UI.md).
+Browser coverage is now in ui.spec.mjs and constellation.spec.mjs. Every
+non-origin HTTP(S) request is actively blocked before navigation. Real browser
+execution is still blocked by process/IPC permissions; no screenshot or visual
+approval is claimed. CSS scale tests are clearly distinct from actual zoom.

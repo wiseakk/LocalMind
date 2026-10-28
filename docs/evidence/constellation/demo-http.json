@@ -1,0 +1,13 @@
+{
+  "kind": "Real local DEMO API; no physical hardware and no LLM composition",
+  "engine": "rules",
+  "results": [
+    {
+      "action": "set_light",
+      "mode": "DEMO",
+      "success": true,
+      "execution_status": "observed",
+      "status_text": "ДЕМО: Настольная лампа — включена."
+    }
+  ]
+}

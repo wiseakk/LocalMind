@@ -1,5 +1,20 @@
 ﻿import { test, expect } from '@playwright/test';
 
+const externalAttempts=new WeakMap();
+test.beforeEach(async({page,baseURL})=>{
+  const attempts=[];externalAttempts.set(page,attempts);const origin=new URL(baseURL).origin;
+  await page.route('**/*',route=>{
+    const url=route.request().url();
+    if(/^https?:/.test(url)&&new URL(url).origin!==origin){attempts.push(url);return route.abort('blockedbyclient');}
+    return route.continue();
+  });
+});
+test.afterEach(async({page},testInfo)=>{
+  const attempts=externalAttempts.get(page)||[];
+  await testInfo.attach('external-request-attempts',{body:JSON.stringify(attempts),contentType:'application/json'});
+  expect(attempts).toEqual([]);
+});
+
 async function fakeInfo(page) {
   await page.route('**/api/info',route=>route.fulfill({json:{server_instance:'test-instance',demo:true,model:'qwen3:4b',devices:[{name:'Настольная лампа',state:false}],voice:{voices:[]}}}));
 }
@@ -46,7 +61,7 @@ test('real DEMO endpoint displays authoritative status with composer disabled',a
   await expect(page.locator('#send')).toBeEnabled();
 });
 
-for(const zoom of [1,1.25,1.4])test(`desktop layout ${zoom*100}% and keyboard dialogs`,async({page})=>{
+for(const zoom of [1,1.25,1.4])test(`desktop CSS scale stress ${zoom*100}% and keyboard dialogs`,async({page})=>{
   await fakeInfo(page);await page.goto('/');
   await page.evaluate(z=>document.documentElement.style.zoom=z,zoom);
   await expect(page.locator('#message')).toBeInViewport();await expect(page.locator('#mic')).toBeInViewport();

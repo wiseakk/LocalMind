@@ -8,6 +8,10 @@ let serverInstance = null;
 let conversationId = null;
 let inFlight = null;
 let pageClosing = false;
+let voiceEpoch = 0;
+let resetting = false;
+let appsRevision = 0;
+let transcriptController = null;
 const headers = () => ({'X-LocalMind-Key': $('key').value});
 const jsonHeaders = () => ({...headers(), 'Content-Type':'application/json'});
 function state(text) { $('composerState').textContent = text; }
@@ -24,7 +28,8 @@ async function checked(response) {
 function bubble(text, who) {
   const el = document.createElement('div'); el.className = 'bubble ' + who;
   if (who === 'assistant') {
-    const label = document.createElement('div'); label.className = 'assistant-label'; label.textContent = '◈  LOCALMIND';
+    const label = document.createElement('div'); label.className = 'assistant-label';
+    const mark=document.createElement('span');window.localmindIcon?.(mark,'constellation');label.append(mark,document.createTextNode('LOCALMIND'));
     const content = document.createElement('div'); content.className = 'rendered-message'; renderLocalMindMessage(content, text);
     el.append(label, content);
   } else el.textContent = text;
@@ -36,6 +41,7 @@ function pending(el) {
   const label = document.createElement('span'); label.textContent = 'Формулирую ответ…'; p.append(label); el.append(p);
 }
 function renderStatus(el, value) {
+  window.localmindScene?.toolResults(value.action_results);
   el.querySelectorAll('.action-chip').forEach(x=>x.remove());
   for (const result of value.action_results || []) {
     const chip = document.createElement('div'); chip.className = 'action-chip' + (result.success ? '' : ' error');
@@ -59,14 +65,16 @@ function renderStatus(el, value) {
 }
 function lock(value) {
   busy = value; $('send').disabled = value; $('mic').disabled = value || voiceBusy;
+  window.localmindScene?.setActivity(value?'generating':'idle');
   if($('interruptReply'))$('interruptReply').disabled=!value;
   document.querySelectorAll('[data-example]').forEach(b=>b.disabled=value);
 }
 async function sendText(value) {
-  if (busy || voiceBusy || recording) return;
+  if (busy || voiceBusy || recording || resetting) return;
   const text = value.trim(); if (!text) return;
   if (!serverInstance) { showError('Сначала восстановите подключение к серверу.'); return; }
   lock(true); stopSpeech(); $('welcome').hidden = true; $('draftReview').hidden = true;
+  window.localmindScene?.observeConversation();
   bubble(text, 'me'); $('message').value = '';
   const el = bubble('', 'assistant'); pending(el); state('Проверка намерения и разрешений…');
   // A retry after transport loss keeps this ID, so the server never repeats the action.
@@ -103,6 +111,7 @@ async function sendText(value) {
           if (item.type === 'delta' && Number.isInteger(item.sequence) && item.sequence > lastSequence && typeof item.text === 'string') {
             if (deltaText.length + item.text.length > 8192) throw Error('Ответ превышает допустимую длину');
             lastSequence = item.sequence; deltaText += item.text;
+            el.classList.add('streaming');
             if(!actionSpoken)speech.feed(item.text);
             el.querySelector('.pending')?.remove();
             renderLocalMindMessage(el.querySelector('.rendered-message'), deltaText); state('Отвечаю…'); scrollEnd();
@@ -144,18 +153,21 @@ async function sendText(value) {
     el.querySelector('.rendered-message').textContent=turn.cancelled?'Ответ прерван.':'Ответ недоступен: '+error.message;
     state(turn.cancelled?'Ответ прерван; выполненное действие не отменяется.':'Ошибка связи. Полученный результат действия сохранён выше.');
     await refresh();
-  } finally { inFlight=null;lock(false); $('message').focus(); scrollEnd(); }
+  } finally { el.classList.remove('streaming');inFlight=null;lock(false); $('message').focus(); scrollEnd(); }
 }
 async function refresh() {
   try {
     const info = await (await checked(await fetch('/api/info', {headers:headers()}))).json();
     if(serverInstance && serverInstance!==info.server_instance)conversationId=null;
     serverInstance=info.server_instance;
+    window.localmindScene?.observeInfo(info);
     $('status').textContent='Сервер подключён'; $('connectionDot').classList.add('online'); $('model').textContent=$('modelSelect').value || info.model;
     $('mode').textContent=info.demo?'DEMO':'REAL · HA';
+    $('mode').classList.toggle('real',!info.demo);
+    $('lampSuggestionCaption').textContent=info.demo?'Настольная лампа · DEMO / симуляция':'Настольная лампа · реальное устройство HA';
     $('demoNote').textContent=info.demo?'Симуляция — физические устройства не переключаются.':'REAL — запросы к разрешённым устройствам Home Assistant.';
     $('devices').replaceChildren();
-    for (const d of info.devices) {
+    for (const d of info.devices || []) {
       const row=document.createElement('div'); row.className='device';
       const name=document.createElement('span');name.textContent=d.name;
       const status=document.createElement('span'); status.className='device-state';
@@ -200,14 +212,17 @@ const speech = new LocalMindSpeech({
   voice:()=>$('ttsVoice')?.value || 'ru_RU-denis-medium',
   report:message=>{state(message);$('voiceStatus').textContent=message;}
 });
-function stopSpeech() {speech.cancel();$('pauseAudio').setAttribute('aria-pressed','false');$('pauseAudio').textContent='Ⅱ';}
+function stopSpeech() {speech.cancel();$('pauseAudio').setAttribute('aria-pressed','false');window.localmindIcon?.($('pauseAudio'),'pause');}
 function playSpeech(text) {speech.start();speech.feed(text,true);}
 async function loadApps(refreshCatalog=false) {
+  const revision=++appsRevision;
   $('appsList').textContent='Проверяем установленные приложения…'; $('rescan').disabled=true;
   try {
     const url=refreshCatalog?'/api/apps/refresh':'/api/apps';
     const data=await (await checked(await fetch(url,{method:refreshCatalog?'POST':'GET',headers:headers()}))).json();
+    if(revision!==appsRevision)return;
     const apps=data.apps; $('appsCount').textContent=apps.length; $('appsList').replaceChildren();
+    window.localmindScene?.observeApps(apps);
     if (!apps.length) $('appsList').textContent='Безопасные приложения не обнаружены. Доступны проверенные встроенные приложения.';
     for(const app of apps) {
       const row=document.createElement('div');row.className='app-entry';
@@ -216,10 +231,10 @@ async function loadApps(refreshCatalog=false) {
       const path=document.createElement('small');path.textContent=app.target;
       const choose=document.createElement('button');choose.className='text-button';choose.textContent='Подставить точное название';
       choose.addEventListener('click',()=>{$('message').value='Открой '+app.id;$('appsDialog').close();$('message').focus()});
-      check.addEventListener('change',async()=>{check.disabled=true;try{await checked(await fetch('/api/apps/permission',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({app_id:app.id,allowed:check.checked,fingerprint:app.fingerprint})}));}catch(error){check.checked=!check.checked;showError(error.message)}finally{check.disabled=false}});
+      check.addEventListener('change',async()=>{check.disabled=true;const grantRevision=++appsRevision;try{await checked(await fetch('/api/apps/permission',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({app_id:app.id,allowed:check.checked,fingerprint:app.fingerprint})}));app.allowed=check.checked;if(grantRevision===appsRevision)window.localmindScene?.observeApps(apps);else await loadApps();}catch(error){check.checked=!check.checked;showError(error.message)}finally{check.disabled=false;$('rescan').disabled=false;}});
       row.append(label,path,choose);$('appsList').append(row);
     }
-  } catch(error) {$('appsList').textContent=error.message;} finally{$('rescan').disabled=false;}
+  } catch(error) {if(revision===appsRevision)$('appsList').textContent=error.message;} finally{if(revision===appsRevision)$('rescan').disabled=false;}
 }
 function stageTranscript(r) {
   $('message').value=r.text; $('rawTranscript').textContent='Исходная расшифровка: '+r.text;
@@ -227,41 +242,45 @@ function stageTranscript(r) {
 }
 $('mic').addEventListener('click',async()=>{
   if (recording) {recording.stop(); return;}
-  if (busy || voiceBusy) return;
+  if (busy || voiceBusy || resetting) return;
   if(!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder){showError('Для микрофона нужен localhost и браузер с MediaRecorder. Текстовый ввод доступен.');return}
-  stopSpeech(); let stream;
+  stopSpeech();window.LocalMindAudio?.unlock();let stream,releaseAmplitude=()=>{};
+  const captureEpoch=voiceEpoch;
   voiceBusy=true; $('mic').disabled=true; $('send').disabled=true;
   try {
     stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    if(pageClosing){stream.getTracks().forEach(t=>t.stop());voiceBusy=false;return}
+    if(pageClosing||captureEpoch!==voiceEpoch){stream.getTracks().forEach(t=>t.stop());voiceBusy=false;$('mic').disabled=busy||resetting;$('send').disabled=busy||resetting;return}
     const type=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'].find(t=>MediaRecorder.isTypeSupported(t));
     if(!type)throw Error('Нет поддерживаемого аудиоформата');
     const mr=new MediaRecorder(stream,{mimeType:type}),chunks=[];let bytes=0;
-    recording=mr;recordingStartedAt=performance.now();$('mic').classList.add('active');$('mic').textContent='■';$('mic').setAttribute('aria-pressed','true');$('mic').setAttribute('aria-label','Остановить запись');$('send').disabled=true;
+    recording=mr;recordingStartedAt=performance.now();$('mic').classList.add('active');window.localmindIcon?.($('mic'),'stop');$('mic').setAttribute('aria-pressed','true');$('mic').setAttribute('aria-label','Остановить запись');$('send').disabled=true;
     voiceBusy=false;$('mic').disabled=false;
     state('Слушаю… Нажмите ■, чтобы закончить. Максимум 30 секунд.');
     mr.ondataavailable=e=>{if(e.data.size){bytes+=e.data.size;chunks.push(e.data);if(bytes>8*1024*1024 && mr.state==='recording')mr.stop()}};
     mr.onstop=async()=>{
-      clearTimeout(recordingTimer);recording=null;stream.getTracks().forEach(t=>t.stop());$('mic').classList.remove('active');$('mic').textContent='◉';$('mic').setAttribute('aria-pressed','false');$('mic').setAttribute('aria-label','Записать голос');
+      clearTimeout(recordingTimer);recording=null;releaseAmplitude();stream.getTracks().forEach(t=>t.stop());$('mic').classList.remove('active');window.localmindIcon?.($('mic'),'mic');$('mic').setAttribute('aria-pressed','false');$('mic').setAttribute('aria-label','Записать голос');
       voiceBusy=true;$('mic').disabled=true;
+      const controller=new AbortController();transcriptController=controller;
+      const timeout=setTimeout(()=>controller.abort(),90000);
       try {
-        if(pageClosing)return;
+        if(pageClosing||captureEpoch!==voiceEpoch)return;
         if(bytes>8*1024*1024)throw Error('Аудио превышает 8 МБ');
         if(bytes<1024 || performance.now()-recordingStartedAt<400)throw Error('Запись слишком короткая. Проверьте микрофон.');
         const ext=type.includes('mp4')?'mp4':type.includes('ogg')?'ogg':'webm';
         const form=new FormData();form.append('audio',new Blob(chunks,{type}),`voice.${ext}`);form.append('profile',$('voiceProfile').value);
-        state('Обрабатываю русскую речь на компьютере…');
-        const r=await(await checked(await fetch('/api/transcribe',{method:'POST',headers:headers(),body:form}))).json();
+        state('Обрабатываю русскую речь на компьютере…');window.localmindScene?.setActivity('transcribing');
+        const r=await(await checked(await fetch('/api/transcribe',{method:'POST',headers:headers(),body:form,signal:controller.signal}))).json();
+        if(pageClosing||captureEpoch!==voiceEpoch)return;
         stageTranscript(r); $('trace').textContent=JSON.stringify({stt:r},null,2);
-      }catch(error){state('Распознавание недоступно. Используйте текстовый ввод.');showError(error.message)}
-      finally{voiceBusy=false;$('mic').disabled=false;$('send').disabled=false;}
+      }catch(error){if(!pageClosing&&captureEpoch===voiceEpoch){state('Распознавание недоступно. Используйте текстовый ввод.');showError(error.message)}}
+      finally{clearTimeout(timeout);if(transcriptController===controller)transcriptController=null;voiceBusy=false;$('mic').disabled=busy||resetting;$('send').disabled=busy||resetting;window.localmindScene?.setActivity(busy?'generating':'idle');}
     };
     mr.onerror=()=>{if(mr.state!=='inactive')mr.stop();state('Ошибка записи микрофона')};
-    mr.start(500);recordingTimer=setTimeout(()=>{if(mr.state==='recording')mr.stop()},30000);
+    mr.start(500);window.localmindScene?.setActivity('listening');releaseAmplitude=window.LocalMindAudio?.start(stream,'listening')||(()=>{});recordingTimer=setTimeout(()=>{if(mr.state==='recording')mr.stop()},30000);
   } catch(error) {
-    stream?.getTracks().forEach(t=>t.stop());clearTimeout(recordingTimer);recording=null;voiceBusy=false;
-    $('mic').classList.remove('active');$('mic').textContent='◉';$('mic').setAttribute('aria-pressed','false');$('mic').setAttribute('aria-label','Записать голос');
-    $('mic').disabled=false;$('send').disabled=false;showError('Микрофон: '+error.message);
+    releaseAmplitude();window.localmindScene?.setActivity('idle');stream?.getTracks().forEach(t=>t.stop());clearTimeout(recordingTimer);recording=null;voiceBusy=false;
+    $('mic').classList.remove('active');window.localmindIcon?.($('mic'),'mic');$('mic').setAttribute('aria-pressed','false');$('mic').setAttribute('aria-label','Записать голос');
+    $('mic').disabled=busy||resetting;$('send').disabled=busy||resetting;if(!pageClosing&&captureEpoch===voiceEpoch)showError('Микрофон: '+error.message);
   }
 });
 $('form').addEventListener('submit',e=>{e.preventDefault();sendText($('message').value)});
@@ -272,11 +291,11 @@ $('settingsOpen').addEventListener('click',()=>{$('settingsDialog').showModal();
 $('modelSelect').addEventListener('change',()=>{$('model').textContent=$('modelSelect').value || 'Локальная модель'});
 $('appsOpen').addEventListener('click',()=>{$('appsDialog').showModal();loadApps();loadFilePermissions()});
 $('rescan').addEventListener('click',()=>loadApps(true));
-$('key').addEventListener('change',refresh);
+$('key').addEventListener('change',()=>{refresh();loadApps();});
 $('speak').addEventListener('change',()=>{if(!$('speak').checked)stopSpeech()});
 $('ttsVoice').addEventListener('change',()=>{stopSpeech();refresh()});
 $('stopAudio').addEventListener('click',()=>{stopSpeech();state('Озвучка остановлена')});
-$('pauseAudio').addEventListener('click',()=>{const paused=speech.pause();$('pauseAudio').setAttribute('aria-pressed',String(Boolean(paused)));$('pauseAudio').textContent=paused?'▶':'Ⅱ'});
+$('pauseAudio').addEventListener('click',()=>{const paused=speech.pause();$('pauseAudio').setAttribute('aria-pressed',String(Boolean(paused)));window.localmindIcon?.($('pauseAudio'),paused?'play':'pause');window.localmindScene?.redraw();});
 $('discardDraft').addEventListener('click',()=>{$('draftReview').hidden=true;$('message').value='';state('Готов к разговору')});
 function closeSidebar(){$('sidebar').classList.remove('open');$('sidebarToggle').setAttribute('aria-expanded','false');updateSidebarAccess()}
 const mobileLayout=window.matchMedia?.('(max-width:760px)');
@@ -286,7 +305,7 @@ mobileLayout?.addEventListener('change',updateSidebarAccess);updateSidebarAccess
 $('chatNav').addEventListener('click',()=>{closeSidebar();$('message').focus()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.querySelector('dialog[open]')){closeSidebar();if(mobileLayout?.matches)$('sidebarToggle').focus()}});
 $('diagnostics').addEventListener('click',async()=>{$('diagnostics').disabled=true;try{$('diagnosticResult').textContent=JSON.stringify(await(await checked(await fetch('/api/diagnostics',{headers:headers()}))).json(),null,2)}catch(e){$('diagnosticResult').textContent=e.message}finally{$('diagnostics').disabled=false}});
-window.addEventListener('pagehide',()=>{pageClosing=true;stopSpeech();if(recording?.state==='recording')recording.stop()});
+window.addEventListener('pagehide',()=>{pageClosing=true;voiceEpoch++;transcriptController?.abort();stopSpeech();if(recording?.state==='recording')recording.stop()});
 window.addEventListener('pageshow',()=>{pageClosing=false;if(!busy&&!voiceBusy&&!recording){$('send').disabled=false;$('mic').disabled=false}});
 refresh();
 
@@ -323,22 +342,25 @@ async function loadFilePermissions() {
   }catch(e){fileControls.textContent=e.message;}
 }
 const resetConversation=document.createElement('button');resetConversation.className='secondary';
-resetConversation.textContent='Начать новый разговор';
+resetConversation.id='resetConversation';resetConversation.textContent='Начать новый разговор';
 resetConversation.addEventListener('click',async()=>{
-  if(busy)return;
+  if(busy||resetConversation.disabled)return;
+  resetting=true;resetConversation.disabled=true;$('send').disabled=true;$('mic').disabled=true;
   try {
     if(conversationId)await checked(await fetch('/api/conversations/reset',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({conversation_id:conversationId})}));
-    conversationId=null;history.length=0;stopSpeech();$('thread').replaceChildren();$('welcome').hidden=false;state('Новый разговор');
-  }catch(e){showError(e.message)}
+    voiceEpoch++;transcriptController?.abort();if(recording?.state==='recording')recording.stop();
+    conversationId=null;history.length=0;stopSpeech();window.localmindAttachments?.reset();window.localmindScene?.reset();$('draftReview').hidden=true;$('message').value='';$('rawTranscript').textContent='';$('thread').replaceChildren();$('welcome').hidden=false;state('Новый разговор');
+  }catch(e){showError(e.message)}finally{resetting=false;resetConversation.disabled=false;$('send').disabled=busy||voiceBusy||Boolean(recording);$('mic').disabled=busy||voiceBusy;}
 });
-$('settingsDialog').append(resetConversation);
+$('sessionControls').append(resetConversation);
 const retrievalLabel=document.createElement('label');retrievalLabel.className='check';
 const retrievalCheck=document.createElement('input');retrievalCheck.type='checkbox';retrievalCheck.id='useLocalSources';
 const retrievalText=document.createElement('span');retrievalText.textContent='Использовать разрешённые локальные справочники';retrievalLabel.append(retrievalCheck,retrievalText);
-const sourcesControl=document.createElement('section');$('settingsDialog').append(retrievalLabel,sourcesControl);
+const sourcesControl=document.createElement('section');$('sourceSettings').append(retrievalLabel,sourcesControl);
 async function loadLocalSources() {
   try {
     const data=await(await checked(await fetch('/api/retrieval/sources',{headers:headers()}))).json();sourcesControl.replaceChildren();
+    window.localmindScene?.setSources(data.sources);
     if(!data.sources.length)sourcesControl.textContent='Добавьте свои UTF-8 .txt/.md источники в config/retrieval_sources.json. См. docs/NEXT_EVALUATION.md.';
     for(const source of data.sources) {
       const label=document.createElement('label');label.className='check';
@@ -346,6 +368,7 @@ async function loadLocalSources() {
       const text=document.createElement('span');text.textContent=source.label+' · '+(source.path || 'недоступен');label.append(check,text);sourcesControl.append(label);
       check.addEventListener('change',async()=>{check.disabled=true;try{
         await checked(await fetch('/api/retrieval/permission',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({source_id:source.id,allowed:check.checked,fingerprint:source.fingerprint})}));
+        source.allowed=check.checked;window.localmindScene?.setSources(data.sources);
       }catch(e){check.checked=!check.checked;showError(e.message)}finally{check.disabled=false}});
     }
   }catch(e){sourcesControl.textContent=e.message;}
@@ -359,3 +382,5 @@ interruptReply.addEventListener('click',async()=>{
   catch(e){state('Текст и звук остановлены; серверный результат проверь в диагностике.');}
 });
 $('stopAudio').before(interruptReply);
+// Read-only discovery never grants a capability or launches an application.
+loadApps();

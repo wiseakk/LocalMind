@@ -1,0 +1,462 @@
+{
+  "kind": "Real loopback HTTP asset check; not browser network or rendering evidence",
+  "csp": "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'none'; connect-src 'self'; media-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+  "assets": [
+    {
+      "path": "assets/app.css",
+      "status": 200,
+      "bytes": 23496,
+      "matches": true
+    },
+    {
+      "path": "assets/app.js",
+      "status": 200,
+      "bytes": 32805,
+      "matches": true
+    },
+    {
+      "path": "assets/attachments.js",
+      "status": 200,
+      "bytes": 10294,
+      "matches": true
+    },
+    {
+      "path": "assets/constellation.js",
+      "status": 200,
+      "bytes": 16280,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_AMS-Regular.ttf",
+      "status": 200,
+      "bytes": 63632,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_AMS-Regular.woff",
+      "status": 200,
+      "bytes": 33516,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_AMS-Regular.woff2",
+      "status": 200,
+      "bytes": 28076,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Caligraphic-Bold.ttf",
+      "status": 200,
+      "bytes": 12368,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Caligraphic-Bold.woff",
+      "status": 200,
+      "bytes": 7716,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Caligraphic-Bold.woff2",
+      "status": 200,
+      "bytes": 6912,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Caligraphic-Regular.ttf",
+      "status": 200,
+      "bytes": 12344,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Caligraphic-Regular.woff",
+      "status": 200,
+      "bytes": 7656,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Caligraphic-Regular.woff2",
+      "status": 200,
+      "bytes": 6908,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Fraktur-Bold.ttf",
+      "status": 200,
+      "bytes": 19584,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Fraktur-Bold.woff",
+      "status": 200,
+      "bytes": 13296,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Fraktur-Bold.woff2",
+      "status": 200,
+      "bytes": 11348,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Fraktur-Regular.ttf",
+      "status": 200,
+      "bytes": 19572,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Fraktur-Regular.woff",
+      "status": 200,
+      "bytes": 13208,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Fraktur-Regular.woff2",
+      "status": 200,
+      "bytes": 11316,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Main-Bold.ttf",
+      "status": 200,
+      "bytes": 51336,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Main-Bold.woff",
+      "status": 200,
+      "bytes": 29912,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Main-Bold.woff2",
+      "status": 200,
+      "bytes": 25324,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Main-BoldItalic.ttf",
+      "status": 200,
+      "bytes": 32968,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Main-BoldItalic.woff",
+      "status": 200,
+      "bytes": 19412,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Main-BoldItalic.woff2",
+      "status": 200,
+      "bytes": 16780,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Main-Italic.ttf",
+      "status": 200,
+      "bytes": 33580,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Main-Italic.woff",
+      "status": 200,
+      "bytes": 19676,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Main-Italic.woff2",
+      "status": 200,
+      "bytes": 16988,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Main-Regular.ttf",
+      "status": 200,
+      "bytes": 53580,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Main-Regular.woff",
+      "status": 200,
+      "bytes": 30772,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Main-Regular.woff2",
+      "status": 200,
+      "bytes": 26272,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Math-BoldItalic.ttf",
+      "status": 200,
+      "bytes": 31196,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Math-BoldItalic.woff",
+      "status": 200,
+      "bytes": 18668,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Math-BoldItalic.woff2",
+      "status": 200,
+      "bytes": 16400,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Math-Italic.ttf",
+      "status": 200,
+      "bytes": 31308,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Math-Italic.woff",
+      "status": 200,
+      "bytes": 18748,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Math-Italic.woff2",
+      "status": 200,
+      "bytes": 16440,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_SansSerif-Bold.ttf",
+      "status": 200,
+      "bytes": 24504,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_SansSerif-Bold.woff",
+      "status": 200,
+      "bytes": 14408,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_SansSerif-Bold.woff2",
+      "status": 200,
+      "bytes": 12216,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_SansSerif-Italic.ttf",
+      "status": 200,
+      "bytes": 22364,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_SansSerif-Italic.woff",
+      "status": 200,
+      "bytes": 14112,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_SansSerif-Italic.woff2",
+      "status": 200,
+      "bytes": 12028,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_SansSerif-Regular.ttf",
+      "status": 200,
+      "bytes": 19436,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_SansSerif-Regular.woff",
+      "status": 200,
+      "bytes": 12316,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_SansSerif-Regular.woff2",
+      "status": 200,
+      "bytes": 10344,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Script-Regular.ttf",
+      "status": 200,
+      "bytes": 16648,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Script-Regular.woff",
+      "status": 200,
+      "bytes": 10588,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Script-Regular.woff2",
+      "status": 200,
+      "bytes": 9644,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Size1-Regular.ttf",
+      "status": 200,
+      "bytes": 12228,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Size1-Regular.woff",
+      "status": 200,
+      "bytes": 6496,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Size1-Regular.woff2",
+      "status": 200,
+      "bytes": 5468,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Size2-Regular.ttf",
+      "status": 200,
+      "bytes": 11508,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Size2-Regular.woff",
+      "status": 200,
+      "bytes": 6188,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Size2-Regular.woff2",
+      "status": 200,
+      "bytes": 5208,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Size3-Regular.ttf",
+      "status": 200,
+      "bytes": 7588,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Size3-Regular.woff",
+      "status": 200,
+      "bytes": 4420,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Size3-Regular.woff2",
+      "status": 200,
+      "bytes": 3624,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Size4-Regular.ttf",
+      "status": 200,
+      "bytes": 10364,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Size4-Regular.woff",
+      "status": 200,
+      "bytes": 5980,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Size4-Regular.woff2",
+      "status": 200,
+      "bytes": 4928,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Typewriter-Regular.ttf",
+      "status": 200,
+      "bytes": 27556,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Typewriter-Regular.woff",
+      "status": 200,
+      "bytes": 16028,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/KaTeX_Typewriter-Regular.woff2",
+      "status": 200,
+      "bytes": 13568,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/Onest.ttf",
+      "status": 200,
+      "bytes": 193056,
+      "matches": true
+    },
+    {
+      "path": "assets/fonts/Unbounded.ttf",
+      "status": 200,
+      "bytes": 778272,
+      "matches": true
+    },
+    {
+      "path": "assets/icons.js",
+      "status": 200,
+      "bytes": 1794,
+      "matches": true
+    },
+    {
+      "path": "assets/interface.js",
+      "status": 200,
+      "bytes": 3053,
+      "matches": true
+    },
+    {
+      "path": "assets/katex.min.css",
+      "status": 200,
+      "bytes": 24794,
+      "matches": true
+    },
+    {
+      "path": "assets/katex.min.js",
+      "status": 200,
+      "bytes": 273081,
+      "matches": true
+    },
+    {
+      "path": "assets/localmind-rich.css",
+      "status": 200,
+      "bytes": 2105,
+      "matches": true
+    },
+    {
+      "path": "assets/localmind-rich.js",
+      "status": 200,
+      "bytes": 4089,
+      "matches": true
+    },
+    {
+      "path": "assets/marked.umd.js",
+      "status": 200,
+      "bytes": 75597,
+      "matches": true
+    },
+    {
+      "path": "assets/purify.min.js",
+      "status": 200,
+      "bytes": 29834,
+      "matches": true
+    },
+    {
+      "path": "assets/speech.js",
+      "status": 200,
+      "bytes": 5439,
+      "matches": true
+    },
+    {
+      "path": "index.html",
+      "status": 200,
+      "bytes": 17778,
+      "matches": true
+    }
+  ]
+}

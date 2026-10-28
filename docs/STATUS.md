@@ -186,3 +186,28 @@ OVERHAUL_ACCEPTANCE.md.
 Git staging attempted in this invocation, but failed exactly:
 `fatal: Unable to create 'C:/Users/ExampleUser/Desktop/LocalMind_MVP_01/.git/worktrees/devcrew-LocalMind_MVP_01-20261028-161515-388f25de/index.lock': Permission denied`.
 Changes remain safely in this worktree; no commit, push, merge or publication.
+
+## 2026-10-28 — Constellation UI milestone (browser gate blocked)
+
+Implemented the Russian Constellation interface: compact rail, split dialogue /
+interactive Canvas, floating voice controls, tabbed settings, licensed local
+Cyrillic fonts/SVG controls and bounded attachment prototype. Backend files,
+API schemas, Windows controls and filesystem permissions are unchanged.
+File names are private by default; no file upload/context ingestion, persistent
+memory or arbitrary folder/device grant is implied. DEMO/REAL stays visible.
+
+Actual baseline and post-change Python suite:391 passed,35 subtests passed,
+one existing cache ACL warning. All seven module syntax checks and28 DOM
+behavior checks pass. 76 linked local resources resolve, and all76 were served
+successfully by the running loopback app with matching bytes and unchanged CSP.
+Independent test/review fixes were rerun. No unresolved scoped security issue.
+Evidence hashes, browser scenarios and limitations: docs/CONSTELLATION_UI.md.
+
+Browser verification cannot be reported as passed: Playwright worker/downloader
+spawn EPERM, independent Chromium IPC Access is denied, connected browser host
+unavailable, native Zen action rejected by automatic approval review. No actual
+screenshots/video, desktop/mobile visual approval, true100/125/140% zoom,
+blocked-external-HTTP browser evidence or local-generation performance trace.
+Windows microphone/speaker/GPU and real HA devices remain untested. No models
+installed; no merge, push, publication or unrelated backend work. Preserve the
+existing start_windows.ps1, offline demo, troubleshooting and40 defense answers.

@@ -104,3 +104,35 @@ The measured4B model still fails factual/practical regressions. Therefore the
 existing4B default is provisional compatibility only, not a quality recommendation.
 Keep the full acceptance explicitly incomplete rather than interpreting unit/DOM
 success as microphone, desktop-window or intelligence evidence.
+
+## 2026-10-28 — Constellation UI implementation milestone
+
+Use isolated DevCrew checkout based on localmind-next-wip; keep backend/API,
+filesystem grants and model integration intact. Choose bounded Canvas2D rather
+than WebGL/framework: max36 nodes,35 edges,1.6M canvas pixels, timed idle/active
+frames, offscreen/hidden suspension. Only observed session/catalog entities;
+no persistent-memory or reasoning simulation. Keep filename disclosure opt-in.
+Bundle licensed Cyrillic Onest/Unbounded and first-party rounded SVG controls.
+
+Attachment selection/paste/drop is browser-memory preparation only. No upload
+endpoint/context integration exists. Preview indexing/processing is labelled
+as a UI demonstration; no synthetic progress percentage. Size/MIME/raster
+header checks precede decoding. Canvas previews preserve img-src 'none'.
+Keep application discovery read-only; grants/fingerprints/PDF read-vs-open
+remain server-enforced. Arbitrary folders/device-group scopes stay explicitly
+unavailable. Keep a persistent actual DEMO/REAL badge and mode-aware lamp text.
+
+## 2026-10-28 — Constellation verification milestone
+
+Independent testing/review found and verified fixes for microphone/reset
+controls, stale STT errors, reset/send races, overlapping catalog grants,
+paused-audio activity/scheduling and stale tool details. Abort STT on reset/page
+exit; never retry tool requests with new identities. Keep reduced-motion and
+low-performance settings effective in JavaScript as well as CSS.
+
+Backend, syntax,28 DOM checks, local asset and real loopback asset checks pass.
+Browser worker launch is blocked by spawn EPERM; independent Chromium IPC also
+fails Access is denied. Native Zen access was denied by automatic review. Do
+not fabricate screenshots, real zoom, performance traces or hardware evidence.
+UI milestone remains pending browser gate; do not merge/integrate yet. Details,
+repeatable commands and before/after report: docs/CONSTELLATION_UI.md.
