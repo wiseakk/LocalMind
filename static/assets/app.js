@@ -1,10 +1,12 @@
-﻿/* First-party UI: execution status and generated commentary stay separate. */
+/* First-party UI: execution status and generated commentary stay separate. */
 'use strict';
 const $ = id => document.getElementById(id);
 const history = [];
 let busy = false, recording = null, recordingStartedAt = 0, recordingTimer = null;
-let speechAudio = null, speechUrl = null, speechEpoch = 0, voiceBusy = false;
+let voiceBusy = false;
 let serverInstance = null;
+let conversationId = null;
+let inFlight = null;
 let pageClosing = false;
 const headers = () => ({'X-LocalMind-Key': $('key').value});
 const jsonHeaders = () => ({...headers(), 'Content-Type':'application/json'});
@@ -40,12 +42,24 @@ function renderStatus(el, value) {
     const states = {process_created:'Запуск начат; ожидаем окно', already_running:result.observed_state==='visible_window'?'Окно приложения уже открыто':'Приложение уже работает в фоне', launch_pending:'Приложение ещё запускается', observed:'Состояние подтверждено', request_accepted:'Команда принята; состояние пока не подтверждено'};
     chip.textContent = (result.mode==='DEMO'?'ДЕМО · симуляция · ':'') + (result.success ? states[result.execution_status] || 'Проверка завершена' : 'Действие не выполнено');
     el.insertBefore(chip, el.querySelector('.rendered-message')); 
+    if(result.execution_status==='permission_required') {
+      const permission=document.createElement('button');permission.className='text-button';permission.textContent='Проверить разрешения файлов';
+      permission.addEventListener('click',()=>{$('appsDialog').showModal();loadFilePermissions()});chip.append(permission);
+    }
+    for(const window of result.data?.windows || []) {
+      const choose=document.createElement('button');choose.className='text-button';choose.textContent=`Выбрать: ${window.application} — ${window.title}`;
+      choose.addEventListener('click',async()=>{if(busy)return;try{
+        await checked(await fetch('/api/windows/select',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({conversation_id:conversationId,window_id:window.window_id})}));
+        state('Окно выбрано. Можно сказать «покажи это окно».');
+      }catch(e){showError(e.message)}});chip.append(choose);
+    }
   }
   if ((value.action_results || []).length) state('Результат получен. Ожидаем комментарий…');
   $('trace').textContent = JSON.stringify(value, null, 2); scrollEnd();
 }
 function lock(value) {
   busy = value; $('send').disabled = value; $('mic').disabled = value || voiceBusy;
+  if($('interruptReply'))$('interruptReply').disabled=!value;
   document.querySelectorAll('[data-example]').forEach(b=>b.disabled=value);
 }
 async function sendText(value) {
@@ -56,17 +70,22 @@ async function sendText(value) {
   bubble(text, 'me'); $('message').value = '';
   const el = bubble('', 'assistant'); pending(el); state('Проверка намерения и разрешений…');
   // A retry after transport loss keeps this ID, so the server never repeats the action.
-  const request = {request_id: crypto.randomUUID(), server_instance:serverInstance, text, history: history.slice(-8), actions_authorized:true,
+  const request = {request_id: crypto.randomUUID(), server_instance:serverInstance, conversation_id:conversationId, text, history: history.slice(-8), actions_authorized:true,
+    local_retrieval:Boolean($('useLocalSources')?.checked),
     response_length:$('responseLength').value, compose_actions:$('composeActions').checked,
     model:$('modelSelect').value || null, reasoning:$('reasoning').value,
     context_tokens:Number($('contextTokens').value),response_tokens:Number($('responseTokens').value),keep_alive_seconds:Number($('keepAlive').value)};
+  const turn={request_id:request.request_id,server_instance:request.server_instance,cancelled:false,controller:null};inFlight=turn;
   let finalValue = null;
   let deltaText = '', lastSequence = 0;
+  let actionSpoken = false;
   const sentAt = performance.now();
   const wallSentAt = Date.now();
+  speech.start();
   try {
     for (let attempt=0;attempt<2;attempt++) {
       const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),90000);
+      turn.controller=controller;
       try {
         const response = await checked(await fetch('/api/chat/stream', {method:'POST', headers:jsonHeaders(), body:JSON.stringify(request),signal:controller.signal}));
         const reader = response.body.getReader(), decoder = new TextDecoder(); let buffer='';
@@ -74,14 +93,21 @@ async function sendText(value) {
           if (!line.trim()) return;
           const item = JSON.parse(line);
           if (item.type === 'error') throw Error(item.detail || 'Ошибка обработки');
-          if (item.type === 'status') renderStatus(el, item.data);
+          if (item.type === 'status') {
+            if(item.data.conversation_id) conversationId=item.data.conversation_id;
+            renderStatus(el, item.data);
+            if(!actionSpoken && item.data.action_results?.length && item.data.answer) {
+              actionSpoken=true;speech.feed(item.data.speech_text || item.data.answer,true);
+            }
+          }
           if (item.type === 'delta' && Number.isInteger(item.sequence) && item.sequence > lastSequence && typeof item.text === 'string') {
             if (deltaText.length + item.text.length > 8192) throw Error('Ответ превышает допустимую длину');
             lastSequence = item.sequence; deltaText += item.text;
+            if(!actionSpoken)speech.feed(item.text);
             el.querySelector('.pending')?.remove();
             renderLocalMindMessage(el.querySelector('.rendered-message'), deltaText); state('Отвечаю…'); scrollEnd();
           }
-          if (item.type === 'final') { finalValue = item.data; renderStatus(el, item.data); }
+          if (item.type === 'final') { finalValue = item.data; if(item.data.conversation_id)conversationId=item.data.conversation_id; renderStatus(el, item.data); }
         }
         while (true) {
           const {value:chunk,done} = await reader.read();
@@ -94,11 +120,14 @@ async function sendText(value) {
         break;
       } catch (error) {
         // Never retry after sleep/stalled transport could outlive server deduplication.
-        if (attempt || Math.max(performance.now()-sentAt,Date.now()-wallSentAt) > 120000) throw error;
+        if (turn.cancelled || attempt || Math.max(performance.now()-sentAt,Date.now()-wallSentAt) > 120000) throw error;
         state('Восстанавливаем ответ без повторного действия…');
       } finally {clearTimeout(timeout);controller.abort();}
     }
     el.querySelector('.pending')?.remove(); renderLocalMindMessage(el.querySelector('.rendered-message'), finalValue.answer);
+    for(const source of finalValue.sources || []) {
+      const provenance=document.createElement('small');provenance.className='meta';provenance.textContent=`Локальная справка: ${source.filename}, строки ${source.line_start}–${source.line_end}`;el.append(provenance);
+    }
     const diagnostics = document.createElement('details'); diagnostics.className='message-diagnostics';
     const summary = document.createElement('summary'); summary.textContent='Диагностика ответа';
     const meta = document.createElement('pre'); meta.className='meta';
@@ -107,21 +136,20 @@ async function sendText(value) {
     diagnostics.append(summary,meta,raw); el.append(diagnostics); history.push({role:'user',content:text},{role:'assistant',content:finalValue.answer});
     if (history.length > 16) history.splice(0,history.length-16);
     state('Готов к разговору');
-    if ($('speak').checked) {
-      // Only final, server-validated prose reaches speech; never partial streams.
-      playSpeech(finalValue.answer);
-    }
+    if(!actionSpoken) speech.feed(deltaText ? '' : finalValue.answer,true);
     await refresh();
   } catch (error) {
+    stopSpeech();
     el.querySelector('.pending')?.remove();
-    el.querySelector('.rendered-message').textContent='Ответ недоступен: '+error.message;
-    state('Ошибка связи. Полученный результат действия сохранён выше.');
+    el.querySelector('.rendered-message').textContent=turn.cancelled?'Ответ прерван.':'Ответ недоступен: '+error.message;
+    state(turn.cancelled?'Ответ прерван; выполненное действие не отменяется.':'Ошибка связи. Полученный результат действия сохранён выше.');
     await refresh();
-  } finally { lock(false); $('message').focus(); scrollEnd(); }
+  } finally { inFlight=null;lock(false); $('message').focus(); scrollEnd(); }
 }
 async function refresh() {
   try {
     const info = await (await checked(await fetch('/api/info', {headers:headers()}))).json();
+    if(serverInstance && serverInstance!==info.server_instance)conversationId=null;
     serverInstance=info.server_instance;
     $('status').textContent='Сервер подключён'; $('connectionDot').classList.add('online'); $('model').textContent=$('modelSelect').value || info.model;
     $('mode').textContent=info.demo?'DEMO':'REAL · HA';
@@ -134,7 +162,8 @@ async function refresh() {
       status.textContent=info.demo?(d.state?'● Включена':'○ Выключена'):'HA · состояние не опрошено'; row.append(name,status); $('devices').append(row);
     }
     const voice=info.voice || {};
-    $('voiceStatus').textContent=voice.voices?.some(v=>v.ready) ? 'Piper и модель Denis готовы. Русская озвучка выполняется локально.' : 'Локальная озвучка требует Piper и модели Denis. См. docs/VOICE.md. Облачная озвучка не используется.';
+    const selectedVoice=voice.voices?.find(v=>v.id===($('ttsVoice').value || 'ru_RU-denis-medium'));
+    $('voiceStatus').textContent=selectedVoice?.ready ? 'Ресурсы выбранного голоса найдены. Синтез выполняется локально; облачная замена отключена.' : 'Выбранный голос требует установки. Piper: docs/VOICE.md; Silero/Chatterbox: docs/NEXT_VOICE.md. Облачная озвучка не используется.';
     if (voice.setup) $('voiceStatus').textContent += '\n'+voice.setup;
   } catch (error) { $('status').textContent=error.message; $('connectionDot').classList.remove('online'); }
 }
@@ -155,19 +184,24 @@ async function loadModels() {
     $('model').textContent=select.value || data.default;
   } catch(error) {$('modelStatus').textContent=error.message;}
 }
-function stopSpeech() {
-  speechEpoch++; if (speechAudio) {speechAudio.pause();speechAudio=null;}
-  if (speechUrl) {URL.revokeObjectURL(speechUrl);speechUrl=null;}
-}
-async function playSpeech(text) {
-  stopSpeech(); const epoch=speechEpoch;
-  try {
-    const response=await checked(await fetch('/api/tts',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({text:text.slice(0,1200)})}));
-    const blob=await response.blob(); if(epoch!==speechEpoch || !$('speak').checked) return;
-    speechUrl=URL.createObjectURL(blob);speechAudio=new Audio(speechUrl);
-    speechAudio.onended=()=>{if(epoch===speechEpoch)stopSpeech()}; await speechAudio.play();
-  } catch(error) {if(epoch===speechEpoch) state('Озвучка недоступна: '+error.message);}
-}
+const speech = new LocalMindSpeech({
+  request:async(text,voice,signal,generation_id)=>{
+    // A cancelled native worker needs a short bounded teardown. Retrying speech
+    // has no PC side effect; keep the generation token so retirement still wins.
+    for(let attempt=0;attempt<12;attempt++){
+      if(signal.aborted)throw Error('Озвучка прервана');
+      const response=await fetch('/api/tts',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({text,voice,generation_id}),signal});
+      if(response.status!==429 || attempt===11)return checked(response);
+      await new Promise(resolve=>setTimeout(resolve,200));
+    }
+  },
+  cancelRequest:async(generation_id)=>fetch('/api/tts/cancel',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({generation_id})}),
+  enabled:()=>$('speak').checked,
+  voice:()=>$('ttsVoice')?.value || 'ru_RU-denis-medium',
+  report:message=>{state(message);$('voiceStatus').textContent=message;}
+});
+function stopSpeech() {speech.cancel();$('pauseAudio').setAttribute('aria-pressed','false');$('pauseAudio').textContent='Ⅱ';}
+function playSpeech(text) {speech.start();speech.feed(text,true);}
 async function loadApps(refreshCatalog=false) {
   $('appsList').textContent='Проверяем установленные приложения…'; $('rescan').disabled=true;
   try {
@@ -234,13 +268,15 @@ $('form').addEventListener('submit',e=>{e.preventDefault();sendText($('message')
 $('message').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();sendText($('message').value)}});
 for(const b of document.querySelectorAll('[data-example]'))b.addEventListener('click',()=>sendText(b.dataset.example));
 for(const b of document.querySelectorAll('[data-close]'))b.addEventListener('click',()=>$(b.dataset.close).close());
-$('settingsOpen').addEventListener('click',()=>{$('settingsDialog').showModal();refresh();loadModels()});
+$('settingsOpen').addEventListener('click',()=>{$('settingsDialog').showModal();refresh();loadModels();loadLocalSources()});
 $('modelSelect').addEventListener('change',()=>{$('model').textContent=$('modelSelect').value || 'Локальная модель'});
-$('appsOpen').addEventListener('click',()=>{$('appsDialog').showModal();loadApps()});
+$('appsOpen').addEventListener('click',()=>{$('appsDialog').showModal();loadApps();loadFilePermissions()});
 $('rescan').addEventListener('click',()=>loadApps(true));
 $('key').addEventListener('change',refresh);
 $('speak').addEventListener('change',()=>{if(!$('speak').checked)stopSpeech()});
+$('ttsVoice').addEventListener('change',()=>{stopSpeech();refresh()});
 $('stopAudio').addEventListener('click',()=>{stopSpeech();state('Озвучка остановлена')});
+$('pauseAudio').addEventListener('click',()=>{const paused=speech.pause();$('pauseAudio').setAttribute('aria-pressed',String(Boolean(paused)));$('pauseAudio').textContent=paused?'▶':'Ⅱ'});
 $('discardDraft').addEventListener('click',()=>{$('draftReview').hidden=true;$('message').value='';state('Готов к разговору')});
 function closeSidebar(){$('sidebar').classList.remove('open');$('sidebarToggle').setAttribute('aria-expanded','false');updateSidebarAccess()}
 const mobileLayout=window.matchMedia?.('(max-width:760px)');
@@ -253,3 +289,73 @@ $('diagnostics').addEventListener('click',async()=>{$('diagnostics').disabled=tr
 window.addEventListener('pagehide',()=>{pageClosing=true;stopSpeech();if(recording?.state==='recording')recording.stop()});
 window.addEventListener('pageshow',()=>{pageClosing=false;if(!busy&&!voiceBusy&&!recording){$('send').disabled=false;$('mic').disabled=false}});
 refresh();
+
+// Permissions show server-resolved paths; no model/user path field is accepted.
+const fileControls=document.createElement('section');
+fileControls.id='filePermissions';fileControls.className='notice';
+$('appsDialog').append(fileControls);
+async function loadFilePermissions() {
+  fileControls.textContent='Проверяем доступ к Загрузкам…';
+  try {
+    const suffix=conversationId?'?conversation_id='+encodeURIComponent(conversationId):'';
+    const data=await(await checked(await fetch('/api/files'+suffix,{headers:headers()}))).json();
+    fileControls.replaceChildren();
+    const label=document.createElement('label');label.className='check';
+    const allow=document.createElement('input');allow.type='checkbox';allow.checked=data.folder.allowed;
+    const title=document.createElement('span');title.textContent='Разрешить чтение PDF в Загрузках (без вложенных папок)';label.append(allow,title);
+    const path=document.createElement('p');path.textContent=data.folder.path;
+    allow.addEventListener('change',async()=>{allow.disabled=true;try{
+      await checked(await fetch('/api/files/folder-permission',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({allowed:allow.checked,fingerprint:data.folder.fingerprint})}));
+      await loadFilePermissions();
+    }catch(e){showError(e.message);allow.checked=!allow.checked}finally{allow.disabled=false}});
+    fileControls.append(label,path);
+    if(data.selected) {
+      const selected=data.selected;
+      const detail=document.createElement('p');detail.textContent=`${selected.filename} · изменён ${selected.modified_at} · ${selected.path}`;
+      const openLabel=document.createElement('label');openLabel.className='check';
+      const open=document.createElement('input');open.type='checkbox';open.checked=selected.open_allowed;
+      const caption=document.createElement('span');caption.textContent='Разрешить Windows открыть именно этот PDF';openLabel.append(open,caption);
+      open.addEventListener('change',async()=>{open.disabled=true;try{
+        await checked(await fetch('/api/files/open-permission',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({conversation_id:conversationId,file_id:selected.file_id,allowed:open.checked})}));
+      }catch(e){open.checked=!open.checked;showError(e.message)}finally{open.disabled=false}});
+      fileControls.append(detail,openLabel);
+    }
+  }catch(e){fileControls.textContent=e.message;}
+}
+const resetConversation=document.createElement('button');resetConversation.className='secondary';
+resetConversation.textContent='Начать новый разговор';
+resetConversation.addEventListener('click',async()=>{
+  if(busy)return;
+  try {
+    if(conversationId)await checked(await fetch('/api/conversations/reset',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({conversation_id:conversationId})}));
+    conversationId=null;history.length=0;stopSpeech();$('thread').replaceChildren();$('welcome').hidden=false;state('Новый разговор');
+  }catch(e){showError(e.message)}
+});
+$('settingsDialog').append(resetConversation);
+const retrievalLabel=document.createElement('label');retrievalLabel.className='check';
+const retrievalCheck=document.createElement('input');retrievalCheck.type='checkbox';retrievalCheck.id='useLocalSources';
+const retrievalText=document.createElement('span');retrievalText.textContent='Использовать разрешённые локальные справочники';retrievalLabel.append(retrievalCheck,retrievalText);
+const sourcesControl=document.createElement('section');$('settingsDialog').append(retrievalLabel,sourcesControl);
+async function loadLocalSources() {
+  try {
+    const data=await(await checked(await fetch('/api/retrieval/sources',{headers:headers()}))).json();sourcesControl.replaceChildren();
+    if(!data.sources.length)sourcesControl.textContent='Добавьте свои UTF-8 .txt/.md источники в config/retrieval_sources.json. См. docs/NEXT_EVALUATION.md.';
+    for(const source of data.sources) {
+      const label=document.createElement('label');label.className='check';
+      const check=document.createElement('input');check.type='checkbox';check.checked=source.allowed;check.disabled=!source.available;
+      const text=document.createElement('span');text.textContent=source.label+' · '+(source.path || 'недоступен');label.append(check,text);sourcesControl.append(label);
+      check.addEventListener('change',async()=>{check.disabled=true;try{
+        await checked(await fetch('/api/retrieval/permission',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({source_id:source.id,allowed:check.checked,fingerprint:source.fingerprint})}));
+      }catch(e){check.checked=!check.checked;showError(e.message)}finally{check.disabled=false}});
+    }
+  }catch(e){sourcesControl.textContent=e.message;}
+}
+const interruptReply=document.createElement('button');interruptReply.id='interruptReply';interruptReply.className='text-button';
+interruptReply.textContent='Прервать ответ';interruptReply.disabled=true;
+interruptReply.addEventListener('click',async()=>{
+  const turn=inFlight;if(!turn)return;
+  turn.cancelled=true;turn.controller?.abort();stopSpeech();
+  try{await checked(await fetch('/api/chat/cancel',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({request_id:turn.request_id,server_instance:turn.server_instance})}));}
+  catch(e){state('Текст и звук остановлены; серверный результат проверь в диагностике.');}
+});
+$('stopAudio').before(interruptReply);

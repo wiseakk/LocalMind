@@ -1,0 +1,2 @@
+# Isolated Python 3.11 environment only; install torch CPU separately as documented.
+numpy==1.26.4

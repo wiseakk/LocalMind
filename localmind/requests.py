@@ -6,9 +6,10 @@ never automatically retry a request after restarting the server.
 """
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from threading import Lock, Condition
+from threading import Lock, Condition, Event
 import time
 import uuid
+from .generation import cancellation
 
 
 class RequestConflict(Exception):
@@ -28,9 +29,12 @@ class RequestEntry:
     deltas: list[str] = field(default_factory=list)
     delta_chars: int = 0
     changed: Condition = field(default_factory=Condition)
+    cancelled: Event = field(default_factory=Event)
 
     def publish(self, delta):
         with self.changed:
+            if self.cancelled.is_set():
+                raise ValueError('Generation cancelled')
             if not isinstance(delta, str) or not delta or self.delta_chars + len(delta) > 8192:
                 return
             self.deltas.append(delta)
@@ -57,6 +61,9 @@ class RequestStore:
             raise ValueError('Request store limits must be positive')
         self.capacity, self.workers, self.ttl = capacity, workers, ttl
         self._entries: dict[str, RequestEntry] = {}
+        # Bounded retired IDs are never silently reusable during this process.
+        # Once full, admission fails closed until a server restart/new instance.
+        self._retired: set[str] = set()
         self._lock = Lock()
         self._pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix='localmind-chat')
 
@@ -64,6 +71,10 @@ class RequestStore:
         key = request_id or uuid.uuid4().hex
         with self._lock:
             now = time.monotonic()
+            expired = {k for k, v in self._entries.items() if v.finished is not None and now - v.finished >= self.ttl}
+            if len(self._retired | expired) > 8192:
+                raise RequestBusy('Лимит идентификаторов исчерпан. Перезапусти сервер и отправь новый запрос.')
+            self._retired.update(expired)
             self._entries = {k: v for k, v in self._entries.items()
                              if v.finished is None or now - v.finished < self.ttl}
             if key in self._entries:
@@ -71,6 +82,8 @@ class RequestStore:
                 if entry.fingerprint != fingerprint:
                     raise RequestConflict('Этот идентификатор уже использован для другого запроса.')
                 return entry
+            if key in self._retired:
+                raise RequestConflict('Срок запроса истёк. Проверь результат вручную и отправь новый запрос с новым ID.')
             if len(self._entries) >= self.capacity:
                 # Never evict an unexpired ID: a delayed retry must not execute twice.
                 raise RequestBusy('Кэш запросов заполнен. Подожди несколько минут.')
@@ -81,6 +94,8 @@ class RequestStore:
             return entry
 
     def _run(self, entry, prepare, complete):
+        prepared, final = None, None
+        token = cancellation.set(entry.cancelled)
         try:
             prepared = prepare()
             prepared.on_delta = entry.publish
@@ -95,16 +110,33 @@ class RequestStore:
                 final['commentary_error'] = 'Не удалось сформировать комментарий. Результат проверки сохранён.'
                 if not final.get('action_results') and final.get('engine') == 'pending':
                     final.update(answer='Не удалось сформировать ответ локальной модели.', engine='offline-error')
+            if entry.cancelled.is_set():
+                final['cancelled'] = True
+                if not final.get('action_results'):
+                    final.update(answer='Ответ прерван.', engine='cancelled')
             entry.final.set_result(final)
         except Exception as exc:
             if not entry.initial.done():
                 entry.initial.set_exception(exc)
             entry.final.set_exception(exc)
         finally:
-            with entry.changed:
-                entry.changed.notify_all()
-            with self._lock:
-                entry.finished = time.monotonic()
+            try:
+                if prepared is not None and getattr(prepared, 'finish_turn', None):
+                    prepared.finish_turn(final)
+            finally:
+                cancellation.reset(token)
+                with entry.changed:
+                    entry.changed.notify_all()
+                with self._lock:
+                    entry.finished = time.monotonic()
+
+    def cancel(self, request_id):
+        with self._lock:
+            entry = self._entries.get(request_id)
+            if entry is None or entry.finished is not None:
+                return False
+            entry.cancelled.set()
+            return True
 
     def close(self):
         self._pool.shutdown(wait=True)

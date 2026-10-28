@@ -28,6 +28,13 @@ class GenerationSettings:
 
 effective_generation: ContextVar[GenerationSettings | None] = ContextVar('generation', default=None)
 text_delta = ContextVar('text_delta', default=None)
+cancellation = ContextVar('cancellation', default=None)
+
+
+def check_cancelled():
+    event = cancellation.get()
+    if event is not None and event.is_set():
+        raise ValueError('Generation cancelled')
 
 
 def defaults():

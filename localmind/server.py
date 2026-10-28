@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 from typing import Annotated, Literal
+from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
@@ -23,9 +24,24 @@ from .devices import device_catalog
 from .apps import catalog, AppError
 from .requests import RequestStore, RequestBusy, RequestConflict
 from .generation import GenerationSettings
+from .conversations import conversations, ConversationError
+from .file_access import file_access, FileAccessError
 from .voice import VoiceError, voice_status, transcribe_audio, synthesize_speech, MAX_UPLOAD_BYTES
 
-app = FastAPI(title='LocalMind', version='1.0.0', docs_url=None, redoc_url=None, openapi_url=None)
+@asynccontextmanager
+async def lifespan(app):
+    from .voice import warm_tts, shutdown_tts
+    from .window_tools import window_tools
+    warm_task = asyncio.create_task(asyncio.to_thread(warm_tts))
+    try:
+        yield
+    finally:
+        await asyncio.to_thread(shutdown_tts)
+        warm_task.cancel()
+        window_tools.close()
+
+
+app = FastAPI(title='LocalMind', version='1.0.0', docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 app.mount('/assets', StaticFiles(directory=ROOT / 'static' / 'assets'), name='assets')
 store = RequestStore()
 LOCAL_HOSTS = frozenset(('127.0.0.1', 'localhost', '::1'))
@@ -50,6 +66,24 @@ class ChatRequest(BaseModel):
     context_tokens: int = Field(default=4096, ge=1024, le=8192)
     response_tokens: int = Field(default=768, ge=64, le=2048)
     keep_alive_seconds: int = Field(default=300, ge=0, le=900)
+    conversation_id: str | None = Field(default=None, min_length=32, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
+    local_retrieval: bool = False
+
+class ConversationRequest(BaseModel):
+    conversation_id: str = Field(min_length=32, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
+
+class FolderPermissionRequest(BaseModel):
+    allowed: bool
+    fingerprint: str = Field(min_length=64, max_length=64)
+
+class FilePermissionRequest(ConversationRequest):
+    file_id: str = Field(min_length=20, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
+    allowed: bool
+
+class SourcePermissionRequest(BaseModel):
+    source_id: str = Field(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
+    allowed: bool
+    fingerprint: str | None = Field(default=None, min_length=64, max_length=64)
 
 class PermissionRequest(BaseModel):
     app_id: str = Field(min_length=1, max_length=100)
@@ -58,7 +92,18 @@ class PermissionRequest(BaseModel):
 
 class SpeechRequest(BaseModel):
     text: str = Field(min_length=1, max_length=1200)
-    voice: Literal['ru_RU-denis-medium'] = 'ru_RU-denis-medium'
+    voice: Literal['ru_RU-denis-medium', 'silero-v5_6-ru', 'chatterbox-v3-ru'] = 'ru_RU-denis-medium'
+    generation_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{32}$')
+
+class SpeechCancelRequest(BaseModel):
+    generation_id: str = Field(pattern=r'^[a-f0-9]{32}$')
+
+class ChatCancelRequest(BaseModel):
+    request_id: str = Field(min_length=8, max_length=80, pattern=r'^[a-zA-Z0-9_-]+$')
+    server_instance: str = Field(max_length=32)
+
+class WindowSelectionRequest(ConversationRequest):
+    window_id: str = Field(min_length=20, max_length=80, pattern=r'^win-[a-f0-9]{32}$')
 
 def is_loopback_address(host: str) -> bool:
     try:
@@ -153,9 +198,26 @@ def _entry(data: ChatRequest):
     payload['generation'] = generation.to_dict()
     payload.pop('request_id')
     fingerprint=hashlib.sha256(json.dumps(payload,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+    def prepare_turn():
+        # Client history remains accepted for wire compatibility, but is never
+        # used to establish memory, permissions, targets or outcomes.
+        conversation = conversations.acquire(data.conversation_id or conversations.create())
+        try:
+            prepared = prepare_reply(data.text, [], data.actions_authorized, data.response_length,
+                                     data.compose_actions, generation, conversation=conversation, local_retrieval=data.local_retrieval)
+            def finish(final):
+                try:
+                    conversation.remember(data.text, final or prepared.initial, prepared.reference)
+                finally:
+                    conversations.release(conversation)
+            prepared.finish_turn = finish
+            return prepared
+        except Exception:
+            conversations.release(conversation)
+            raise
     try:
         return store.begin(data.request_id, fingerprint,
-            lambda:prepare_reply(data.text,[m.model_dump() for m in data.history],data.actions_authorized,data.response_length,data.compose_actions,generation),
+            prepare_turn,
             complete_reply)
     except RequestConflict as exc:
         raise HTTPException(409,str(exc)) from exc
@@ -169,6 +231,110 @@ def chat(data:ChatRequest, x_localmind_key: Annotated[str | None, Header()] = No
         return _entry(data).final.result(timeout=90)
     except FutureTimeout as exc:
         raise HTTPException(504,'Ответ ещё обрабатывается. Повторите с тем же request_id.') from exc
+    except ConversationError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.post('/api/conversations/reset')
+def reset_conversation(data: ConversationRequest, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    try:
+        conversations.reset(data.conversation_id)
+        return {'ok': True}
+    except ConversationError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.post('/api/chat/cancel')
+def cancel_chat(data: ChatCancelRequest, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    if data.server_instance != SERVER_INSTANCE:
+        raise HTTPException(409, 'Сервер перезапущен. Старый запрос недоступен.')
+    return {'cancelled': store.cancel(data.request_id)}
+
+
+@app.post('/api/windows/select')
+def select_window(data: WindowSelectionRequest, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    from .capabilities import _windows
+    from .conversations import Reference
+    conversation = None
+    try:
+        conversation = conversations.acquire(data.conversation_id)
+        result = _windows().verify_selection(data.window_id)
+        if not result.success:
+            raise HTTPException(409, str(result))
+        conversation.references['window'] = Reference('window', data.window_id)
+        conversation.references['application'] = Reference('application', result.data['app_id'])
+        conversation.focus = 'window'
+        return result.to_dict()
+    except ConversationError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    finally:
+        if conversation:
+            conversations.release(conversation)
+
+
+@app.get('/api/files')
+def files(conversation_id: str | None = None, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    try:
+        folder = file_access.folder_info()
+        selected = None
+        if conversation_id:
+            conversation = conversations.acquire(conversation_id)
+            try:
+                ref = conversation.references.get('file')
+                if ref:
+                    selected = file_access.selected_info(conversation.id, ref.id)
+            finally:
+                conversations.release(conversation)
+        return {'folder': folder, 'selected': selected}
+    except (FileAccessError, ConversationError, OSError) as exc:
+        raise HTTPException(409, str(exc) if isinstance(exc, ValueError) else 'Папка недоступна.') from exc
+
+
+@app.get('/api/retrieval/sources')
+def retrieval_sources(x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    from .retrieval import retrieval
+    return {'sources': retrieval.entries()}
+
+
+@app.post('/api/retrieval/permission')
+def retrieval_permission(data: SourcePermissionRequest, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    from .retrieval import retrieval, RetrievalError
+    try:
+        retrieval.set_permission(data.source_id, data.allowed, data.fingerprint)
+        return {'ok': True}
+    except RetrievalError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.post('/api/files/folder-permission')
+def folder_permission(data: FolderPermissionRequest, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    try:
+        file_access.set_folder_permission(data.allowed, data.fingerprint)
+        return {'ok': True}
+    except (FileAccessError, OSError) as exc:
+        raise HTTPException(409, 'Папка недоступна или изменилась. Проверь разрешение повторно.') from exc
+
+
+@app.post('/api/files/open-permission')
+def file_permission(data: FilePermissionRequest, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    conversation = None
+    try:
+        conversation = conversations.acquire(data.conversation_id)
+        file_access.set_open_permission(conversation.id, data.file_id, data.allowed)
+        return {'ok': True}
+    except (FileAccessError, ConversationError, OSError) as exc:
+        raise HTTPException(409, 'Файл или разговор изменился. Выбери и разреши PDF повторно.') from exc
+    finally:
+        if conversation:
+            conversations.release(conversation)
 
 @app.post('/api/chat/stream')
 def chat_stream(data:ChatRequest, x_localmind_key: Annotated[str | None, Header()] = None):
@@ -231,9 +397,18 @@ async def transcribe(audio:Annotated[UploadFile,File()], profile:Annotated[str,F
 def tts(data:SpeechRequest,x_localmind_key:Annotated[str | None,Header()]=None):
     authorize(x_localmind_key)
     try:
-        return Response(synthesize_speech(data.text,data.voice),media_type='audio/wav')
+        wav = (synthesize_speech(data.text, data.voice, data.generation_id) if data.generation_id else
+               synthesize_speech(data.text, data.voice))
+        return Response(wav,media_type='audio/wav')
     except VoiceError as exc:
         raise HTTPException(exc.status_code,exc.detail) from exc
+
+@app.post('/api/tts/cancel')
+def cancel_speech(data: SpeechCancelRequest, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    from .voice import cancel_tts
+    cancel_tts(data.generation_id)
+    return {'ok': True}
 
 @app.get('/api/apps')
 def apps(x_localmind_key:Annotated[str | None,Header()]=None):

@@ -1,0 +1,682 @@
+{
+  "schema_version": 2,
+  "started_utc": "2026-10-28T14:24:42.307492+00:00",
+  "kind": "voice",
+  "rows": [
+    {
+      "voice": "ru_RU-denis-medium",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": 3497.918,
+      "first_response_ms": null,
+      "audio_duration_s": 17.531065759637187,
+      "real_time_factor": 0.1995268312810431,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20586917888,
+        "used_physical_bytes": 12821790720,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 773164,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "wall_ms": 3498.126,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20287512576,
+        "used_physical_bytes": 13121196032,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "iteration": 1,
+      "phase": "first_observed"
+    },
+    {
+      "voice": "ru_RU-denis-medium",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": 290.397,
+      "first_response_ms": null,
+      "audio_duration_s": 17.449795918367347,
+      "real_time_factor": 0.016641856521332335,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20287025152,
+        "used_physical_bytes": 13121683456,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 769580,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "wall_ms": 290.489,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20243189760,
+        "used_physical_bytes": 13165518848,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "iteration": 2,
+      "phase": "warm_observed"
+    },
+    {
+      "voice": "ru_RU-denis-medium",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": 307.711,
+      "first_response_ms": null,
+      "audio_duration_s": 17.22920634920635,
+      "real_time_factor": 0.017859847619398583,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20238995456,
+        "used_physical_bytes": 13169713152,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 759852,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "wall_ms": 307.997,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20224888832,
+        "used_physical_bytes": 13183819776,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "iteration": 3,
+      "phase": "warm_observed"
+    },
+    {
+      "voice": "ru_RU-denis-medium",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": 301.344,
+      "first_response_ms": null,
+      "audio_duration_s": 17.46140589569161,
+      "real_time_factor": 0.017257716921542553,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20227878912,
+        "used_physical_bytes": 13180829696,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 770092,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "wall_ms": 301.4,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20192014336,
+        "used_physical_bytes": 13216694272,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "iteration": 4,
+      "phase": "warm_observed"
+    },
+    {
+      "voice": "ru_RU-denis-medium",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": 284.817,
+      "first_response_ms": null,
+      "audio_duration_s": 17.29886621315193,
+      "real_time_factor": 0.016464489434773487,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20190052352,
+        "used_physical_bytes": 13218656256,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 762924,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "wall_ms": 285.002,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20227584000,
+        "used_physical_bytes": 13181124608,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 6, 616.92",
+        "stderr": ""
+      },
+      "iteration": 5,
+      "phase": "warm_observed"
+    },
+    {
+      "voice": "silero-v5_6-ru",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": null,
+      "first_response_ms": null,
+      "audio_duration_s": null,
+      "real_time_factor": null,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20231229440,
+        "used_physical_bytes": 13177479168,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 6, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 0,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "error": {
+        "type": "ValueError",
+        "detail": "VoiceError 503: Локальный голос Piper не установлен. Установите requirements-voice.txt и выполните python -m localmind.voice setup-tts. См. docs/VOICE.md."
+      },
+      "wall_ms": 0.117,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20225892352,
+        "used_physical_bytes": 13182816256,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 6, 616.92",
+        "stderr": ""
+      },
+      "iteration": 1,
+      "phase": "first_observed"
+    },
+    {
+      "voice": "silero-v5_6-ru",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": null,
+      "first_response_ms": null,
+      "audio_duration_s": null,
+      "real_time_factor": null,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20227317760,
+        "used_physical_bytes": 13181390848,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 6, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 0,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "error": {
+        "type": "ValueError",
+        "detail": "VoiceError 503: Локальный голос Piper не установлен. Установите requirements-voice.txt и выполните python -m localmind.voice setup-tts. См. docs/VOICE.md."
+      },
+      "wall_ms": 0.128,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20230492160,
+        "used_physical_bytes": 13178216448,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 6, 616.92",
+        "stderr": ""
+      },
+      "iteration": 2,
+      "phase": "warm_observed"
+    },
+    {
+      "voice": "silero-v5_6-ru",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": null,
+      "first_response_ms": null,
+      "audio_duration_s": null,
+      "real_time_factor": null,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20232060928,
+        "used_physical_bytes": 13176647680,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 6, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 0,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "error": {
+        "type": "ValueError",
+        "detail": "VoiceError 503: Локальный голос Piper не установлен. Установите requirements-voice.txt и выполните python -m localmind.voice setup-tts. См. docs/VOICE.md."
+      },
+      "wall_ms": 0.113,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20231843840,
+        "used_physical_bytes": 13176864768,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 6, 616.92",
+        "stderr": ""
+      },
+      "iteration": 3,
+      "phase": "warm_observed"
+    },
+    {
+      "voice": "silero-v5_6-ru",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": null,
+      "first_response_ms": null,
+      "audio_duration_s": null,
+      "real_time_factor": null,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20228259840,
+        "used_physical_bytes": 13180448768,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 6, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 0,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "error": {
+        "type": "ValueError",
+        "detail": "VoiceError 503: Локальный голос Piper не установлен. Установите requirements-voice.txt и выполните python -m localmind.voice setup-tts. См. docs/VOICE.md."
+      },
+      "wall_ms": 0.119,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20227010560,
+        "used_physical_bytes": 13181698048,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 6, 616.92",
+        "stderr": ""
+      },
+      "iteration": 4,
+      "phase": "warm_observed"
+    },
+    {
+      "voice": "silero-v5_6-ru",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": null,
+      "first_response_ms": null,
+      "audio_duration_s": null,
+      "real_time_factor": null,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20228960256,
+        "used_physical_bytes": 13179748352,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 0,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "error": {
+        "type": "ValueError",
+        "detail": "VoiceError 503: Локальный голос Piper не установлен. Установите requirements-voice.txt и выполните python -m localmind.voice setup-tts. См. docs/VOICE.md."
+      },
+      "wall_ms": 0.133,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20229853184,
+        "used_physical_bytes": 13178855424,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "iteration": 5,
+      "phase": "warm_observed"
+    },
+    {
+      "voice": "chatterbox-v3-ru",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": null,
+      "first_response_ms": null,
+      "audio_duration_s": null,
+      "real_time_factor": null,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20234006528,
+        "used_physical_bytes": 13174702080,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 0,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "error": {
+        "type": "ValueError",
+        "detail": "VoiceError 503: Локальный голос Piper не установлен. Установите requirements-voice.txt и выполните python -m localmind.voice setup-tts. См. docs/VOICE.md."
+      },
+      "wall_ms": 0.087,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20219617280,
+        "used_physical_bytes": 13189091328,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "iteration": 1,
+      "phase": "first_observed"
+    },
+    {
+      "voice": "chatterbox-v3-ru",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": null,
+      "first_response_ms": null,
+      "audio_duration_s": null,
+      "real_time_factor": null,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20222664704,
+        "used_physical_bytes": 13186043904,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 0,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "error": {
+        "type": "ValueError",
+        "detail": "VoiceError 503: Локальный голос Piper не установлен. Установите requirements-voice.txt и выполните python -m localmind.voice setup-tts. См. docs/VOICE.md."
+      },
+      "wall_ms": 0.076,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20225830912,
+        "used_physical_bytes": 13182877696,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "iteration": 2,
+      "phase": "warm_observed"
+    },
+    {
+      "voice": "chatterbox-v3-ru",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": null,
+      "first_response_ms": null,
+      "audio_duration_s": null,
+      "real_time_factor": null,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20232499200,
+        "used_physical_bytes": 13176209408,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 0,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "error": {
+        "type": "ValueError",
+        "detail": "VoiceError 503: Локальный голос Piper не установлен. Установите requirements-voice.txt и выполните python -m localmind.voice setup-tts. См. docs/VOICE.md."
+      },
+      "wall_ms": 0.081,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20223246336,
+        "used_physical_bytes": 13185462272,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "iteration": 3,
+      "phase": "warm_observed"
+    },
+    {
+      "voice": "chatterbox-v3-ru",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": null,
+      "first_response_ms": null,
+      "audio_duration_s": null,
+      "real_time_factor": null,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20226478080,
+        "used_physical_bytes": 13182230528,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 0,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "error": {
+        "type": "ValueError",
+        "detail": "VoiceError 503: Локальный голос Piper не установлен. Установите requirements-voice.txt и выполните python -m localmind.voice setup-tts. См. docs/VOICE.md."
+      },
+      "wall_ms": 0.087,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20229648384,
+        "used_physical_bytes": 13179060224,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "iteration": 4,
+      "phase": "warm_observed"
+    },
+    {
+      "voice": "chatterbox-v3-ru",
+      "text": "Привет! Python и C# — языки программирования. RSA использует открытый и закрытый ключи. Открой Obsidian, затем Steam. World of Warcraft — название игры. Вычислим: 17 умножить на 23 равно 391. Скидка 15 процентов.",
+      "synthesis_ms": null,
+      "first_response_ms": null,
+      "audio_duration_s": null,
+      "real_time_factor": null,
+      "first_audible_audio_ms": null,
+      "voice_total_ms": null,
+      "unavailable": "No browser playback or acoustic capture; HTTP bytes are not audible audio",
+      "ram_before": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20232867840,
+        "used_physical_bytes": 13175840768,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_before": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "audio_bytes": 0,
+      "transport": "direct local supervised worker; no HTTP or playback",
+      "error": {
+        "type": "ValueError",
+        "detail": "VoiceError 503: Локальный голос Piper не установлен. Установите requirements-voice.txt и выполните python -m localmind.voice setup-tts. См. docs/VOICE.md."
+      },
+      "wall_ms": 0.082,
+      "ram_after": {
+        "total_physical_bytes": 33408708608,
+        "available_physical_bytes": 20235751424,
+        "used_physical_bytes": 13172957184,
+        "scope": "whole system, not model allocation"
+      },
+      "gpu_after": {
+        "returncode": 0,
+        "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+        "stderr": ""
+      },
+      "iteration": 5,
+      "phase": "warm_observed"
+    }
+  ],
+  "environment": {
+    "ram": {
+      "total_physical_bytes": 33408708608,
+      "available_physical_bytes": 20594614272,
+      "used_physical_bytes": 12814094336,
+      "scope": "whole system, not model allocation"
+    },
+    "gpu": {
+      "returncode": 0,
+      "stdout": "NVIDIA GeForce RTX 4070, 12282, 1136, 7, 616.92",
+      "stderr": ""
+    }
+  },
+  "cold_semantics": "First sample is first call observed; no claim OS caches or worker were cleared",
+  "quality": {
+    "naturalness": null,
+    "pronunciation": null,
+    "review": "Listening required; no automatic quality claim"
+  },
+  "server_instance": null,
+  "summary": {
+    "attempts": 15,
+    "failures": 10,
+    "first_delta_ms": {
+      "n": 0,
+      "p50": null,
+      "p95": null
+    },
+    "first_response_ms": {
+      "n": 0,
+      "p50": null,
+      "p95": null
+    },
+    "synthesis_ms": {
+      "n": 5,
+      "p50": 301.344,
+      "p95": 3497.918
+    },
+    "wall_ms": {
+      "n": 15,
+      "p50": 0.119,
+      "p95": 3498.126
+    },
+    "real_time_factor": {
+      "n": 5,
+      "p50": 0.017257716921542553,
+      "p95": 0.1995268312810431
+    },
+    "first_browser_visible_text_ms": {
+      "n": 0,
+      "p50": null,
+      "p95": null
+    },
+    "first_audible_audio_ms": {
+      "n": 0,
+      "p50": null,
+      "p95": null
+    },
+    "voice_total_ms": {
+      "n": 0,
+      "p50": null,
+      "p95": null
+    }
+  },
+  "finished_utc": "2026-10-28T14:24:48.185190+00:00"
+}

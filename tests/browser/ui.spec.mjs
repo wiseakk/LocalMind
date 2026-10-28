@@ -58,6 +58,35 @@ for(const zoom of [1,1.25,1.4])test(`desktop layout ${zoom*100}% and keyboard di
   await page.screenshot({path:`test-results/desktop-${zoom}.png`,fullPage:true});
 });
 
+test('clause speech enters playback before final and interruption discards queued audio',async({page})=>{
+  await fakeInfo(page);await page.goto('/');
+  await page.evaluate(()=>{
+    const original=window.fetch;window.voiceCalls=[];window.played=[];window.paused=[];
+    window.Audio=class {constructor(url){this.url=url}async play(){window.played.push(this)}pause(){window.paused.push(this)}};
+    window.fetch=async(url,options)=>{
+      if(url==='/api/tts'){window.voiceCalls.push(JSON.parse(options.body));return new Response(new Blob(['mock local WAV']));}
+      if(url==='/api/tts/cancel')return Response.json({ok:true});
+      if(url==='/api/chat/stream')return new Response(new ReadableStream({start(controller){
+        controller.enqueue(new TextEncoder().encode(JSON.stringify({type:'status',data:{action_results:[]}})+'\n'));
+        controller.enqueue(new TextEncoder().encode(JSON.stringify({type:'delta',sequence:1,text:'Первая фраза уже готова для речи. '})+'\n'));
+        window.finishVoiceReply=()=>{
+          controller.enqueue(new TextEncoder().encode(JSON.stringify({type:'delta',sequence:2,text:'Вторая фраза продолжает ответ.'})+'\n'));
+          controller.enqueue(new TextEncoder().encode(JSON.stringify({type:'final',data:{answer:'Первая фраза уже готова для речи. Вторая фраза продолжает ответ.',engine:'test',action_results:[]}})+'\n'));controller.close();
+        };
+      }}));
+      return original(url,options);
+    };
+    document.querySelector('#speak').checked=true;sendText('Объясни это');
+  });
+  await expect.poll(()=>page.evaluate(()=>window.played.length)).toBe(1);
+  await expect(page.locator('#send')).toBeDisabled();
+  expect(await page.evaluate(()=>window.voiceCalls.length)).toBe(1);
+  await page.locator('#stopAudio').click();await page.evaluate(()=>window.finishVoiceReply());
+  await expect(page.locator('#send')).toBeEnabled();
+  expect(await page.evaluate(()=>window.played.length)).toBe(1);
+  expect(await page.evaluate(()=>window.paused.length)).toBe(1);
+});
+
 test('phone layout and reduced motion',async({page})=>{
   await fakeInfo(page);await page.setViewportSize({width:390,height:844});await page.emulateMedia({reducedMotion:'reduce'});await page.goto('/');
   await expect(page.locator('#mic')).toBeInViewport();

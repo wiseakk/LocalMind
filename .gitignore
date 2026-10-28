@@ -30,3 +30,5 @@ models/
 .voice-deps/
 .voice-real/
 .pip-cache/
+
+.voice-envs/

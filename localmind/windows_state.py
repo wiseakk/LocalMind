@@ -18,9 +18,20 @@ from .results import ActionResult
 
 
 @dataclass(frozen=True)
+class VerifiedWindow:
+    """Native identity, never a user/model supplied window title."""
+    hwnd: int
+    pid: int
+    created: int
+    thread_id: int
+    title: str = ''
+
+
+@dataclass(frozen=True)
 class ApplicationState:
     state: str  # visible_window, background, absent, unavailable
     processes: tuple[tuple[int, int], ...] = ()  # PID, creation FILETIME
+    windows: tuple[VerifiedWindow, ...] = ()
 
 
 class _WTSProcess(ctypes.Structure):
@@ -37,7 +48,7 @@ def inspect_application(target: Path) -> ApplicationState:
         return ApplicationState('unavailable')
 
 
-def _inspect_windows(target: Path) -> ApplicationState:
+def _inspect_windows(target: Path, on_verified=None) -> ApplicationState:
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
     security = ctypes.WinDLL('advapi32', use_last_error=True)
     terminal = ctypes.WinDLL('wtsapi32', use_last_error=True)
@@ -60,6 +71,7 @@ def _inspect_windows(target: Path) -> ApplicationState:
     user.EnumWindows.argtypes = [callback_type, w.LPARAM]
     user.IsWindowVisible.argtypes = [w.HWND]
     user.GetWindowThreadProcessId.argtypes = [w.HWND, ctypes.POINTER(w.DWORD)]
+    user.GetWindowTextW.argtypes = [w.HWND, w.LPWSTR, ctypes.c_int]
     session, token, needed = w.DWORD(), w.HANDLE(), w.DWORD()
     rows, count = ctypes.POINTER(_WTSProcess)(), w.DWORD()
     handles = []
@@ -141,13 +153,23 @@ def _inspect_windows(target: Path) -> ApplicationState:
         if not matching_pids:
             return ApplicationState('unavailable' if unknown else 'absent')
         visible = set()
+        windows = []
+        creation_by_pid = dict(identities)
 
         @callback_type
         def visit(hwnd, _):
             pid = w.DWORD()
-            if user.IsWindowVisible(hwnd) and user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid)):
+            thread_id = user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if user.IsWindowVisible(hwnd) and thread_id:
                 if pid.value in matching_pids:
                     visible.add(pid.value)
+                    if len(windows) < 128:
+                        title = ctypes.create_unicode_buffer(512)
+                        copied = user.GetWindowTextW(hwnd, title, len(title))
+                        display_title = title.value if isinstance(copied, int) and copied > 0 else ''
+                        display_title = display_title.encode('utf-8', errors='replace').decode('utf-8')
+                        windows.append(VerifiedWindow(int(hwnd), pid.value, creation_by_pid[pid.value],
+                                                      int(thread_id), display_title))
             return True
 
         if not user.EnumWindows(visit, 0):
@@ -162,8 +184,13 @@ def _inspect_windows(target: Path) -> ApplicationState:
                 live.add(pid)
         identities = [item for item in identities if item[0] in live]
         visible &= live
+        windows = tuple(item for item in windows if item.pid in live)
+        # Native process handles remain open through the operation. The caller
+        # must additionally validate its per-window marker before any mutation.
+        if on_verified is not None:
+            on_verified(user, windows)
         if visible:
-            return ApplicationState('visible_window', tuple(identities))
+            return ApplicationState('visible_window', tuple(identities), windows)
         if identities:
             return ApplicationState('background', tuple(identities))
         return ApplicationState('unavailable' if unknown else 'absent')

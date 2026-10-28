@@ -18,6 +18,8 @@ import time
 import wave
 
 from .settings import ROOT
+from .speech_text import normalize_speech
+from .speech_worker import worker as _speech_worker, SpeechWorkerError, CANDIDATES, candidate_ready
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_RECORDING_SECONDS = 30
@@ -32,7 +34,11 @@ PROFILES = {
     'gpu-quality': {'model': 'medium', 'device': 'cuda', 'compute_type': 'float16', 'label': 'GPU · точность'},
 }
 DEFAULT_VOICE = 'ru_RU-denis-medium'
-VOICES = {DEFAULT_VOICE: {'label': 'Денис · русский', 'dataset_license': 'CC0'}}
+VOICES = {
+    DEFAULT_VOICE: {'label': 'Денис · Piper · CPU', 'dataset_license': 'CC0', 'engine': 'piper'},
+    'silero-v5_6-ru': {'label': 'Silero v5_6_ru · CPU · экспериментальный', 'license': 'CC-BY-NC-SA-4.0', 'engine': 'silero'},
+    'chatterbox-v3-ru': {'label': 'Chatterbox Multilingual V3 · экспериментальный', 'license': 'MIT', 'engine': 'chatterbox'},
+}
 MODELS = ROOT / 'models'
 _operation = threading.BoundedSemaphore(1)
 _temporary_directory = tempfile.TemporaryDirectory
@@ -62,6 +68,8 @@ def _stt_ready(profile: str) -> bool:
 
 
 def _tts_ready(voice: str) -> bool:
+    if voice in CANDIDATES:
+        return candidate_ready(voice)
     directory = MODELS / 'piper'
     model, config = directory / (voice + '.onnx'), directory / (voice + '.onnx.json')
     try:
@@ -83,7 +91,7 @@ def voice_status() -> dict:
         'max_recording_seconds': MAX_RECORDING_SECONDS,
         'max_upload_bytes': MAX_UPLOAD_BYTES,
         'profiles': [{'id': key, **value, 'ready': stt_installed and _stt_ready(key)} for key, value in PROFILES.items()],
-        'voices': [{'id': key, **value, 'ready': tts_installed and _tts_ready(key)} for key, value in VOICES.items()],
+        'voices': [{'id': key, **value, 'ready': _tts_ready(key) and (key in CANDIDATES or tts_installed)} for key, value in VOICES.items()],
         'setup': 'См. docs/VOICE.md. Установите requirements-voice.txt и загрузите выбранную модель отдельно.',
         'local_only': True,
     }
@@ -151,14 +159,43 @@ def transcribe_audio(data: bytes, suffix: str, profile: str = 'balanced') -> dic
     return _run_worker('stt', profile, data, suffix.lower())[0]
 
 
-def synthesize_speech(text: str, voice: str = DEFAULT_VOICE) -> bytes:
+def synthesize_speech(text: str, voice: str = DEFAULT_VOICE, generation_id: str | None = None) -> bytes:
     if voice not in VOICES:
         raise VoiceError(422, 'Неизвестный локальный голос.')
     if not isinstance(text, str) or not text.strip() or len(text) > MAX_TTS_CHARACTERS:
         raise VoiceError(422, 'Для озвучивания нужен текст от 1 до 1200 символов.')
-    if not _installed('piper') or not _tts_ready(voice):
+    if voice in CANDIDATES and not _tts_ready(voice):
+        raise VoiceError(503, 'Выбранный локальный голос не установлен. Подготовьте отдельную среду и модель по docs/NEXT_VOICE.md или выберите Piper.')
+    if voice == DEFAULT_VOICE and (not _tts_ready(voice) or not _installed('piper')):
         raise VoiceError(503, 'Локальный голос Piper не установлен. Установите requirements-voice.txt и выполните python -m localmind.voice setup-tts. См. docs/VOICE.md.')
-    return _run_worker('tts', voice, text.encode('utf-8'), '.txt')[1]
+    spoken = normalize_speech(text)
+    if not spoken:
+        raise VoiceError(422, 'После подготовки для речи текст пуст.')
+    # Normalization can expand numbers/technical names; bound worker input too.
+    if len(spoken) > 2400:
+        raise VoiceError(422, 'Для озвучивания разбей текст на более короткие фразы.')
+    try:
+        return _speech_worker.synthesize(spoken, voice, generation_id)
+    except SpeechWorkerError as exc:
+        code = 429 if str(exc) == 'busy' else 504 if str(exc) == 'timeout' else 503
+        raise VoiceError(code, 'Локальная озвучка занята.' if code == 429 else 'Локальная озвучка недоступна или превысила время. Проверьте голос в docs/VOICE.md.') from exc
+
+
+def warm_tts():
+    """Optional startup warm-up, never download or make startup depend on TTS."""
+    if _installed('piper') and _tts_ready(DEFAULT_VOICE):
+        try:
+            _speech_worker.synthesize('Готов.', DEFAULT_VOICE)
+        except SpeechWorkerError:
+            pass
+
+
+def shutdown_tts():
+    _speech_worker.close()
+
+
+def cancel_tts(generation_id: str):
+    return _speech_worker.cancel(generation_id)
 
 
 def _decode_bounded(source: Path):

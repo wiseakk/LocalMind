@@ -13,6 +13,7 @@ class ActionResult:
     mode: str = 'REAL'
     duration_ms: int = 0
     status_text: str = ''
+    data: dict | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)

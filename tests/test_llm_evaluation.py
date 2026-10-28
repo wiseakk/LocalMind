@@ -131,3 +131,80 @@ def test_inference_retains_malformed_output_as_failed_run(monkeypatch):
     assert result['raw_content'] == '{"answer":'
     assert result['error']['type'] == 'JSONDecodeError'
     assert not result['objective']['passed']
+
+
+def test_next_corpus_has_real_russian_and_structured_tool_facts():
+    corpus = json.loads(evaluation.CORPUS.read_text(encoding='utf-8'))
+    cases = {case['id']: case for case in corpus['cases']}
+    assert len(cases) >= 66
+    assert cases['next-rsa-followup']['prompt'] == 'А кто его придумал?'
+    assert cases['next-window-ambiguity']['prompt'] == 'Закрой это окно.'
+    assert {'tool_facts', 'references', 'safety'} <= {case['category'] for case in cases.values()}
+    assert cases['next-capability-truth']['runtime_facts']['last_result']['success'] is True
+    messages = evaluation.messages_for(cases['next-capability-truth'], 'qwen3.5:4b')
+    assert any(m['role'] == 'system' and 'apps.focus_window' in m['content'] for m in messages)
+    evaluation.validate_candidate('qwen3.5:4b')
+
+
+def test_percentiles_do_not_treat_missing_metrics_or_failures_as_zero():
+    assert evaluation.distribution([None, 1, 2, 10, float('inf'), True]) == {'n': 3, 'p50': 2, 'p95': 10}
+    result = evaluation.summary([{'wall_ms': 10}, {'error': {'type': 'timeout'}, 'wall_ms': 100}])
+    assert result['attempts'] == 2 and result['failures'] == 1
+    assert result['first_audible_audio_ms'] == {'n': 0, 'p50': None, 'p95': None}
+
+
+def review_for(row, **changes):
+    item = {'case_id': row['case_id'], 'answer_sha256': evaluation.answer_digest(row),
+            'factual_correct': True, 'addresses_request': True, 'safe_and_truthful': True,
+            'naturalness': 2, 'reason': 'Matches the full stated rubric, with no invented observations.'}
+    item.update(changes)
+    return {'method': 'ai-assisted', 'reviewer': 'test reviewer', 'answers': [item]}
+
+
+def test_semantic_review_requires_exact_answer_binding_and_reasons():
+    row = {'case_id': 'rsa', 'answer': 'Ответ'}
+    ledger = review_for(row)
+    score = evaluation.semantic_review([row], ledger)
+    assert score['pass_rate'] == 1 and score['method'] == 'ai-assisted'
+    assert score['reviewed'] == 1
+    with pytest.raises(ValueError, match='retained answer'):
+        evaluation.semantic_review([dict(row, answer='Другой ответ')], ledger)
+    with pytest.raises(ValueError, match='reason'):
+        evaluation.semantic_review([row], review_for(row, reason=''))
+    with pytest.raises(ValueError, match='booleans'):
+        evaluation.semantic_review([row], review_for(row, factual_correct='true'))
+
+
+def test_partial_or_core_failure_review_cannot_promote_profiles():
+    row = {'case_id': 'rsa', 'answer': 'Ответ'}
+    entry = {'model': 'qwen3:4b', 'comparison': [row], 'cold_warm': []}
+    document = {'full_corpus': False, 'models': [entry]}
+    assert evaluation.select_profiles(document, {})['quality'] is None
+    document.update(full_corpus=True, comparison_case_ids=['rsa'], core_regression_ids=['rsa'])
+    result = evaluation.select_profiles(document, {'qwen3:4b': review_for(row, factual_correct=False)})
+    assert result['quality'] is None
+    assert 'core' in result['reasons'][0]
+
+
+def test_incomplete_stream_is_retained_as_failure_even_if_json_is_valid(monkeypatch):
+    monkeypatch.setattr(evaluation, 'gpu', lambda: {})
+    monkeypatch.setattr(evaluation, 'memory', lambda: {})
+    monkeypatch.setattr(evaluation, 'command', lambda args: {})
+    def respond(request):
+        if request.url.path == '/api/ps':
+            return httpx.Response(200, json={'models': []})
+        return httpx.Response(200, text=json.dumps({'message': {'content': '{"answer":"391"}'}}))
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        row = evaluation.infer(client, 'http://127.0.0.1:11434', 'qwen3:4b',
+                               {'id': 'x', 'category': 'mathematics', 'split': 'heldout', 'prompt': '?'})
+    assert row['error']['type'] == 'ValueError'
+    assert row['raw_first_token_ms'] is not None
+
+
+def test_stream_line_budget_applies_before_unterminated_line_buffering():
+    class Response:
+        def iter_bytes(self):
+            yield b'x' * 131073
+    import time
+    with pytest.raises(ValueError, match='Unterminated'):
+        list(evaluation.bounded_lines(Response(), time.perf_counter()))

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const {JSDOM} = require('jsdom');
 const html=fs.readFileSync('static/index.html','utf8').replace(/^\uFEFF/,'');
-const scripts=['marked.umd.js','purify.min.js','katex.min.js','localmind-rich.js','app.js'];
+const scripts=['marked.umd.js','purify.min.js','katex.min.js','localmind-rich.js','speech.js','app.js'];
 let passed=0;
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 function makeDom(fetcher) {
@@ -124,6 +124,55 @@ async function run(name,fn){await fn();passed++;console.log('PASS '+name)}
       d.querySelector('#speak').checked=false;d.querySelector('#speak').dispatchEvent(new w.Event('change'));
       resolveVoice(new Response(new Blob(['RIFFmock'])));await pause(20);assert.equal(audioCreated,0);
     }finally{dom.window.close()}
+  });
+  await run('speech starts before final; pause preserves order; replay does not repeat speech',async()=>{
+    let release,tts=[];const audios=[];
+    const dom=makeDom(async(url,options)=>{
+      if(url==='/api/info')return Response.json({server_instance:'test',devices:[],voice:{}});
+      if(url==='/api/tts'){tts.push(JSON.parse(options.body));return new Response(new Blob(['RIFFmock']));}
+      if(url==='/api/tts/cancel')return Response.json({ok:true});
+      if(url==='/api/chat/stream')return new Response(new ReadableStream({start(c){
+        c.enqueue(new TextEncoder().encode(JSON.stringify({type:'status',data:{action_results:[]}})+'\n'));
+        c.enqueue(new TextEncoder().encode(JSON.stringify({type:'delta',sequence:1,text:'Первое предложение достаточно длинное. '})+'\n'));
+        release=()=>{
+          // A replayed transport sequence must not feed the speech queue twice.
+          c.enqueue(new TextEncoder().encode(JSON.stringify({type:'delta',sequence:1,text:'Первое предложение достаточно длинное. '})+'\n'));
+          c.enqueue(new TextEncoder().encode(JSON.stringify({type:'delta',sequence:2,text:'Второе предложение тоже длинное.'})+'\n'));
+          c.enqueue(new TextEncoder().encode(JSON.stringify({type:'final',data:{answer:'Первое предложение достаточно длинное. Второе предложение тоже длинное.',engine:'ollama',action_results:[]}})+'\n'));c.close();
+        };
+      }}));
+      throw Error('unexpected '+url);
+    });
+    const w=dom.window,d=w.document;w.URL.createObjectURL=()=>`blob:local-${audios.length}`;w.URL.revokeObjectURL=()=>{};
+    w.Audio=class {constructor(){this.plays=0;this.pauses=0;audios.push(this)}async play(){this.plays++}pause(){this.pauses++}};
+    try{
+      await pause(10);d.querySelector('#speak').checked=true;
+      const sending=w.sendText('Расскажи что-нибудь');await pause(30);
+      assert.equal(tts.length,1);assert.equal(audios.length,1);assert.equal(audios[0].plays,1);
+      assert.equal(d.querySelector('#send').disabled,true);assert.ok(w.localmindVoiceMetrics.first_playback_ms!==null);
+      d.querySelector('#pauseAudio').click();assert.equal(audios[0].pauses,1);release();await sending;
+      assert.equal(tts.length,1);d.querySelector('#pauseAudio').click();await pause(10);assert.equal(audios[0].plays,2);
+      audios[0].onended();await pause(20);assert.equal(tts.length,2);assert.equal(audios.length,2);
+      assert.ok(tts[0].text.startsWith('Первое'));assert.ok(tts[1].text.startsWith('Второе'));
+      assert.equal(tts[0].generation_id,tts[1].generation_id);
+      d.querySelector('#stopAudio').click();assert.equal(audios[1].pauses,1);
+    }finally{dom.window.close()}
+  });
+  await run('interruption rejects late old audio and aborts its synthesis fetch',async()=>{
+    const requests=[],audios=[];
+    const dom=makeDom(async(url,options)=>{
+      if(url==='/api/tts')return new Promise(resolve=>requests.push({body:JSON.parse(options.body),signal:options.signal,resolve}));
+      return Response.json({server_instance:'test',devices:[],voice:{}});
+    });
+    const w=dom.window,d=w.document;w.URL.createObjectURL=()=>`blob:${audios.length}`;w.URL.revokeObjectURL=()=>{};
+    w.Audio=class {constructor(){audios.push(this)}async play(){}pause(){}};
+    try{
+      d.querySelector('#speak').checked=true;w.playSpeech('Предыдущая фраза.');await pause(5);
+      w.playSpeech('Новая фраза.');await pause(5);assert.equal(requests.length,2);assert.equal(requests[0].signal.aborted,true);
+      requests[0].resolve(new Response(new Blob(['old'])));await pause(5);assert.equal(audios.length,0);
+      requests[1].resolve(new Response(new Blob(['new'])));await pause(10);assert.equal(audios.length,1);
+      assert.notEqual(requests[0].body.generation_id,requests[1].body.generation_id);
+    }finally{w.stopSpeech();dom.window.close()}
   });
   console.log(`${passed} DOM behavior checks passed (not browser visual QA).`);
 })().catch(e=>{console.error(e);process.exitCode=1});
