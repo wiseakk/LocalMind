@@ -1,4 +1,5 @@
 import sys
+import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,10 +15,15 @@ from localmind.settings import settings
 class LocalMindTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.client = TestClient(server.app, client=('127.0.0.1', 50000))
+        cls.client = TestClient(server.app, base_url='http://127.0.0.1', client=('127.0.0.1', 50000))
 
     def setUp(self):
         devices._demo_states['desk_light'] = False
+        # This legacy suite exercises the deterministic fallback. The separate
+        # response suite verifies real composer inputs and accepted output.
+        composer = mock.patch.object(agent, '_compose_action', side_effect=ValueError('fallback fixture'))
+        composer.start()
+        self.addCleanup(composer.stop)
 
     def test_light_direct_rule_preserved(self):
         self.assertTrue(settings.demo)
@@ -75,9 +81,9 @@ class LocalMindTests(unittest.TestCase):
     def test_ollama_chat_preserved_without_executable_tools(self):
         observed = []
 
-        def fake(messages, tools):
+        def fake(messages, tools, **_options):
             observed.append((messages, tools))
-            return {'role': 'assistant', 'content': 'RSA — асимметричный криптоалгоритм.'}
+            return {'role': 'assistant', 'content': json.dumps({'answer': 'RSA — асимметричный криптоалгоритм.'})}
 
         with mock.patch.object(agent, 'ollama_chat', side_effect=fake):
             answer = agent.reply('Что такое RSA-шифрование?')
@@ -149,11 +155,11 @@ class LocalMindTests(unittest.TestCase):
         )
         observed = []
 
-        def fake(_messages, tools):
+        def fake(_messages, tools, **_options):
             observed.append(tools)
             return {
                 'role': 'assistant',
-                'content': 'Это только объяснение.',
+                'content': json.dumps({'answer': 'Это только объяснение.'}),
                 'tool_calls': [{
                     'function': {'name': 'open_app', 'arguments': {'app': 'notepad'}},
                 }],
@@ -244,9 +250,8 @@ class LocalMindTests(unittest.TestCase):
                 return [Segment()], {}
 
         fake_module = SimpleNamespace(WhisperModel=Whisper)
-        server.app.state.whisper = Whisper()
         with (
-            mock.patch.dict(sys.modules, {'faster_whisper': fake_module}),
+            mock.patch.object(server, 'transcribe_audio', return_value={'text':'Включи настольную лампу'}),
             mock.patch.object(server, 'reply', side_effect=AssertionError('must not execute')),
         ):
             response = self.client.post(
@@ -258,15 +263,16 @@ class LocalMindTests(unittest.TestCase):
 
     def test_voice_transcript_is_staged_for_review_not_auto_sent(self):
         html = Path('static/index.html').read_text(encoding='utf-8')
-        self.assertNotIn('sendText(r.text)', html)
-        self.assertIn("$('message').value=r.text", html)
+        script = Path('static/assets/app.js').read_text(encoding='utf-8')
+        self.assertNotIn('sendText(r.text)', script)
+        self.assertIn("$('message').value=r.text", script)
         self.assertIn('Текст НЕ отправлен', html)
 
     def test_remote_clients_are_rejected_and_loopback_clients_work(self):
-        remote = TestClient(server.app, client=('192.168.1.50', 50000))
+        remote = TestClient(server.app, base_url='http://127.0.0.1', client=('192.168.1.50', 50000))
         self.assertEqual(remote.get('/api/info').status_code, 403)
         self.assertEqual(self.client.get('/api/info').status_code, 200)
-        ipv6 = TestClient(server.app, client=('::1', 50000))
+        ipv6 = TestClient(server.app, base_url='http://[::1]', client=('::1', 50000))
         self.assertEqual(ipv6.get('/api/info').status_code, 200)
 
     def test_startup_is_fixed_to_ipv4_loopback(self):

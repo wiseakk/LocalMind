@@ -3,6 +3,8 @@
 No code supplied by a language model is ever executed here.
 """
 import httpx
+import time
+from .results import ActionResult
 from .settings import settings, DEVICES
 
 # Fake hardware in demo mode. State resets on server restart.
@@ -23,6 +25,7 @@ def find_device(text: str):
     return None
 
 def set_light(device_id: str, state: str):
+    started = time.monotonic()
     if device_id not in DEVICES:
         raise DeviceError('Устройство не разрешено в конфигурации')
     if DEVICES[device_id]['domain'] != 'light' or state not in ('on', 'off'):
@@ -30,7 +33,9 @@ def set_light(device_id: str, state: str):
 
     if settings.demo:
         _demo_states[device_id] = state == 'on'
-        return f"ДЕМО: {DEVICES[device_id]['name']} — {'включена' if state == 'on' else 'выключена'}."
+        return ActionResult(True, 'set_light', device_id, 'observed', state, mode='DEMO',
+                            duration_ms=round((time.monotonic() - started) * 1000),
+                            status_text=f"ДЕМО: {DEVICES[device_id]['name']} — {'включена' if state == 'on' else 'выключена'}.")
 
     if not settings.ha_url or not settings.ha_token:
         raise DeviceError('Нужны HOME_ASSISTANT_URL и HOME_ASSISTANT_TOKEN')
@@ -38,7 +43,7 @@ def set_light(device_id: str, state: str):
     # Action and entity are NOT supplied as arbitrary LLM-generated URLs.
     action = 'turn_on' if state == 'on' else 'turn_off'
     try:
-        with httpx.Client(timeout=8) as client:
+        with httpx.Client(timeout=8, trust_env=False) as client:
             response = client.post(
                 f'{settings.ha_url}/api/services/light/{action}',
                 headers={'Authorization': f'Bearer {settings.ha_token}'},
@@ -47,4 +52,6 @@ def set_light(device_id: str, state: str):
             response.raise_for_status()
     except httpx.HTTPError as exc:
         raise DeviceError('Home Assistant недоступен или отклонил команду') from exc
-    return f"Отправлена команда: {DEVICES[device_id]['name']} — {state}."
+    return ActionResult(True, 'set_light', device_id, 'request_accepted',
+                        duration_ms=round((time.monotonic() - started) * 1000),
+                        status_text=f"Home Assistant принял команду: {DEVICES[device_id]['name']} — {state}. Фактическое состояние не проверено.")

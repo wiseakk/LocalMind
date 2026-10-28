@@ -2,29 +2,13 @@
 (function () {
   'use strict';
 
-  let lastFriendly = -1;
-  const confirmations = ['Готово!', 'Есть!', 'Сделано!'];
-  function friendlyRuleAnswer(answer, engine) {
-    if (engine !== 'rules' || typeof answer !== 'string') return answer;
-    // Only celebrate confirmed successes, never a refusal/failed request.
-    const isSuccess = /^ДЕМО:\s*.+\s[—-]\s(?:включен[ао]?|выключен[ао]?)[.!]?\s*$/i.test(answer)
-      || /^Запущено приложение:\s*[^\r\n]+[.]?$/i.test(answer);
-    if (isSuccess) {
-      lastFriendly = (lastFriendly + 1) % confirmations.length;
-      return confirmations[lastFriendly] + '\n\n' + answer;
-    }
-    if (/^Команда содержит отрицание\./i.test(answer)) {
-      return 'Понял, ничего не трогаю.\n\n' + answer;
-    }
-    return answer;
-  }
-
   function hideMathInMarkdown(text) {
     const math = [];
     // Keep fenced/inline code untouched before extracting math.
-    const protectedCode = /(```[\s\S]*?```|`[^`\n]*`)/g;
+    const protectedCode = /(```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)/g;
     const segments = text.split(protectedCode);
-    const mathPattern = /\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\\\([\s\S]*?\\\)|(?<!\\)\$([^\r\n$]+?)\$/g;
+    // Single dollars remain literal, so currency and shell snippets stay intact.
+    const mathPattern = /\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|\\\([\s\S]*?\\\)/g;
     return {
       markup: segments.map((segment, index) => {
         if (index % 2 === 1) return segment;
@@ -56,11 +40,12 @@
       const html = parser.parse(prepared.markup, { gfm: true, breaks: true });
       target.innerHTML = purifier.sanitize(html, {
         USE_PROFILES: { html: true },
-        FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form'],
+        FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'img', 'video', 'audio', 'source', 'link', 'meta', 'input', 'button', 'textarea', 'select'],
         FORBID_ATTR: ['style'],
         ALLOW_DATA_ATTR: false,
       });
       for (const a of target.querySelectorAll('a[href]')) {
+        if (!/^https?:\/\//i.test(a.getAttribute('href'))) a.removeAttribute('href');
         a.target = '_blank';
         a.rel = 'noopener noreferrer';
       }
@@ -109,6 +94,5 @@
     }
   }
 
-  window.friendlyRuleAnswer = friendlyRuleAnswer;
   window.renderLocalMindMessage = renderLocalMindMessage;
 }());

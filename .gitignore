@@ -18,3 +18,15 @@ htmlcov/
 results/private/
 .DS_Store
 node_modules/
+.npm-cache/
+.browser-cache/
+.test-artifacts/
+.test-tmp-apps/
+.voice-test-temp/
+pytest-cache-files-*/
+test-results/
+playwright-report/
+models/
+.voice-deps/
+.voice-real/
+.pip-cache/

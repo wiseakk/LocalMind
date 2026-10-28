@@ -1,5 +1,9 @@
 # Архитектурные решения DevCrew
 
+## 2026-10-28 — M0 запуск и установка
+
+Обычный запуск не должен обращаться к сети для pip. `setup_windows.ps1` создаёт окружение и устанавливает зависимости явно; `start_windows.ps1` использует готовое окружение. `start.py` задаёт UTF-8 для redirected Windows stdout и отключает доверие proxy headers. Базовый тест-набор: 18 passed, 35 subtests; сервер реально стартовал на loopback.
+
 Пустой журнал для проверяемых design decisions. По каждому решению записывай:
 - дата/роль, проблема, варианты, почему выбран вариант, безопасность, измерение/тест.
 - важное ограничение и план отката.
@@ -15,3 +19,54 @@
 - **Решение по сети:** официальный старт всегда передаёт Uvicorn `127.0.0.1`; настройка bind-адреса удалена; middleware отклоняет не-loopback peer даже при альтернативном запуске ASGI-сервера.
 - **Откат:** вернуть предыдущую реализацию нельзя без повторного security review. Безопасное адресное закрытие или LAN можно добавить только отдельным milestone с реальным Windows window handle либо paired TLS/auth протоколом и новыми тестами.
 - **Проверка:** 18 unit/API/security тестов через stdlib `unittest` прошли; обязательный pytest-gate был попытан, но `pytest` в текущем venv отсутствует и не был скачан из-за заблокированной сети. Зависимость зафиксирована в `requirements-dev.txt`. Hardware/integration claims не делались.
+
+## 2026-10-28 — M1 execution и commentary
+
+Builder разделил prepare_reply/complete_reply. Immutable ActionResult отделяет
+DEMO observation от process_created/HA request_accepted. Composer tool-free,
+JSONschema с точными facts; ошибочная генерация сохраняет status. Shared RequestStore
+bounded128/four workers/TTL300s не вытесняет неистёкшие ID и не отменяется с клиентом.
+Browser retry связан с instance и120s wall/monotonic deadline. Никаких гарантий
+после restart/TTL без проверки состояния. Real Ollama/HTTP status2ms→final921ms
+подтвердил отдельные фазы, concurrent replay протестирован mocks. Новые commits
+не создаются: общий Git index вне разрешённого корня, Permission denied.
+
+## 2026-10-28 — M2 UI и offline rendering
+
+First-party app.js/app.css вынесены из HTML. Native dialog обеспечивает базовую
+focus boundary, mobile sidebar inert; motion transform/opacity и reduced-motion.
+Speech transcript остаётся draft. Статус адаптера и probabilistic commentary
+показаны отдельно. DOMPurify/KaTeX обновлены после audit и vendored с font assets;
+single-dollar literal, external media запрещены renderer+CSP, ссылки только по
+клику. DOM regression4 passed, rendered browser check blocked spawnEPERM;
+никакого утверждения о скриншотах. Отказ TTS говорит только trusted status.
+
+## 2026-10-28 — M3 voice
+
+Выбраны multilingual base/small/medium с явным download и local-only inference,
+CPU defaults. Native decode/model вынесен в killable child120s, одна операция,
+8MB/30s входа. Модель загружается каждый раз ради освобождения ресурсов после
+зависания. Фиксированный контейнер блокирует upload playlist. Piper Denis chosen
+с documented engine/voice licensing; browser speech fallback отсутствует.
+Реальные direct CPU/Piper smoke прошли на synthetic WAV, STT ошибся; prompt,
+overfit под фразу и бесполезный padding не подменяют результаты. Temp ACL sandbox
+возвращает safe503; системные ACL не ослабляются.17 voice tests passed.
+
+## 2026-10-28 — M4 каталог
+
+Discovery metadata считается недоверенной. Native COM только читает, Resolve не
+вызывается. Обнаружение отделено от разрешения: GUI PE known basenames only,
+никаких arguments/shells/URL/CLI. ID привязан к источнику; fingerprint включает
+exe; file guard/повторная валидация перед CreateProcess. Право session-only,
+обновление приложения отзывает его. Unique id alias разрешает одинаковые имена.
+26 tests и actual17 read-only candidates; actuallaunch pending. Закрытие refused.
+
+## 2026-10-28 — M5 тесты и границы отчётности
+
+Independent review исправил реальные race/timeout/grounding defects;12 cross-module
+adversarial tests добавлены. Request body admission4/deadline15s/size caps перед
+дорогим parsing; Host/Origin/peer/key до body. Тесты используют inheritance ACL
+только workspace scratch, production audio private. p50/p95 nearest-rank и WER/CER
+имеют явный denominator; failed processing не исчезает из отчёта.40 explanatory
+jury answers не заменяют real engineering experiments. Полная приёмка pending
+до hardware/normalvoice/browser; git write limitation записан, push/merge отсутствуют.
