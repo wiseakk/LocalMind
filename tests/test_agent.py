@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 import start
 from localmind import agent, devices, server
 from localmind.settings import settings
+from localmind.windows_state import LaunchCoordinator, ApplicationState
 
 
 class LocalMindTests(unittest.TestCase):
@@ -205,13 +206,13 @@ class LocalMindTests(unittest.TestCase):
         system_directory = agent._windows_system_directory()
         self.assertIsNotNone(system_directory)
         observed = []
-        with mock.patch.object(
+        with mock.patch.object(agent, 'launch_coordinator', LaunchCoordinator(inspector=lambda _: ApplicationState('absent'))), mock.patch.object(
             agent.subprocess,
             'Popen',
             side_effect=lambda argv, **options: observed.append((argv, options)) or object(),
         ):
-            self.assertIn('Запущено', agent.open_app('calculator'))
-            self.assertIn('Запущено', agent.open_app('notepad'))
+            self.assertEqual(agent.open_app('calculator').execution_status, 'process_created')
+            self.assertEqual(agent.open_app('notepad').execution_status, 'process_created')
         self.assertEqual(len(observed), 2)
         for argv, options in observed:
             self.assertEqual(len(argv), 1)

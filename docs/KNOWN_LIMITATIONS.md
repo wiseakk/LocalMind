@@ -68,3 +68,18 @@
 offline-сценарий из README, проверьте реальные программы/микрофон/Piper/GPU/HA
 отдельными пунктами и запишите наблюдения. Недоступное устройство помечается
 «не проверено», а не «работает по результатам mock».
+
+## 2026-10-28 current overhaul limitations (supersedes readiness assumptions)
+
+Three-model comparison and a measured replacement default remain incomplete;
+qwen3:4b still has retained factual/contextual errors. Two required asset pulls
+stall and roll back chunks despite reconnect. No comparative improvement claim
+is made. This checkout currently reports STT/Piper assets not ready; historical
+synthetic tests in another environment do not establish current microphone or
+playback readiness. GPU LLM and a CPU LLM fallback were measured here, but GPU
+STT coexistence was not. Playwright spawn EPERM and unavailable/unapproved
+browser access block actual visual and browser-first-text checks. Native
+EnumWindows is unavailable in this sandbox; inspection uncertainty suppresses
+launches. Broker child/UWP windows are not inferred from a launcher process.
+Conservative commentary checks cannot formally prove arbitrary prose. Full
+current evidence and reproduction: OVERHAUL_ACCEPTANCE.md, MODEL_COMPARISON.md.

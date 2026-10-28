@@ -42,3 +42,11 @@
   объяснение архитектуры, 40 вопросов для защиты, протокол опытов и ограничения.
 - Реальное качество STT/TTS, Windows-микрофон, GPU, HA, пять живых запусков
   приложений и визуальная приёмка не объявляются подтверждёнными mock-тестами.
+
+## 2026-10-28 — intelligence/UX/performance overhaul implementation
+
+Added Russian token intent grammar, verified Windows state inspection and
+application launch coordination, request-local local-model/reasoning controls,
+bounded conversation streaming/replay, validated action commentary before
+speech/display, collapsed diagnostics, model corpus/evaluator and retained actual
+measurements. Full acceptance remains incomplete; see OVERHAUL_ACCEPTANCE.md.

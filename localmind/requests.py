@@ -6,7 +6,7 @@ never automatically retry a request after restarting the server.
 """
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
-from threading import Lock
+from threading import Lock, Condition
 import time
 import uuid
 
@@ -25,6 +25,23 @@ class RequestEntry:
     initial: Future = field(default_factory=Future)
     final: Future = field(default_factory=Future)
     finished: float | None = None
+    deltas: list[str] = field(default_factory=list)
+    delta_chars: int = 0
+    changed: Condition = field(default_factory=Condition)
+
+    def publish(self, delta):
+        with self.changed:
+            if not isinstance(delta, str) or not delta or self.delta_chars + len(delta) > 8192:
+                return
+            self.deltas.append(delta)
+            self.delta_chars += len(delta)
+            self.changed.notify_all()
+
+    def read_deltas(self, offset):
+        with self.changed:
+            if len(self.deltas) == offset and not self.final.done():
+                self.changed.wait(timeout=1)
+            return self.deltas[offset:], self.final.done()
 
     def __post_init__(self):
         # An HTTP task may cancel an asyncio wrapper when its client leaves.
@@ -66,6 +83,7 @@ class RequestStore:
     def _run(self, entry, prepare, complete):
         try:
             prepared = prepare()
+            prepared.on_delta = entry.publish
             entry.initial.set_result(prepared.initial)
             try:
                 final = complete(prepared)
@@ -83,6 +101,8 @@ class RequestStore:
                 entry.initial.set_exception(exc)
             entry.final.set_exception(exc)
         finally:
+            with entry.changed:
+                entry.changed.notify_all()
             with self._lock:
                 entry.finished = time.monotonic()
 

@@ -67,6 +67,54 @@ async function run(name,fn){await fn();passed++;console.log('PASS '+name)}
       assert.ok(d.querySelector('#errorText').textContent.includes('test start failed'));
     }finally{dom.window.close()}
   });
+  await run('model controls snapshot settings; live Markdown deltas and collapsed diagnostics',async()=>{
+    let submitted,release;
+    const dom=makeDom(async(url,options)=>{
+      if(url==='/api/info')return Response.json({server_instance:'test',demo:true,model:'qwen3:4b',devices:[],voice:{}});
+      if(url==='/api/models')return Response.json({models:[{name:'qwen3:4b'},{name:'qwen3:8b'}],default:'qwen3:4b'});
+      if(url==='/api/chat/stream'){
+        submitted=JSON.parse(options.body);
+        return new Response(new ReadableStream({start(c){
+          c.enqueue(new TextEncoder().encode(JSON.stringify({type:'status',data:{action_results:[]}})+'\n'));
+          c.enqueue(new TextEncoder().encode(JSON.stringify({type:'delta',sequence:1,text:'**Начало** ответа с формулой \\(x^2\\). '})+'\n'));
+          release=()=>{c.enqueue(new TextEncoder().encode(JSON.stringify({type:'final',data:{answer:'**Начало** ответа с формулой \\(x^2\\). Конец.',engine:'ollama',action_results:[]}})+'\n'));c.close()};
+        }}));
+      }
+      throw Error('unexpected '+url);
+    });
+    const w=dom.window,d=w.document;
+    try{
+      await pause(10);d.querySelector('#settingsOpen').click();await pause(10);
+      d.querySelector('#modelSelect').value='qwen3:8b';d.querySelector('#reasoning').value='on';
+      d.querySelector('#responseTokens').value='1536';d.querySelector('#settingsDialog').close();
+      const sending=w.sendText('Объясни формулу');await pause(20);
+      assert.equal(submitted.model,'qwen3:8b');assert.equal(submitted.reasoning,'on');assert.equal(submitted.response_tokens,1536);
+      assert.ok(d.querySelector('.rendered-message strong'));assert.equal(d.querySelectorAll('.rendered-message .katex').length,1);
+      assert.equal(d.querySelector('.pending'),null);assert.equal(d.querySelector('#send').disabled,true);
+      d.querySelector('#modelSelect').value='qwen3:4b';release();await sending;
+      assert.equal(submitted.model,'qwen3:8b');assert.equal(d.querySelector('.message-diagnostics').open,false);
+      assert.ok(d.querySelector('.rendered-message').textContent.includes('Конец.'));
+    }finally{dom.window.close()}
+  });
+  await run('interrupted text stream replays by sequence without duplicate text or submits',async()=>{
+    let calls=0,ids=[];
+    const dom=makeDom(async(url,options)=>{
+      if(url==='/api/info')return Response.json({server_instance:'test',demo:true,model:'qwen3:4b',devices:[],voice:{}});
+      if(url==='/api/chat/stream'){
+        calls++;ids.push(JSON.parse(options.body).request_id);
+        const events=[{type:'status',data:{action_results:[]}},{type:'delta',sequence:1,text:'Первая часть. '}];
+        if(calls===2)events.push({type:'delta',sequence:2,text:'Продолжение.'},{type:'final',data:{answer:'Первая часть. Продолжение.',engine:'ollama',action_results:[]}});
+        return new Response(events.map(e=>JSON.stringify(e)).join('\n')+'\n');
+      }
+      throw Error('unexpected '+url);
+    });
+    try{
+      await pause(10);await dom.window.sendText('Привет');
+      const d=dom.window.document;
+      assert.equal(calls,2);assert.equal(ids[0],ids[1]);assert.equal(d.querySelectorAll('.bubble.me').length,1);
+      assert.equal(d.querySelector('.rendered-message').textContent.trim(),'Первая часть. Продолжение.');
+    }finally{dom.window.close()}
+  });
   await run('mute cancels playback after an in-flight TTS request',async()=>{
     let audioCreated=0,resolveVoice;
     const dom=makeDom(async url=>url==='/api/tts'?new Promise(r=>{resolveVoice=r}):Response.json({server_instance:'test',devices:[],voice:{}}));

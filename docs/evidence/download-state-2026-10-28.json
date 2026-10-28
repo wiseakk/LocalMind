@@ -1,0 +1,43 @@
+{
+  "timestamp_utc": "2026-10-28T13:38:19.211777+00:00",
+  "downloads": [
+    {
+      "model": "qwen3:8b",
+      "first": {
+        "elapsed_s": 4.418856700000106,
+        "status": "pulling a3de86cd1c13",
+        "digest": "sha256:a3de86cd1c132c822487ededd47a324c50491393e6565cd14bafa40d0b8e686f",
+        "total": 5225374496,
+        "completed": 167993715
+      },
+      "last": {
+        "elapsed_s": 12.038943600000493,
+        "status": "pulling a3de86cd1c13",
+        "digest": "sha256:a3de86cd1c132c822487ededd47a324c50491393e6565cd14bafa40d0b8e686f",
+        "total": 5225374496,
+        "completed": 171337692
+      },
+      "net_bytes_per_second": 438837.1213981602,
+      "note": "Network retries can roll back incomplete chunks; net rate is not peak transfer rate"
+    },
+    {
+      "model": "qwen3.5:9b",
+      "first": {
+        "elapsed_s": 4.4186549999994895,
+        "status": "pulling f836f08f9211",
+        "digest": "sha256:f836f08f921193f4d6b6a6952dba0a6fb116759d26a757bcb395d570d73976ca",
+        "total": 921704832,
+        "completed": 104697743
+      },
+      "last": {
+        "elapsed_s": 12.038597400000072,
+        "status": "pulling f836f08f9211",
+        "digest": "sha256:f836f08f921193f4d6b6a6952dba0a6fb116759d26a757bcb395d570d73976ca",
+        "total": 921704832,
+        "completed": 110344069
+      },
+      "net_bytes_per_second": 740993.2652508724,
+      "note": "Network retries can roll back incomplete chunks; net rate is not peak transfer rate"
+    }
+  ]
+}

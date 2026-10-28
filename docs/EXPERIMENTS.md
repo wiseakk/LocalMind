@@ -141,3 +141,13 @@ Ollama после факта действия: статус должен ост�
 обновления, неизвестное/неоднозначное имя, безопасный отказ закрыть несохранённый
 Блокнот. Home Assistant проверяется только на реальном настроенном устройстве
 с разрешением владельца. Сохраните точные команды и наблюдения, не токены и аудио.
+
+## 2026-10-28 overhaul measurements
+
+The reproducible Russian suite and actual cold/warm/CPU results are in
+[MODEL_COMPARISON.md](MODEL_COMPARISON.md). Three-model selection is incomplete:
+two downloads stall. No comparative accuracy/speed improvement is established.
+Actual app HTTP streams/replays and safe Steam-inspection failures are retained
+in evidence/app-overhaul-2026-10-28.json; smoke status/commentary in
+evidence/app-smoke-2026-10-28.jsonl. API-first-answer timing is not browser timing.
+See OVERHAUL_ACCEPTANCE.md for exact numbers and unverified hardware gates.

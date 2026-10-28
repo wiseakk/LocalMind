@@ -134,3 +134,55 @@ checklist. Git commit заблокирован ACL metadata. Эти пункты
 Версии реально provisioned: Python3.14.5; FastAPI0.162.0; Uvicorn0.54.0;
 httpx0.28.1; pytest9.1.1; PyAV18.1.0; faster-whisper1.2.1; CTranslate2 4.8.4;
 Node24.19.0; Ollama0.40.11. Версии — наблюдение этого прогона, не выдуманный benchmark.
+# Overhaul milestone 1 — 2026-10-28
+
+Baseline at `6ee4231`: 134 Python tests and 35 subtests passed. Added a fully
+consumed Russian token grammar, request-local model settings, bounded replayable
+text deltas, local model controls and collapsed per-message diagnostics.
+Application inspection uses image identity, session and user SID; cross-request
+launch coordination is implemented. Native read-only Windows probe verified the
+current Python PID/creation time and an absent image. This sandbox denies
+EnumWindows: real Steam windows/background/startup are NOT VERIFIED. No personal
+application was launched for this milestone. Model comparison is in progress;
+no quality or speed improvement is claimed yet. UI dependencies are being
+installed locally; PowerShell execution policy requires `npm.cmd`.
+
+## Overhaul milestone 2 — behavior and security verification
+
+293 Python tests + 35 subtests pass; six DOM checks and JS syntax checks pass;
+`npm.cmd audit` reports zero vulnerabilities. Dependencies installed with
+`npm.cmd ci --cache .npm-cache --no-fund --ignore-scripts` (no policy change).
+Independent testing found and verified fixes for compound catalog-alias grants,
+false window/new-launch/light prose, isolated surrogate output and unbounded
+unterminated model lines. Inference now bounds decompressed bytes, chunk count,
+elapsed time and lock wait; UI transport has a timeout. Action generation is
+tool-free, nonstreamed until validated, and capped at 256 tokens even in reasoning
+mode; dialogue emits decoded answer deltas with replay sequence numbers.
+
+Real `start.py` startup passed on loopback. Playwright runner failed with
+`spawn EPERM`; connected browser host unavailable; native browser access rejected
+as `Computer Use was not approved to use Zen`. No visual/zoom/browser-first-text
+claim is made. Current 4B measurements retain factual errors; comparison downloads
+are still in progress. Windows microphone, real Steam state transitions and GPU
+STT coexistence remain unverified.
+
+## Overhaul milestone 3 — retained evidence and final checks
+
+Final `-m pytest -q`: **297 passed, 35 subtests passed in2.59s**, one existing
+cache-write ACL warning. JS syntax, six DOM checks, npm audit (zero vulnerabilities)
+and `git diff --check` pass. Independent regression review found no unresolved
+P0/P1 in the exercised changes. Real HTTP evidence verifies incremental text,
+same-ID replay, model-not-installed fallback, follow-up, DEMO and safe Steam
+inspection uncertainty; exact observations are in OVERHAUL_ACCEPTANCE.md.
+
+qwen3:4b cold/warm/CPU experiments and all answers are retained. Larger model
+downloads stalled repeatedly despite reconnect and were stopped, preserving
+resumable partial assets. No measured replacement default or intelligence gain
+is claimed. Visual/microphone/GPU-STT/real Steam state gates remain unverified.
+Startup/offline instructions, troubleshooting and existing40 explanatory defense
+answers are preserved. Detailed limitations: MODEL_COMPARISON.md and
+OVERHAUL_ACCEPTANCE.md.
+
+Git staging attempted in this invocation, but failed exactly:
+`fatal: Unable to create 'C:/Users/ExampleUser/Desktop/LocalMind_MVP_01/.git/worktrees/devcrew-LocalMind_MVP_01-20261028-161515-388f25de/index.lock': Permission denied`.
+Changes remain safely in this worktree; no commit, push, merge or publication.

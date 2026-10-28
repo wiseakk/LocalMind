@@ -21,6 +21,8 @@ import unicodedata
 from typing import Callable, Iterable
 import uuid
 
+from .windows_state import launch_coordinator
+
 
 class AppError(Exception):
     """Safe, user-visible catalog refusal (never contains arbitrary exceptions)."""
@@ -40,6 +42,7 @@ KNOWN_ALIASES = {
     'chrome': ('Chrome', 'гугл хром'),
     'firefox': ('Firefox', 'файрфокс'),
     'msedge': ('Microsoft Edge', 'Edge', 'эдж'),
+    'steam': ('Steam', 'стим'),
 }
 # Conservative supported GUI set. A new executable needs an explicit code review,
 # rather than letting an arbitrary discovered utility become a launch capability.
@@ -422,12 +425,10 @@ class AppCatalog:
                     raise AppError('Сначала разреши это приложение в настройках.')
                 with _launch_guard(entry.target):
                     self._revalidate(app_id)
-                    subprocess.Popen([str(entry.target)], shell=False, close_fds=True,
-                                     cwd=str(entry.target.parent))
-            return {'success': True, 'action': 'open_app', 'resolved_target': target,
-                    'execution_status': 'process_created', 'observed_state': None,
-                    'error': None, 'mode': 'REAL', 'duration_ms': round((time.perf_counter() - started) * 1000, 2),
-                    'status_text': f'Создан процесс: {target}. Состояние окна не проверено.'}
+                    result = launch_coordinator.launch(entry.target, target,
+                        lambda: subprocess.Popen([str(entry.target)], shell=False, close_fds=True,
+                                                 cwd=str(entry.target.parent)))
+            return {**result.to_dict(), 'duration_ms': round((time.perf_counter() - started) * 1000, 2)}
         except (AppError, OSError) as exc:
             # Exception text is controlled here, OS errors/paths are not reflected.
             error = str(exc) if isinstance(exc, AppError) else 'Windows отклонила запуск приложения.'

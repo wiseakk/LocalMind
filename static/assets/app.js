@@ -37,7 +37,8 @@ function renderStatus(el, value) {
   el.querySelectorAll('.action-chip').forEach(x=>x.remove());
   for (const result of value.action_results || []) {
     const chip = document.createElement('div'); chip.className = 'action-chip' + (result.success ? '' : ' error');
-    chip.textContent = `${result.mode} · ${result.status_text || value.answer} · ${result.duration_ms} мс`;
+    const states = {process_created:'Запуск начат; ожидаем окно', already_running:result.observed_state==='visible_window'?'Окно приложения уже открыто':'Приложение уже работает в фоне', launch_pending:'Приложение ещё запускается', observed:'Состояние подтверждено', request_accepted:'Команда принята; состояние пока не подтверждено'};
+    chip.textContent = (result.mode==='DEMO'?'ДЕМО · симуляция · ':'') + (result.success ? states[result.execution_status] || 'Проверка завершена' : 'Действие не выполнено');
     el.insertBefore(chip, el.querySelector('.rendered-message')); 
   }
   if ((value.action_results || []).length) state('Результат получен. Ожидаем комментарий…');
@@ -56,25 +57,36 @@ async function sendText(value) {
   const el = bubble('', 'assistant'); pending(el); state('Проверка намерения и разрешений…');
   // A retry after transport loss keeps this ID, so the server never repeats the action.
   const request = {request_id: crypto.randomUUID(), server_instance:serverInstance, text, history: history.slice(-8), actions_authorized:true,
-    response_length:$('responseLength').value, compose_actions:$('composeActions').checked};
+    response_length:$('responseLength').value, compose_actions:$('composeActions').checked,
+    model:$('modelSelect').value || null, reasoning:$('reasoning').value,
+    context_tokens:Number($('contextTokens').value),response_tokens:Number($('responseTokens').value),keep_alive_seconds:Number($('keepAlive').value)};
   let finalValue = null;
+  let deltaText = '', lastSequence = 0;
   const sentAt = performance.now();
   const wallSentAt = Date.now();
   try {
     for (let attempt=0;attempt<2;attempt++) {
+      const controller=new AbortController(), timeout=setTimeout(()=>controller.abort(),90000);
       try {
-        const response = await checked(await fetch('/api/chat/stream', {method:'POST', headers:jsonHeaders(), body:JSON.stringify(request)}));
+        const response = await checked(await fetch('/api/chat/stream', {method:'POST', headers:jsonHeaders(), body:JSON.stringify(request),signal:controller.signal}));
         const reader = response.body.getReader(), decoder = new TextDecoder(); let buffer='';
         function event(line) {
           if (!line.trim()) return;
           const item = JSON.parse(line);
           if (item.type === 'error') throw Error(item.detail || 'Ошибка обработки');
           if (item.type === 'status') renderStatus(el, item.data);
+          if (item.type === 'delta' && Number.isInteger(item.sequence) && item.sequence > lastSequence && typeof item.text === 'string') {
+            if (deltaText.length + item.text.length > 8192) throw Error('Ответ превышает допустимую длину');
+            lastSequence = item.sequence; deltaText += item.text;
+            el.querySelector('.pending')?.remove();
+            renderLocalMindMessage(el.querySelector('.rendered-message'), deltaText); state('Отвечаю…'); scrollEnd();
+          }
           if (item.type === 'final') { finalValue = item.data; renderStatus(el, item.data); }
         }
         while (true) {
           const {value:chunk,done} = await reader.read();
           buffer += decoder.decode(chunk || new Uint8Array(), {stream:!done});
+          if (buffer.length>131072) throw Error('Повреждённый или слишком большой поток ответа');
           let newline; while ((newline = buffer.indexOf('\n')) >= 0) { event(buffer.slice(0,newline)); buffer=buffer.slice(newline+1); }
           if (done) { if (buffer) event(buffer); break; }
         }
@@ -84,20 +96,20 @@ async function sendText(value) {
         // Never retry after sleep/stalled transport could outlive server deduplication.
         if (attempt || Math.max(performance.now()-sentAt,Date.now()-wallSentAt) > 120000) throw error;
         state('Восстанавливаем ответ без повторного действия…');
-      }
+      } finally {clearTimeout(timeout);controller.abort();}
     }
     el.querySelector('.pending')?.remove(); renderLocalMindMessage(el.querySelector('.rendered-message'), finalValue.answer);
-    const meta = document.createElement('div'); meta.className='meta';
+    const diagnostics = document.createElement('details'); diagnostics.className='message-diagnostics';
+    const summary = document.createElement('summary'); summary.textContent='Диагностика ответа';
+    const meta = document.createElement('pre'); meta.className='meta';
     meta.textContent=`${finalValue.engine} · действие ${finalValue.action_ms || 0} мс · LLM ${finalValue.llm_ms || 0} мс`;
-    el.append(meta); history.push({role:'user',content:text},{role:'assistant',content:finalValue.answer});
+    const raw = document.createElement('pre'); raw.textContent=JSON.stringify(finalValue,null,2);
+    diagnostics.append(summary,meta,raw); el.append(diagnostics); history.push({role:'user',content:text},{role:'assistant',content:finalValue.answer});
     if (history.length > 16) history.splice(0,history.length-16);
     state('Готов к разговору');
     if ($('speak').checked) {
-      // Authoritative failure/status is audible even if model prose is imperfect.
-      const failed=(finalValue.action_results||[]).some(result=>!result.success);
-      const spoken=failed ? finalValue.status : finalValue.status && finalValue.answer!==finalValue.status
-        ? finalValue.status+' '+finalValue.answer : finalValue.answer;
-      playSpeech(spoken);
+      // Only final, server-validated prose reaches speech; never partial streams.
+      playSpeech(finalValue.answer);
     }
     await refresh();
   } catch (error) {
@@ -111,7 +123,7 @@ async function refresh() {
   try {
     const info = await (await checked(await fetch('/api/info', {headers:headers()}))).json();
     serverInstance=info.server_instance;
-    $('status').textContent='Сервер подключён'; $('connectionDot').classList.add('online'); $('model').textContent=info.model;
+    $('status').textContent='Сервер подключён'; $('connectionDot').classList.add('online'); $('model').textContent=$('modelSelect').value || info.model;
     $('mode').textContent=info.demo?'DEMO':'REAL · HA';
     $('demoNote').textContent=info.demo?'Симуляция — физические устройства не переключаются.':'REAL — запросы к разрешённым устройствам Home Assistant.';
     $('devices').replaceChildren();
@@ -125,6 +137,23 @@ async function refresh() {
     $('voiceStatus').textContent=voice.voices?.some(v=>v.ready) ? 'Piper и модель Denis готовы. Русская озвучка выполняется локально.' : 'Локальная озвучка требует Piper и модели Denis. См. docs/VOICE.md. Облачная озвучка не используется.';
     if (voice.setup) $('voiceStatus').textContent += '\n'+voice.setup;
   } catch (error) { $('status').textContent=error.message; $('connectionDot').classList.remove('online'); }
+}
+async function loadModels() {
+  const select=$('modelSelect'), selected=select.value;
+  try {
+    const data=await(await checked(await fetch('/api/models',{headers:headers()}))).json();
+    select.replaceChildren();
+    for(const model of data.models || []) {
+      const option=document.createElement('option'); option.value=model.name; option.textContent=model.name; select.append(option);
+    }
+    const wanted=selected || data.default;
+    if ([...select.options].some(o=>o.value===wanted)) select.value=wanted;
+    else {
+      const missing=document.createElement('option');missing.value='';missing.textContent='Модель по умолчанию недоступна — выберите локальную';missing.selected=true;select.prepend(missing);
+    }
+    $('modelStatus').textContent='Только установленные локальные модели. Первый ответ включает загрузку; следующие обычно быстрее. При смене предыдущая модель выгружается. Изменения применяются к следующему запросу.';
+    $('model').textContent=select.value || data.default;
+  } catch(error) {$('modelStatus').textContent=error.message;}
 }
 function stopSpeech() {
   speechEpoch++; if (speechAudio) {speechAudio.pause();speechAudio=null;}
@@ -205,7 +234,8 @@ $('form').addEventListener('submit',e=>{e.preventDefault();sendText($('message')
 $('message').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();sendText($('message').value)}});
 for(const b of document.querySelectorAll('[data-example]'))b.addEventListener('click',()=>sendText(b.dataset.example));
 for(const b of document.querySelectorAll('[data-close]'))b.addEventListener('click',()=>$(b.dataset.close).close());
-$('settingsOpen').addEventListener('click',()=>{$('settingsDialog').showModal();refresh()});
+$('settingsOpen').addEventListener('click',()=>{$('settingsDialog').showModal();refresh();loadModels()});
+$('modelSelect').addEventListener('change',()=>{$('model').textContent=$('modelSelect').value || 'Локальная модель'});
 $('appsOpen').addEventListener('click',()=>{$('appsDialog').showModal();loadApps()});
 $('rescan').addEventListener('click',()=>loadApps(true));
 $('key').addEventListener('change',refresh);

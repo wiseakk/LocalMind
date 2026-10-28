@@ -31,7 +31,8 @@ def main():
                 print(json.dumps({'event': event['type'], 'received_ms': elapsed,
                                   'data': event.get('data')}, ensure_ascii=False))
                 events.append(event)
-        assert [event['type'] for event in events] == ['status', 'final']
+        assert events[0]['type'] == 'status' and events[-1]['type'] == 'final'
+        assert all(event['type'] == 'delta' for event in events[1:-1])
         assert events[0]['data']['action_results'][0]['mode'] == 'DEMO'
         assert events[0]['data']['action_results'][0]['observed_state'] == 'on'
         replay = client.post('/api/chat', json=body)

@@ -78,3 +78,36 @@ Playwright покрывает реальные zoom/keyboard/viewport, когд�
 LAN pairing, публикация, постоянный wake word, cloud fallback, универсальная
 активация UWP/MSIX, закрытие окон, persistent history и crash-persistent delivery.
 Это требует отдельных проектов с собственными границами безопасности.
+
+## Overhaul extension (2026-10-28)
+
+`intents.py` consumes Russian request tokens and one exact catalog alias. Names
+are untrusted metadata: compound/action tokens inside aliases cannot grant a
+compound instruction. Catalog permission, target fingerprint and executable
+guard remain independent of parsing. `windows_state.py` inspects exact canonical
+image identity + current session/SID and holds process handles through window
+enumeration; striped locks cover inspection and spawn. Unknown inspection denies
+launch rather than treating unknown as absent. Pending launches retain owned
+process handles and a bounded handoff grace.
+
+`GenerationSettings` is frozen per request; its effective values enter replay
+identity. `/api/models` lists installed local assets, and inference rechecks tags
+and show metadata to reject remote aliases. Missing selected models produce an
+explicit local error, with no automatic model or cloud substitution. A failed
+composer preserves the completed action. Requests retain the existing JSON
+fields and status/final events; streams may additionally contain sequenced delta
+events. Replay retains at most 8192 text characters per bounded request entry.
+
+Conversational answer JSON is decoded incrementally; reasoning fields and raw
+JSON are not exposed. Byte/chunk/time budgets apply before line buffering.
+Action JSON is fully buffered and validated before any display/speech. Styling
+uses the existing offline sanitized Markdown/KaTeX renderer. Technical results
+appear in closed details elements; simulation and simple trusted action feedback
+stay visible. Browser speech uses only final validated prose and local Piper;
+partial speech is intentionally disabled.
+
+Ollama API contracts checked against official references:
+https://docs.ollama.com/api/chat, https://docs.ollama.com/capabilities/thinking,
+https://docs.ollama.com/api/ps. Installed template behavior is measured separately:
+API documentation does not prove a local template honors non-thinking requests.
+See MODEL_COMPARISON.md and retained evidence.

@@ -1,0 +1,1162 @@
+{
+  "kind": "actual loopback integration, no microphone or browser claims",
+  "flows": [
+    {
+      "text": "Привет",
+      "elapsed_ms": 154.55990000009479,
+      "response": {
+        "answer": "Не удалось получить корректный ответ от локальной модели. Проверь Ollama и загрузку модели localmind-uninstalled-regression:latest.",
+        "engine": "offline-error",
+        "actions": [],
+        "action_results": [],
+        "latency_ms": 153,
+        "action_ms": 0,
+        "llm_ms": 153,
+        "commentary": null,
+        "generation": {
+          "model": "localmind-uninstalled-regression:latest",
+          "reasoning": "off",
+          "context_tokens": 4096,
+          "response_tokens": 768,
+          "keep_alive_seconds": 300
+        }
+      }
+    },
+    {
+      "text": "А в чём они похожи?",
+      "elapsed_ms": 2000.4520999991655,
+      "response": {
+        "answer": "Список и кортеж похожи тем, что оба хранят последовательность элементов (можно создавать с помощью круглых или квадратных скобок), поддерживают индексацию и могут содержать элементы разных типов. Однако список изменяем, а корт и неизменяем. Оба могут быть использованы для хранения данных в определённом порядке.",
+        "engine": "ollama",
+        "actions": [],
+        "action_results": [],
+        "latency_ms": 1999,
+        "action_ms": 0,
+        "llm_ms": 1999,
+        "commentary": null,
+        "generation": {
+          "model": "qwen3:4b",
+          "reasoning": "off",
+          "context_tokens": 4096,
+          "response_tokens": 768,
+          "keep_alive_seconds": 300
+        }
+      }
+    },
+    {
+      "text": "Включи лампу",
+      "elapsed_ms": 1090.4809999992722,
+      "response": {
+        "answer": "Настольная лампа успешно включена в демонстрационном режиме.",
+        "engine": "ollama-action",
+        "actions": [
+          "ДЕМО: Настольная лампа — включена."
+        ],
+        "action_results": [
+          {
+            "success": true,
+            "action": "set_light",
+            "resolved_target": "desk_light",
+            "execution_status": "observed",
+            "observed_state": "on",
+            "error": null,
+            "mode": "DEMO",
+            "duration_ms": 0,
+            "status_text": "ДЕМО: Настольная лампа — включена."
+          }
+        ],
+        "latency_ms": 1089,
+        "action_ms": 0,
+        "llm_ms": 1089,
+        "commentary": "Настольная лампа успешно включена в демонстрационном режиме.",
+        "generation": {
+          "model": "qwen3:4b",
+          "reasoning": "off",
+          "context_tokens": 4096,
+          "response_tokens": 768,
+          "keep_alive_seconds": 300
+        },
+        "status": "ДЕМО: Настольная лампа — включена."
+      }
+    }
+  ],
+  "model": "qwen3:4b",
+  "server_instance": "de74b82da7ae477193721c2a09addd6c",
+  "models": {
+    "models": [
+      {
+        "name": "qwen3:4b",
+        "size": 2497293931,
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen3",
+          "families": [
+            "qwen3"
+          ],
+          "parameter_size": "4.0B",
+          "quantization_level": "Q4_K_M",
+          "context_length": 262144,
+          "embedding_length": 2560,
+          "runner": "ggml"
+        }
+      }
+    ],
+    "default": "qwen3:4b",
+    "local_only": true
+  },
+  "stream": {
+    "events": [
+      {
+        "received_ms": 1.7479000016464852,
+        "type": "status",
+        "data": {
+          "answer": "Локальная модель формирует ответ…",
+          "engine": "pending",
+          "actions": [],
+          "action_results": [],
+          "latency_ms": 0,
+          "action_ms": 0,
+          "llm_ms": 0,
+          "commentary": null,
+          "generation": {
+            "model": "qwen3:4b",
+            "reasoning": "off",
+            "context_tokens": 4096,
+            "response_tokens": 768,
+            "keep_alive_seconds": 300
+          }
+        }
+      },
+      {
+        "received_ms": 671.3434000012057,
+        "type": "delta",
+        "text": "В Python список (list) — это изменяемая структура",
+        "sequence": 1
+      },
+      {
+        "received_ms": 689.6571000015683,
+        "type": "delta",
+        "text": " данных",
+        "sequence": 2
+      },
+      {
+        "received_ms": 706.0451000015746,
+        "type": "delta",
+        "text": ",",
+        "sequence": 3
+      },
+      {
+        "received_ms": 724.1368000013608,
+        "type": "delta",
+        "text": " где",
+        "sequence": 4
+      },
+      {
+        "received_ms": 742.7658000015072,
+        "type": "delta",
+        "text": " элемент",
+        "sequence": 5
+      },
+      {
+        "received_ms": 759.9955000005139,
+        "type": "delta",
+        "text": "ы",
+        "sequence": 6
+      },
+      {
+        "received_ms": 777.9595000010886,
+        "type": "delta",
+        "text": " могут",
+        "sequence": 7
+      },
+      {
+        "received_ms": 795.7241000003705,
+        "type": "delta",
+        "text": " быть",
+        "sequence": 8
+      },
+      {
+        "received_ms": 813.4468000007473,
+        "type": "delta",
+        "text": " зам",
+        "sequence": 9
+      },
+      {
+        "received_ms": 830.6735000005574,
+        "type": "delta",
+        "text": "ен",
+        "sequence": 10
+      },
+      {
+        "received_ms": 848.9148000007845,
+        "type": "delta",
+        "text": "ены",
+        "sequence": 11
+      },
+      {
+        "received_ms": 866.1845000005997,
+        "type": "delta",
+        "text": ",",
+        "sequence": 12
+      },
+      {
+        "received_ms": 884.8391999999876,
+        "type": "delta",
+        "text": " добав",
+        "sequence": 13
+      },
+      {
+        "received_ms": 902.9162000006181,
+        "type": "delta",
+        "text": "лен",
+        "sequence": 14
+      },
+      {
+        "received_ms": 919.8680000008608,
+        "type": "delta",
+        "text": "ы",
+        "sequence": 15
+      },
+      {
+        "received_ms": 938.6655000016617,
+        "type": "delta",
+        "text": " или",
+        "sequence": 16
+      },
+      {
+        "received_ms": 956.7793000005622,
+        "type": "delta",
+        "text": " удал",
+        "sequence": 17
+      },
+      {
+        "received_ms": 975.0186000001122,
+        "type": "delta",
+        "text": "ены",
+        "sequence": 18
+      },
+      {
+        "received_ms": 993.5549000001629,
+        "type": "delta",
+        "text": ".",
+        "sequence": 19
+      },
+      {
+        "received_ms": 1012.1148000016547,
+        "type": "delta",
+        "text": " К",
+        "sequence": 20
+      },
+      {
+        "received_ms": 1029.2128000000957,
+        "type": "delta",
+        "text": "орт",
+        "sequence": 21
+      },
+      {
+        "received_ms": 1048.475999999937,
+        "type": "delta",
+        "text": "еж",
+        "sequence": 22
+      },
+      {
+        "received_ms": 1066.932600000655,
+        "type": "delta",
+        "text": " (",
+        "sequence": 23
+      },
+      {
+        "received_ms": 1084.9030000008497,
+        "type": "delta",
+        "text": "tuple",
+        "sequence": 24
+      },
+      {
+        "received_ms": 1102.5953000007576,
+        "type": "delta",
+        "text": ")",
+        "sequence": 25
+      },
+      {
+        "received_ms": 1120.446599999923,
+        "type": "delta",
+        "text": " —",
+        "sequence": 26
+      },
+      {
+        "received_ms": 1138.7340000001132,
+        "type": "delta",
+        "text": " не",
+        "sequence": 27
+      },
+      {
+        "received_ms": 1156.3194999998814,
+        "type": "delta",
+        "text": "из",
+        "sequence": 28
+      },
+      {
+        "received_ms": 1175.250900001629,
+        "type": "delta",
+        "text": "мен",
+        "sequence": 29
+      },
+      {
+        "received_ms": 1193.4485000001587,
+        "type": "delta",
+        "text": "яем",
+        "sequence": 30
+      },
+      {
+        "received_ms": 1211.5221000003658,
+        "type": "delta",
+        "text": "ая",
+        "sequence": 31
+      },
+      {
+        "received_ms": 1229.5439000008628,
+        "type": "delta",
+        "text": " ст",
+        "sequence": 32
+      },
+      {
+        "received_ms": 1247.6811000015005,
+        "type": "delta",
+        "text": "рук",
+        "sequence": 33
+      },
+      {
+        "received_ms": 1265.9189000005426,
+        "type": "delta",
+        "text": "ту",
+        "sequence": 34
+      },
+      {
+        "received_ms": 1283.8879999999335,
+        "type": "delta",
+        "text": "ра",
+        "sequence": 35
+      },
+      {
+        "received_ms": 1303.001199999926,
+        "type": "delta",
+        "text": " данных",
+        "sequence": 36
+      },
+      {
+        "received_ms": 1320.7967000016652,
+        "type": "delta",
+        "text": ",",
+        "sequence": 37
+      },
+      {
+        "received_ms": 1338.995000000068,
+        "type": "delta",
+        "text": " поэтому",
+        "sequence": 38
+      },
+      {
+        "received_ms": 1355.8179999999993,
+        "type": "delta",
+        "text": " его",
+        "sequence": 39
+      },
+      {
+        "received_ms": 1374.845100001039,
+        "type": "delta",
+        "text": " элемент",
+        "sequence": 40
+      },
+      {
+        "received_ms": 1393.307600001208,
+        "type": "delta",
+        "text": "ы",
+        "sequence": 41
+      },
+      {
+        "received_ms": 1411.424400001124,
+        "type": "delta",
+        "text": " нельзя",
+        "sequence": 42
+      },
+      {
+        "received_ms": 1429.2918000010104,
+        "type": "delta",
+        "text": " мен",
+        "sequence": 43
+      },
+      {
+        "received_ms": 1447.6191000012477,
+        "type": "delta",
+        "text": "ять",
+        "sequence": 44
+      },
+      {
+        "received_ms": 1466.0960000001069,
+        "type": "delta",
+        "text": " после",
+        "sequence": 45
+      },
+      {
+        "received_ms": 1483.9134000012564,
+        "type": "delta",
+        "text": " создания",
+        "sequence": 46
+      },
+      {
+        "received_ms": 1502.28000000061,
+        "type": "delta",
+        "text": ".",
+        "sequence": 47
+      },
+      {
+        "received_ms": 1520.373200000904,
+        "type": "delta",
+        "text": " Например",
+        "sequence": 48
+      },
+      {
+        "received_ms": 1538.7457000015274,
+        "type": "delta",
+        "text": ",",
+        "sequence": 49
+      },
+      {
+        "received_ms": 1557.692300000781,
+        "type": "delta",
+        "text": " список",
+        "sequence": 50
+      },
+      {
+        "received_ms": 1575.6703000006382,
+        "type": "delta",
+        "text": " можно",
+        "sequence": 51
+      },
+      {
+        "received_ms": 1593.9298000012059,
+        "type": "delta",
+        "text": " измен",
+        "sequence": 52
+      },
+      {
+        "received_ms": 1611.9366000002628,
+        "type": "delta",
+        "text": "ять",
+        "sequence": 53
+      },
+      {
+        "received_ms": 1630.0344000010227,
+        "type": "delta",
+        "text": " через",
+        "sequence": 54
+      },
+      {
+        "received_ms": 1648.4638000001723,
+        "type": "delta",
+        "text": " метод",
+        "sequence": 55
+      },
+      {
+        "received_ms": 1666.830200001641,
+        "type": "delta",
+        "text": "ы",
+        "sequence": 56
+      },
+      {
+        "received_ms": 1684.3982000009419,
+        "type": "delta",
+        "text": " в",
+        "sequence": 57
+      },
+      {
+        "received_ms": 1702.5694000003568,
+        "type": "delta",
+        "text": "род",
+        "sequence": 58
+      },
+      {
+        "received_ms": 1721.051800001078,
+        "type": "delta",
+        "text": "е",
+        "sequence": 59
+      },
+      {
+        "received_ms": 1738.9437000001635,
+        "type": "delta",
+        "text": " `",
+        "sequence": 60
+      },
+      {
+        "received_ms": 1757.4375000003783,
+        "type": "delta",
+        "text": "append",
+        "sequence": 61
+      },
+      {
+        "received_ms": 1776.4252000015404,
+        "type": "delta",
+        "text": "()",
+        "sequence": 62
+      },
+      {
+        "received_ms": 1792.8995000002033,
+        "type": "delta",
+        "text": "`,",
+        "sequence": 63
+      },
+      {
+        "received_ms": 1812.1865000011894,
+        "type": "delta",
+        "text": " а",
+        "sequence": 64
+      },
+      {
+        "received_ms": 1826.9976999999926,
+        "type": "delta",
+        "text": " кор",
+        "sequence": 65
+      },
+      {
+        "received_ms": 1846.603400001186,
+        "type": "delta",
+        "text": "т",
+        "sequence": 66
+      },
+      {
+        "received_ms": 1863.7507000003097,
+        "type": "delta",
+        "text": "еж",
+        "sequence": 67
+      },
+      {
+        "received_ms": 1882.365600000412,
+        "type": "delta",
+        "text": " —",
+        "sequence": 68
+      },
+      {
+        "received_ms": 1901.5933000009682,
+        "type": "delta",
+        "text": " только",
+        "sequence": 69
+      },
+      {
+        "received_ms": 1919.8049000005994,
+        "type": "delta",
+        "text": " для",
+        "sequence": 70
+      },
+      {
+        "received_ms": 1938.6846000015794,
+        "type": "delta",
+        "text": " чт",
+        "sequence": 71
+      },
+      {
+        "received_ms": 1957.0433000008052,
+        "type": "delta",
+        "text": "ения",
+        "sequence": 72
+      },
+      {
+        "received_ms": 1974.4182000013097,
+        "type": "delta",
+        "text": ".",
+        "sequence": 73
+      },
+      {
+        "received_ms": 1991.8078999999125,
+        "type": "delta",
+        "text": " К",
+        "sequence": 74
+      },
+      {
+        "received_ms": 2010.6235000002926,
+        "type": "delta",
+        "text": "орт",
+        "sequence": 75
+      },
+      {
+        "received_ms": 2026.2350000011793,
+        "type": "delta",
+        "text": "еж",
+        "sequence": 76
+      },
+      {
+        "received_ms": 2043.2358000016393,
+        "type": "delta",
+        "text": "и",
+        "sequence": 77
+      },
+      {
+        "received_ms": 2060.6479000016407,
+        "type": "delta",
+        "text": " обычно",
+        "sequence": 78
+      },
+      {
+        "received_ms": 2078.557200000432,
+        "type": "delta",
+        "text": " используют",
+        "sequence": 79
+      },
+      {
+        "received_ms": 2097.1677000015916,
+        "type": "delta",
+        "text": "ся",
+        "sequence": 80
+      },
+      {
+        "received_ms": 2113.166800001636,
+        "type": "delta",
+        "text": ",",
+        "sequence": 81
+      },
+      {
+        "received_ms": 2131.917100001374,
+        "type": "delta",
+        "text": " когда",
+        "sequence": 82
+      },
+      {
+        "received_ms": 2150.1345000015135,
+        "type": "delta",
+        "text": " нужно",
+        "sequence": 83
+      },
+      {
+        "received_ms": 2168.421300000773,
+        "type": "delta",
+        "text": " гаран",
+        "sequence": 84
+      },
+      {
+        "received_ms": 2186.8396000008943,
+        "type": "delta",
+        "text": "тиров",
+        "sequence": 85
+      },
+      {
+        "received_ms": 2204.4218000010005,
+        "type": "delta",
+        "text": "ать",
+        "sequence": 86
+      },
+      {
+        "received_ms": 2222.751300001619,
+        "type": "delta",
+        "text": " не",
+        "sequence": 87
+      },
+      {
+        "received_ms": 2240.356000000247,
+        "type": "delta",
+        "text": "из",
+        "sequence": 88
+      },
+      {
+        "received_ms": 2258.6309000016627,
+        "type": "delta",
+        "text": "мен",
+        "sequence": 89
+      },
+      {
+        "received_ms": 2276.585800000248,
+        "type": "delta",
+        "text": "яем",
+        "sequence": 90
+      },
+      {
+        "received_ms": 2295.293400000446,
+        "type": "delta",
+        "text": "ость",
+        "sequence": 91
+      },
+      {
+        "received_ms": 2312.465000000884,
+        "type": "delta",
+        "text": " данных",
+        "sequence": 92
+      },
+      {
+        "received_ms": 2331.5370000000257,
+        "type": "delta",
+        "text": ",",
+        "sequence": 93
+      },
+      {
+        "received_ms": 2349.458600001526,
+        "type": "delta",
+        "text": " нап",
+        "sequence": 94
+      },
+      {
+        "received_ms": 2367.2740000001795,
+        "type": "delta",
+        "text": "р",
+        "sequence": 95
+      },
+      {
+        "received_ms": 2385.6019000013475,
+        "type": "delta",
+        "text": "имер",
+        "sequence": 96
+      },
+      {
+        "received_ms": 2403.815500001656,
+        "type": "delta",
+        "text": ",",
+        "sequence": 97
+      },
+      {
+        "received_ms": 2421.422600000369,
+        "type": "delta",
+        "text": " в",
+        "sequence": 98
+      },
+      {
+        "received_ms": 2440.0029000007635,
+        "type": "delta",
+        "text": " качестве",
+        "sequence": 99
+      },
+      {
+        "received_ms": 2458.434000000125,
+        "type": "delta",
+        "text": " ключ",
+        "sequence": 100
+      },
+      {
+        "received_ms": 2476.5882000010606,
+        "type": "delta",
+        "text": "ей",
+        "sequence": 101
+      },
+      {
+        "received_ms": 2494.555400000536,
+        "type": "delta",
+        "text": " в",
+        "sequence": 102
+      },
+      {
+        "received_ms": 2511.503300000186,
+        "type": "delta",
+        "text": " сл",
+        "sequence": 103
+      },
+      {
+        "received_ms": 2529.606200001581,
+        "type": "delta",
+        "text": "овар",
+        "sequence": 104
+      },
+      {
+        "received_ms": 2545.2055000005203,
+        "type": "delta",
+        "text": "ях",
+        "sequence": 105
+      },
+      {
+        "received_ms": 2561.41640000169,
+        "type": "delta",
+        "text": ".",
+        "sequence": 106
+      },
+      {
+        "received_ms": 2604.090200000428,
+        "type": "final",
+        "data": {
+          "answer": "В Python список (list) — это изменяемая структура данных, где элементы могут быть заменены, добавлены или удалены. Кортеж (tuple) — неизменяемая структура данных, поэтому его элементы нельзя менять после создания. Например, список можно изменять через методы вроде `append()`, а кортеж — только для чтения. Кортежи обычно используются, когда нужно гарантировать неизменяемость данных, например, в качестве ключей в словарях.",
+          "engine": "ollama",
+          "actions": [],
+          "action_results": [],
+          "latency_ms": 2603,
+          "action_ms": 0,
+          "llm_ms": 2603,
+          "commentary": null,
+          "generation": {
+            "model": "qwen3:4b",
+            "reasoning": "off",
+            "context_tokens": 4096,
+            "response_tokens": 768,
+            "keep_alive_seconds": 300
+          }
+        }
+      }
+    ],
+    "replay_identical": true,
+    "first_answer_delta_ms": 671.3434000012057,
+    "browser_visible_ms": null
+  },
+  "steam": {
+    "catalog_matches": 1,
+    "concurrent": [
+      {
+        "text": "Открой Steam",
+        "elapsed_ms": 19.27390000128071,
+        "response": {
+          "answer": "Не удалось проверить состояние приложения; проверь его вручную.",
+          "engine": "rules",
+          "actions": [
+            "Не удалось проверить состояние приложения; проверь его вручную."
+          ],
+          "action_results": [
+            {
+              "success": false,
+              "action": "open_app",
+              "resolved_target": "Steam",
+              "execution_status": "inspection_unavailable",
+              "observed_state": null,
+              "error": "Не удалось проверить состояние приложения; повторный запуск отменён.",
+              "mode": "REAL",
+              "duration_ms": 16,
+              "status_text": "Не удалось проверить состояние приложения; проверь его вручную."
+            }
+          ],
+          "latency_ms": 16,
+          "action_ms": 16,
+          "llm_ms": 0,
+          "commentary": null,
+          "generation": {
+            "model": "qwen3:4b",
+            "reasoning": "off",
+            "context_tokens": 4096,
+            "response_tokens": 768,
+            "keep_alive_seconds": 300
+          },
+          "status": "Не удалось проверить состояние приложения; проверь его вручную."
+        }
+      },
+      {
+        "text": "Открой, пожалуйста, Steam",
+        "elapsed_ms": 34.776099999362486,
+        "response": {
+          "answer": "Не удалось проверить состояние приложения; проверь его вручную.",
+          "engine": "rules",
+          "actions": [
+            "Не удалось проверить состояние приложения; проверь его вручную."
+          ],
+          "action_results": [
+            {
+              "success": false,
+              "action": "open_app",
+              "resolved_target": "Steam",
+              "execution_status": "inspection_unavailable",
+              "observed_state": null,
+              "error": "Не удалось проверить состояние приложения; повторный запуск отменён.",
+              "mode": "REAL",
+              "duration_ms": 32,
+              "status_text": "Не удалось проверить состояние приложения; проверь его вручную."
+            }
+          ],
+          "latency_ms": 32,
+          "action_ms": 32,
+          "llm_ms": 0,
+          "commentary": null,
+          "generation": {
+            "model": "qwen3:4b",
+            "reasoning": "off",
+            "context_tokens": 4096,
+            "response_tokens": 768,
+            "keep_alive_seconds": 300
+          },
+          "status": "Не удалось проверить состояние приложения; проверь его вручную."
+        }
+      }
+    ],
+    "repeated": [
+      {
+        "text": "Можешь открыть Steam?",
+        "elapsed_ms": 21.660999998857733,
+        "response": {
+          "answer": "Не удалось проверить состояние приложения; проверь его вручную.",
+          "engine": "rules",
+          "actions": [
+            "Не удалось проверить состояние приложения; проверь его вручную."
+          ],
+          "action_results": [
+            {
+              "success": false,
+              "action": "open_app",
+              "resolved_target": "Steam",
+              "execution_status": "inspection_unavailable",
+              "observed_state": null,
+              "error": "Не удалось проверить состояние приложения; повторный запуск отменён.",
+              "mode": "REAL",
+              "duration_ms": 16,
+              "status_text": "Не удалось проверить состояние приложения; проверь его вручную."
+            }
+          ],
+          "latency_ms": 16,
+          "action_ms": 16,
+          "llm_ms": 0,
+          "commentary": null,
+          "generation": {
+            "model": "qwen3:4b",
+            "reasoning": "off",
+            "context_tokens": 4096,
+            "response_tokens": 768,
+            "keep_alive_seconds": 300
+          },
+          "status": "Не удалось проверить состояние приложения; проверь его вручную."
+        }
+      },
+      {
+        "text": "Запусти мне Steam",
+        "elapsed_ms": 17.476899998655426,
+        "response": {
+          "answer": "Не удалось проверить состояние приложения; проверь его вручную.",
+          "engine": "rules",
+          "actions": [
+            "Не удалось проверить состояние приложения; проверь его вручную."
+          ],
+          "action_results": [
+            {
+              "success": false,
+              "action": "open_app",
+              "resolved_target": "Steam",
+              "execution_status": "inspection_unavailable",
+              "observed_state": null,
+              "error": "Не удалось проверить состояние приложения; повторный запуск отменён.",
+              "mode": "REAL",
+              "duration_ms": 16,
+              "status_text": "Не удалось проверить состояние приложения; проверь его вручную."
+            }
+          ],
+          "latency_ms": 16,
+          "action_ms": 16,
+          "llm_ms": 0,
+          "commentary": null,
+          "generation": {
+            "model": "qwen3:4b",
+            "reasoning": "off",
+            "context_tokens": 4096,
+            "response_tokens": 768,
+            "keep_alive_seconds": 300
+          },
+          "status": "Не удалось проверить состояние приложения; проверь его вручную."
+        }
+      }
+    ],
+    "negative": [
+      {
+        "text": "Не открывай Steam",
+        "elapsed_ms": 1.6059999998105923,
+        "response": {
+          "answer": "Команда содержит отрицание. Действие не выполняю.",
+          "engine": "rules",
+          "actions": [],
+          "action_results": [
+            {
+              "success": false,
+              "action": "policy",
+              "resolved_target": null,
+              "execution_status": "denied",
+              "observed_state": null,
+              "error": "Команда содержит отрицание. Действие не выполняю.",
+              "mode": "REAL",
+              "duration_ms": 0,
+              "status_text": "Команда содержит отрицание. Действие не выполняю."
+            }
+          ],
+          "latency_ms": 0,
+          "action_ms": 0,
+          "llm_ms": 0,
+          "commentary": null,
+          "generation": {
+            "model": "qwen3:4b",
+            "reasoning": "off",
+            "context_tokens": 4096,
+            "response_tokens": 768,
+            "keep_alive_seconds": 300
+          },
+          "status": "Команда содержит отрицание. Действие не выполняю."
+        }
+      },
+      {
+        "text": "Как открыть Steam?",
+        "elapsed_ms": 1898.5281000004761,
+        "response": {
+          "answer": "Чтобы открыть Steam, запусти приложение Steam через меню «Пуск» (кнопка Start на Windows) или через список приложений на рабочем столе. Если Steam установлен, он будет отображаться как стандартное приложение. Для запуска нажми на иконку Steam в меню «Пуск» или дважды кликни на файл Steam.exe в папке «Приложения».",
+          "engine": "ollama",
+          "actions": [],
+          "action_results": [],
+          "latency_ms": 1897,
+          "action_ms": 0,
+          "llm_ms": 1897,
+          "commentary": null,
+          "generation": {
+            "model": "qwen3:4b",
+            "reasoning": "off",
+            "context_tokens": 4096,
+            "response_tokens": 768,
+            "keep_alive_seconds": 300
+          }
+        }
+      },
+      {
+        "text": "«Открой Steam»",
+        "elapsed_ms": 1.5478999994229525,
+        "response": {
+          "answer": "Команда приведена как цитата. Действие не выполняю.",
+          "engine": "rules",
+          "actions": [],
+          "action_results": [
+            {
+              "success": false,
+              "action": "policy",
+              "resolved_target": null,
+              "execution_status": "denied",
+              "observed_state": null,
+              "error": "Команда приведена как цитата. Действие не выполняю.",
+              "mode": "REAL",
+              "duration_ms": 0,
+              "status_text": "Команда приведена как цитата. Действие не выполняю."
+            }
+          ],
+          "latency_ms": 0,
+          "action_ms": 0,
+          "llm_ms": 0,
+          "commentary": null,
+          "generation": {
+            "model": "qwen3:4b",
+            "reasoning": "off",
+            "context_tokens": 4096,
+            "response_tokens": 768,
+            "keep_alive_seconds": 300
+          },
+          "status": "Команда приведена как цитата. Действие не выполняю."
+        }
+      },
+      {
+        "text": "Если я попрошу, открой Steam",
+        "elapsed_ms": 1.774100001057377,
+        "response": {
+          "answer": "Запрос неоднозначен. Укажи одно действие и одну цель.",
+          "engine": "rules",
+          "actions": [],
+          "action_results": [
+            {
+              "success": false,
+              "action": "policy",
+              "resolved_target": null,
+              "execution_status": "denied",
+              "observed_state": null,
+              "error": "Запрос неоднозначен. Укажи одно действие и одну цель.",
+              "mode": "REAL",
+              "duration_ms": 0,
+              "status_text": "Запрос неоднозначен. Укажи одно действие и одну цель."
+            }
+          ],
+          "latency_ms": 0,
+          "action_ms": 0,
+          "llm_ms": 0,
+          "commentary": null,
+          "generation": {
+            "model": "qwen3:4b",
+            "reasoning": "off",
+            "context_tokens": 4096,
+            "response_tokens": 768,
+            "keep_alive_seconds": 300
+          },
+          "status": "Запрос неоднозначен. Укажи одно действие и одну цель."
+        }
+      },
+      {
+        "text": "Открой Steam и Obsidian",
+        "elapsed_ms": 2.4723000005906215,
+        "response": {
+          "answer": "Не удалось однозначно определить одно разрешённое приложение.",
+          "engine": "rules",
+          "actions": [],
+          "action_results": [
+            {
+              "success": false,
+              "action": "policy",
+              "resolved_target": null,
+              "execution_status": "denied",
+              "observed_state": null,
+              "error": "Не удалось однозначно определить одно разрешённое приложение.",
+              "mode": "REAL",
+              "duration_ms": 1,
+              "status_text": "Не удалось однозначно определить одно разрешённое приложение."
+            }
+          ],
+          "latency_ms": 1,
+          "action_ms": 1,
+          "llm_ms": 0,
+          "commentary": null,
+          "generation": {
+            "model": "qwen3:4b",
+            "reasoning": "off",
+            "context_tokens": 4096,
+            "response_tokens": 768,
+            "keep_alive_seconds": 300
+          },
+          "status": "Не удалось однозначно определить одно разрешённое приложение."
+        }
+      }
+    ]
+  },
+  "diagnostics": {
+    "ollama_reachable": true,
+    "model_installed": true,
+    "voice": {
+      "stt_installed": true,
+      "tts_installed": false,
+      "default_profile": "balanced",
+      "max_recording_seconds": 30,
+      "max_upload_bytes": 8388608,
+      "profiles": [
+        {
+          "id": "cpu-fast",
+          "model": "base",
+          "device": "cpu",
+          "compute_type": "int8",
+          "label": "CPU · быстро",
+          "ready": false
+        },
+        {
+          "id": "balanced",
+          "model": "small",
+          "device": "cpu",
+          "compute_type": "int8",
+          "label": "CPU · баланс",
+          "ready": false
+        },
+        {
+          "id": "gpu-quality",
+          "model": "medium",
+          "device": "cuda",
+          "compute_type": "float16",
+          "label": "GPU · точность",
+          "ready": false
+        }
+      ],
+      "voices": [
+        {
+          "id": "ru_RU-denis-medium",
+          "label": "Денис · русский",
+          "dataset_license": "CC0",
+          "ready": false
+        }
+      ],
+      "setup": "См. docs/VOICE.md. Установите requirements-voice.txt и загрузите выбранную модель отдельно.",
+      "local_only": true
+    },
+    "demo": true,
+    "gpu": "size_vram — выделенная память Ollama, не измерение загрузки CUDA; совместная работа с GPU STT проверяется отдельно.",
+    "ollama_version": "0.40.12",
+    "loaded_models": [
+      {
+        "name": "qwen3:4b",
+        "size": 3180247121,
+        "size_vram": 3180247121,
+        "context_length": 4096,
+        "expires_at": "2026-10-28T16:43:34.9086467+03:00"
+      }
+    ]
+  }
+}

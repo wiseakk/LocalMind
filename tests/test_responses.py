@@ -144,7 +144,9 @@ def test_disappearing_catalog_entry_is_denied_without_key_error():
 
 
 def test_app_process_creation_is_not_window_observation():
-    with mock.patch.object(agent, 'resolve_windows_app', return_value=__import__('pathlib').Path('C:/Windows/System32/notepad.exe')), \
+    from localmind.windows_state import LaunchCoordinator, ApplicationState
+    with mock.patch.object(agent, 'launch_coordinator', LaunchCoordinator(inspector=lambda _: ApplicationState('absent'))), \
+         mock.patch.object(agent, 'resolve_windows_app', return_value=__import__('pathlib').Path('C:/Windows/System32/notepad.exe')), \
          mock.patch.object(agent.platform, 'system', return_value='Windows'), \
          mock.patch.object(agent.subprocess, 'Popen'):
         result = agent.open_app('notepad')
@@ -162,11 +164,13 @@ def test_model_url_must_be_local_and_proxy_environment_ignored():
         with pytest.raises(ValueError):
             agent.ollama_chat([], [])
     fake_client = mock.MagicMock()
+    fake_client.__enter__.return_value.get.return_value.json.return_value = {'models': [{'name': agent.settings.model, 'size': 100}]}
     fake_client.__enter__.return_value.post.return_value.json.return_value = {'message': {'content': 'ok'}}
+    fake_client.__enter__.return_value.stream.return_value.__enter__.return_value.iter_bytes.return_value = [b'{"message":{"content":"ok"}}']
     with mock.patch.object(agent.httpx, 'Client', return_value=fake_client) as client:
         agent.ollama_chat([], [])
     assert client.call_args.kwargs['trust_env'] is False
-    body = fake_client.__enter__.return_value.post.call_args.kwargs['json']
+    body = fake_client.__enter__.return_value.stream.call_args.kwargs['json']
     assert body['think'] is False and body['tools'] == [] and body['stream'] is False
 
 
@@ -213,20 +217,23 @@ def test_answer_limit_uses_word_boundary_when_no_sentence_exists():
 
 def test_qwen3_empty_think_prefill_is_request_local():
     fake_client = mock.MagicMock()
+    fake_client.__enter__.return_value.get.return_value.json.return_value = {'models': [{'name': 'qwen3:4b', 'size': 100}]}
     fake_client.__enter__.return_value.post.return_value.json.return_value = {'message': {'content': '{}'}}
+    fake_client.__enter__.return_value.stream.return_value.__enter__.return_value.iter_bytes.return_value = [b'{"message":{"content":"{}"}}']
     configuration = SimpleNamespace(ollama_url='http://127.0.0.1:11434', model='qwen3:4b')
     original = [{'role': 'user', 'content': 'test'}]
     with mock.patch.object(agent, 'settings', configuration), \
          mock.patch.object(agent.httpx, 'Client', return_value=fake_client):
         agent.ollama_chat(original, [])
-    body = fake_client.__enter__.return_value.post.call_args.kwargs['json']
+    body = fake_client.__enter__.return_value.stream.call_args.kwargs['json']
     assert body['messages'][-1] == {'role': 'assistant', 'content': '<think>\n\n</think>\n\n'}
     assert original == [{'role': 'user', 'content': 'test'}]
     configuration.model = 'other-model:latest'
+    fake_client.__enter__.return_value.get.return_value.json.return_value = {'models': [{'name': configuration.model, 'size': 100}]}
     with mock.patch.object(agent, 'settings', configuration), \
          mock.patch.object(agent.httpx, 'Client', return_value=fake_client):
         agent.ollama_chat(original, [])
-    assert fake_client.__enter__.return_value.post.call_args.kwargs['json']['messages'] == original
+    assert fake_client.__enter__.return_value.stream.call_args.kwargs['json']['messages'] == original
 
 
 def test_concurrent_duplicates_share_execution_and_immediate_result():

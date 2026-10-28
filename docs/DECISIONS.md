@@ -70,3 +70,37 @@ adversarial tests добавлены. Request body admission4/deadline15s/size c
 имеют явный denominator; failed processing не исчезает из отчёта.40 explanatory
 jury answers не заменяют real engineering experiments. Полная приёмка pending
 до hardware/normalvoice/browser; git write limitation записан, push/merge отсутствуют.
+# 2026-10-28 — extend the existing assistant
+
+- Preserve immutable execution results, catalog authorization and request-ID
+  replay. Add an independent application launch lock and identity inspection.
+- Token grammar consumes the whole request and exact catalog alias; a polite
+  modal question may authorize a request, informational questions may not.
+- Snapshot model, reasoning, context, response budget and residency into replay
+  identity. Local inference verifies installed metadata; cloud stubs are refused.
+- Stream only conversational answer strings, never reasoning or unvalidated
+  action commentary. Replay deltas with sequence numbers and bounded memory.
+- Keep the existing model provisionally until sequential measurements support a
+  replacement. Qwen3 prefill is a compatibility workaround, not proof that this
+  installed template supports native non-thinking generation.
+
+## 2026-10-28 — fail closed on composition and stream defects
+
+Independent adversarial tests showed factual JSON echoes alone do not validate
+prose. Reject unobserved window assertions, invented relaunches, opposite/negated
+light observations and invalid Unicode; keep the immutable completed result on
+generation failure. Accepted model wording is preserved. This is conservative
+text validation, not a proof of arbitrary natural-language correctness.
+Use bounded byte iteration before NDJSON line parsing; per-read timeout alone
+does not bound a continuously trickling response. Model settings are ContextVars
+scoped to one completion, with a separate non-thinking action composition scope.
+
+## 2026-10-28 — retain the default pending real comparison
+
+Do not promote a larger model without the requested sequential quality/latency/
+VRAM evidence. Two candidate downloads repeatedly stalled and rolled back chunks
+after a reconnect; partial assets and failure evidence are retained for `--resume`.
+The measured4B model still fails factual/practical regressions. Therefore the
+existing4B default is provisional compatibility only, not a quality recommendation.
+Keep the full acceptance explicitly incomplete rather than interpreting unit/DOM
+success as microphone, desktop-window or intelligence evidence.

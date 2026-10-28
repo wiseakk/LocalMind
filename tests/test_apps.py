@@ -8,12 +8,15 @@ from unittest import mock
 import pytest
 
 from localmind import apps
+from localmind.windows_state import ApplicationState, LaunchCoordinator
 
 
 @pytest.fixture(autouse=True)
 def supported_fixtures(monkeypatch):
     monkeypatch.setattr(apps, 'SUPPORTED_GUI_EXECUTABLES',
                         apps.SUPPORTED_GUI_EXECUTABLES | {'editor', 'first', 'second'})
+    monkeypatch.setattr(apps, 'launch_coordinator',
+                        LaunchCoordinator(inspector=lambda _: ApplicationState('absent')))
 
 
 def make_exe(path: Path, extra=b'', subsystem=2) -> Path:

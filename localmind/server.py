@@ -6,6 +6,7 @@ import hmac
 import ipaddress
 import json
 import threading
+import time
 import uuid
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
@@ -21,6 +22,7 @@ from .agent import reply, prepare_reply, complete_reply
 from .devices import device_catalog
 from .apps import catalog, AppError
 from .requests import RequestStore, RequestBusy, RequestConflict
+from .generation import GenerationSettings
 from .voice import VoiceError, voice_status, transcribe_audio, synthesize_speech, MAX_UPLOAD_BYTES
 
 app = FastAPI(title='LocalMind', version='1.0.0', docs_url=None, redoc_url=None, openapi_url=None)
@@ -43,6 +45,11 @@ class ChatRequest(BaseModel):
     response_length: Literal['brief', 'normal', 'detailed'] = 'normal'
     compose_actions: bool = True
     server_instance: str | None = Field(default=None, max_length=32)
+    model: str | None = Field(default=None, min_length=1, max_length=100, pattern=r'^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$')
+    reasoning: Literal['off', 'on', 'auto'] = 'off'
+    context_tokens: int = Field(default=4096, ge=1024, le=8192)
+    response_tokens: int = Field(default=768, ge=64, le=2048)
+    keep_alive_seconds: int = Field(default=300, ge=0, le=900)
 
 class PermissionRequest(BaseModel):
     app_id: str = Field(min_length=1, max_length=100)
@@ -137,11 +144,18 @@ def _entry(data: ChatRequest):
     if data.server_instance is not None and data.server_instance != SERVER_INSTANCE:
         raise HTTPException(409,'Сервер перезапущен. Автоматическое повторение действия отменено; проверьте его состояние вручную.')
     payload=data.model_dump()
+    try:
+        generation = GenerationSettings(data.model or settings.model, data.reasoning, data.context_tokens,
+                                        data.response_tokens, data.keep_alive_seconds)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    # Snapshot effective defaults as well as explicit settings in replay identity.
+    payload['generation'] = generation.to_dict()
     payload.pop('request_id')
     fingerprint=hashlib.sha256(json.dumps(payload,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
     try:
         return store.begin(data.request_id, fingerprint,
-            lambda:prepare_reply(data.text,[m.model_dump() for m in data.history],data.actions_authorized,data.response_length,data.compose_actions),
+            lambda:prepare_reply(data.text,[m.model_dump() for m in data.history],data.actions_authorized,data.response_length,data.compose_actions,generation),
             complete_reply)
     except RequestConflict as exc:
         raise HTTPException(409,str(exc)) from exc
@@ -165,11 +179,39 @@ def chat_stream(data:ChatRequest, x_localmind_key: Annotated[str | None, Header(
         try:
             initial=await asyncio.to_thread(entry.initial.result,90)
             yield json.dumps({'type':'status','data':initial},ensure_ascii=False)+'\n'
+            offset = 0
+            deadline = time.monotonic() + 90
+            while True:
+                if time.monotonic() > deadline:
+                    raise TimeoutError('Response still processing')
+                deltas, finished = await asyncio.to_thread(entry.read_deltas, offset)
+                for delta in deltas:
+                    offset += 1
+                    yield json.dumps({'type':'delta','text':delta,'sequence':offset},ensure_ascii=False)+'\n'
+                if finished:
+                    break
             final=await asyncio.to_thread(entry.final.result,90)
             yield json.dumps({'type':'final','data':final},ensure_ascii=False)+'\n'
         except Exception:
             yield json.dumps({'type':'error','detail':'Не удалось получить ответ. Сохраните request_id для повторного запроса.'},ensure_ascii=False)+'\n'
     return StreamingResponse(events(),media_type='application/x-ndjson',headers={'X-Accel-Buffering':'no'})
+
+
+@app.get('/api/models')
+def models(x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    from .agent import _local_ollama_url
+    try:
+        with httpx.Client(timeout=3, trust_env=False) as client:
+            response = client.get(_local_ollama_url() + '/api/tags')
+            response.raise_for_status()
+            installed = [{'name': m['name'], 'size': m.get('size'), 'details': m.get('details', {})}
+                         for m in response.json().get('models', [])
+                         if isinstance(m.get('name'), str) and 'cloud' not in m['name'].casefold()
+                         and m.get('size', 0) > 0 and not m.get('remote_host') and not m.get('remote_model')]
+        return {'models': installed, 'default': settings.model, 'local_only': True}
+    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+        raise HTTPException(503, 'Локальный Ollama недоступен. Проверьте его запуск; облачная замена отключена.')
 
 @app.post('/api/transcribe')
 async def transcribe(audio:Annotated[UploadFile,File()], profile:Annotated[str,Form()]='balanced',
@@ -224,6 +266,12 @@ def diagnostics(x_localmind_key:Annotated[str | None,Header()]=None):
             result=client.get(url+'/api/tags');result.raise_for_status()
             status['ollama_reachable']=True
             status['model_installed']=any(m.get('name')==settings.model for m in result.json().get('models',[]))
+            version=client.get(url+'/api/version');version.raise_for_status()
+            status['ollama_version']=version.json().get('version')
+            resident=client.get(url+'/api/ps');resident.raise_for_status()
+            status['loaded_models']=[{k:m.get(k) for k in ('name','size','size_vram','context_length','expires_at')}
+                                     for m in resident.json().get('models',[])]
+            status['gpu']='size_vram — выделенная память Ollama, не измерение загрузки CUDA; совместная работа с GPU STT проверяется отдельно.'
     except Exception:
         status['ollama_message']='Проверьте локальный Ollama и ollama pull выбранной модели. Секреты и пути скрыты.'
     return status
