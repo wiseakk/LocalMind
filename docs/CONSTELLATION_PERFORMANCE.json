@@ -1,0 +1,762 @@
+{
+  "date": "2026-10-28",
+  "os": "Windows-10-10.0.19045-SP0",
+  "baseline_commit": "4bcbaef",
+  "browser_gpu": {
+    "vendorId": 4318,
+    "deviceId": 10118,
+    "subSysId": 352416631,
+    "revision": 161,
+    "vendorString": "",
+    "deviceString": "NVIDIA GeForce RTX 4070",
+    "driverVendor": "NVIDIA",
+    "driverVersion": "32.0.16.1692"
+  },
+  "features": {
+    "2d_canvas": "enabled",
+    "direct_rendering_display_compositor": "disabled_off_ok",
+    "gpu_compositing": "enabled",
+    "multiple_raster_threads": "enabled_on",
+    "opengl": "enabled_on",
+    "rasterization": "enabled",
+    "raw_draw": "disabled_off_ok",
+    "skia_graphite": "disabled_off",
+    "trees_in_viz": "disabled_off",
+    "video_decode": "enabled",
+    "video_encode": "enabled",
+    "webgl": "enabled",
+    "webgpu": "enabled",
+    "webnn": "disabled_off"
+  },
+  "model": "qwen3:4b",
+  "nodes": 14,
+  "sample_seconds": 6,
+  "raw_trace_directory": ".test-artifacts/canvas-native-evidence",
+  "before": [
+    {
+      "zoom": 1,
+      "actualZoom": 1,
+      "zoomMode": "native",
+      "viewport": {
+        "width": 1440,
+        "height": 1000,
+        "dpr": 1,
+        "cssZoom": "1"
+      },
+      "workload": "idle",
+      "fps": 11.828798960398146,
+      "p95FrameMs": 91,
+      "rendererMainCpuPercent": 1.7507483762497051,
+      "gpuSystemSamples": [
+        "4, 1, 4398",
+        "1, 1, 4392",
+        "2, 8, 4390",
+        "5, 7, 4389",
+        "6, 14, 4375",
+        "9, 19, 4372"
+      ],
+      "inferenceFrames": 0,
+      "stats": {
+        "nodes": 14,
+        "edges": 13,
+        "frames": 91,
+        "scheduled": true,
+        "reduced": false,
+        "low": false,
+        "visible": true,
+        "mode": "idle",
+        "amplitude": 0
+      },
+      "trace": {
+        "Layout": {
+          "count": 0,
+          "ms": 0
+        },
+        "UpdateLayoutTree": {
+          "count": 0,
+          "ms": 0
+        },
+        "Paint": {
+          "count": 0,
+          "ms": 0
+        },
+        "FunctionCall": {
+          "count": 1066,
+          "ms": 27.72000000000003
+        },
+        "RasterTask": {
+          "count": 0,
+          "ms": 0
+        }
+      }
+    },
+    {
+      "zoom": 1,
+      "actualZoom": 1,
+      "zoomMode": "native",
+      "viewport": {
+        "width": 1440,
+        "height": 1000,
+        "dpr": 1,
+        "cssZoom": "1"
+      },
+      "workload": "ollama",
+      "fps": 25.158280573144626,
+      "p95FrameMs": 84.80000000000018,
+      "rendererMainCpuPercent": 9.771857027785,
+      "gpuSystemSamples": [
+        "25, 19, 4397",
+        "3, 8, 4387",
+        "94, 77, 4381",
+        "94, 84, 4386",
+        "94, 84, 4380",
+        "94, 86, 4380"
+      ],
+      "inferenceFrames": 136,
+      "stats": {
+        "nodes": 14,
+        "edges": 13,
+        "frames": 171,
+        "scheduled": true,
+        "reduced": false,
+        "low": false,
+        "visible": true,
+        "mode": "idle",
+        "amplitude": 0
+      },
+      "trace": {
+        "Layout": {
+          "count": 459,
+          "ms": 96.29500000000006
+        },
+        "UpdateLayoutTree": {
+          "count": 1254,
+          "ms": 19.50600000000005
+        },
+        "Paint": {
+          "count": 1438,
+          "ms": 108.12999999999991
+        },
+        "FunctionCall": {
+          "count": 1602,
+          "ms": 39.975000000000215
+        },
+        "RasterTask": {
+          "count": 0,
+          "ms": 0
+        }
+      }
+    },
+    {
+      "zoom": 1.25,
+      "actualZoom": 1.25,
+      "zoomMode": "native",
+      "viewport": {
+        "width": 1152,
+        "height": 800,
+        "dpr": 1.25,
+        "cssZoom": "1"
+      },
+      "workload": "idle",
+      "fps": 11.826828577614911,
+      "p95FrameMs": 91,
+      "rendererMainCpuPercent": 1.805570538714682,
+      "gpuSystemSamples": [
+        "3, 1, 4414",
+        "2, 1, 4410",
+        "2, 1, 4406",
+        "3, 5, 4406",
+        "3, 9, 4388",
+        "4, 10, 4376"
+      ],
+      "inferenceFrames": 0,
+      "stats": {
+        "nodes": 14,
+        "edges": 13,
+        "frames": 91,
+        "scheduled": true,
+        "reduced": false,
+        "low": false,
+        "visible": true,
+        "mode": "idle",
+        "amplitude": 0
+      },
+      "trace": {
+        "Layout": {
+          "count": 0,
+          "ms": 0
+        },
+        "UpdateLayoutTree": {
+          "count": 0,
+          "ms": 0
+        },
+        "Paint": {
+          "count": 0,
+          "ms": 0
+        },
+        "FunctionCall": {
+          "count": 1066,
+          "ms": 28.17700000000003
+        },
+        "RasterTask": {
+          "count": 0,
+          "ms": 0
+        }
+      }
+    },
+    {
+      "zoom": 1.25,
+      "actualZoom": 1.25,
+      "zoomMode": "native",
+      "viewport": {
+        "width": 1152,
+        "height": 800,
+        "dpr": 1.25,
+        "cssZoom": "1"
+      },
+      "workload": "ollama",
+      "fps": 23.814678501840227,
+      "p95FrameMs": 84.89999999999964,
+      "rendererMainCpuPercent": 9.812015691903072,
+      "gpuSystemSamples": [
+        "7, 4, 4405",
+        "2, 1, 4402",
+        "88, 79, 4402",
+        "94, 83, 4402",
+        "94, 85, 4389",
+        "94, 85, 4390"
+      ],
+      "inferenceFrames": 122,
+      "stats": {
+        "nodes": 14,
+        "edges": 13,
+        "frames": 163,
+        "scheduled": true,
+        "reduced": false,
+        "low": false,
+        "visible": true,
+        "mode": "idle",
+        "amplitude": 0
+      },
+      "trace": {
+        "Layout": {
+          "count": 444,
+          "ms": 92.39999999999999
+        },
+        "UpdateLayoutTree": {
+          "count": 1157,
+          "ms": 16.65499999999997
+        },
+        "Paint": {
+          "count": 1395,
+          "ms": 96.84699999999998
+        },
+        "FunctionCall": {
+          "count": 1579,
+          "ms": 36.503000000000206
+        },
+        "RasterTask": {
+          "count": 0,
+          "ms": 0
+        }
+      }
+    },
+    {
+      "zoom": 1.4,
+      "actualZoom": 1.4,
+      "zoomMode": "native",
+      "viewport": {
+        "width": 1028,
+        "height": 714,
+        "dpr": 1.399999976158142,
+        "cssZoom": "1"
+      },
+      "workload": "idle",
+      "fps": 11.825646663002383,
+      "p95FrameMs": 91,
+      "rendererMainCpuPercent": 1.8412586489500689,
+      "gpuSystemSamples": [
+        "8, 11, 4426",
+        "9, 14, 4429",
+        "8, 19, 4420",
+        "9, 19, 4419",
+        "6, 18, 4392",
+        "5, 14, 4382"
+      ],
+      "inferenceFrames": 0,
+      "stats": {
+        "nodes": 14,
+        "edges": 13,
+        "frames": 91,
+        "scheduled": true,
+        "reduced": false,
+        "low": false,
+        "visible": true,
+        "mode": "idle",
+        "amplitude": 0
+      },
+      "trace": {
+        "Layout": {
+          "count": 0,
+          "ms": 0
+        },
+        "UpdateLayoutTree": {
+          "count": 0,
+          "ms": 0
+        },
+        "Paint": {
+          "count": 0,
+          "ms": 0
+        },
+        "FunctionCall": {
+          "count": 1066,
+          "ms": 28.771999999999974
+        },
+        "RasterTask": {
+          "count": 0,
+          "ms": 0
+        }
+      }
+    },
+    {
+      "zoom": 1.4,
+      "actualZoom": 1.4,
+      "zoomMode": "native",
+      "viewport": {
+        "width": 1028,
+        "height": 714,
+        "dpr": 1.399999976158142,
+        "cssZoom": "1"
+      },
+      "workload": "ollama",
+      "fps": 25.32404784912042,
+      "p95FrameMs": 84.80000000000018,
+      "rendererMainCpuPercent": 11.474717101764153,
+      "gpuSystemSamples": [
+        "29, 25, 4405",
+        "10, 19, 4406",
+        "83, 71, 4414",
+        "94, 83, 4414",
+        "94, 83, 4410",
+        "94, 84, 4404"
+      ],
+      "inferenceFrames": 139,
+      "stats": {
+        "nodes": 14,
+        "edges": 13,
+        "frames": 173,
+        "scheduled": true,
+        "reduced": false,
+        "low": false,
+        "visible": true,
+        "mode": "idle",
+        "amplitude": 0
+      },
+      "trace": {
+        "Layout": {
+          "count": 496,
+          "ms": 111.90499999999994
+        },
+        "UpdateLayoutTree": {
+          "count": 1308,
+          "ms": 19.71599999999999
+        },
+        "Paint": {
+          "count": 1548,
+          "ms": 114.04200000000017
+        },
+        "FunctionCall": {
+          "count": 1640,
+          "ms": 38.556000000000225
+        },
+        "RasterTask": {
+          "count": 0,
+          "ms": 0
+        }
+      }
+    }
+  ],
+  "after": [
+    {
+      "zoom": 1,
+      "actualZoom": 1,
+      "zoomMode": "native",
+      "viewport": {
+        "width": 1440,
+        "height": 1000,
+        "dpr": 1,
+        "cssZoom": "1"
+      },
+      "workload": "idle",
+      "fps": 165.10887855918634,
+      "p95FrameMs": 6.100000000000364,
+      "rendererMainCpuPercent": 4.390823640531324,
+      "gpuSystemSamples": [
+        "4, 8, 4379",
+        "3, 1, 4373",
+        "6, 1, 4371",
+        "13, 9, 4370",
+        "19, 19, 4354",
+        "25, 17, 4359"
+      ],
+      "inferenceFrames": 0,
+      "stats": {
+        "nodes": 14,
+        "edges": 13,
+        "frames": 1260,
+        "scheduled": true,
+        "reduced": false,
+        "low": false,
+        "visible": true,
+        "mode": "idle",
+        "amplitude": 0,
+        "dpr": 1,
+        "pixels": 394188,
+        "settling": false,
+        "fps": 164.9862527321491,
+        "p95FrameMs": 6.199999809265137,
+        "meanDrawMs": 0.06500000096857547
+      },
+      "trace": {
+        "Layout": {
+          "count": 0,
+          "ms": 0
+        },
+        "UpdateLayoutTree": {
+          "count": 0,
+          "ms": 0
+        },
+        "Paint": {
+          "count": 0,
+          "ms": 0
+        },
+        "FunctionCall": {
+          "count": 2028,
+          "ms": 113.77200000000028
+        },
+        "RasterTask": {
+          "count": 0,
+          "ms": 0
+        }
+      }
+    },
+    {
+      "zoom": 1,
+      "actualZoom": 1,
+      "zoomMode": "native",
+      "viewport": {
+        "width": 1440,
+        "height": 1000,
+        "dpr": 1,
+        "cssZoom": "1"
+      },
+      "workload": "ollama",
+      "fps": 164.9615089812326,
+      "p95FrameMs": 6.100000000000364,
+      "rendererMainCpuPercent": 11.62616529327882,
+      "gpuSystemSamples": [
+        "4, 2, 4387",
+        "4, 1, 4385",
+        "91, 80, 4381",
+        "94, 83, 4376",
+        "94, 84, 4374",
+        "94, 83, 4381"
+      ],
+      "inferenceFrames": 713,
+      "stats": {
+        "nodes": 14,
+        "edges": 13,
+        "frames": 1283,
+        "scheduled": true,
+        "reduced": false,
+        "low": false,
+        "visible": true,
+        "mode": "idle",
+        "amplitude": 0,
+        "dpr": 1,
+        "pixels": 394188,
+        "settling": false,
+        "fps": 165.00137658373598,
+        "p95FrameMs": 6.099999904632568,
+        "meanDrawMs": 0.05888888976640171
+      },
+      "trace": {
+        "Layout": {
+          "count": 433,
+          "ms": 89.90999999999997
+        },
+        "UpdateLayoutTree": {
+          "count": 1143,
+          "ms": 17.287999999999986
+        },
+        "Paint": {
+          "count": 1358,
+          "ms": 101.54700000000012
+        },
+        "FunctionCall": {
+          "count": 2451,
+          "ms": 121.98800000000024
+        },
+        "RasterTask": {
+          "count": 0,
+          "ms": 0
+        }
+      },
+      "engine": "ollama"
+    },
+    {
+      "zoom": 1.25,
+      "actualZoom": 1.25,
+      "zoomMode": "native",
+      "viewport": {
+        "width": 1152,
+        "height": 800,
+        "dpr": 1.25,
+        "cssZoom": "1"
+      },
+      "workload": "idle",
+      "fps": 165.12538532032633,
+      "p95FrameMs": 6.100000000000364,
+      "rendererMainCpuPercent": 4.439838756531011,
+      "gpuSystemSamples": [
+        "11, 4, 4404",
+        "10, 10, 4394",
+        "16, 15, 4390",
+        "22, 18, 4390",
+        "23, 18, 4368",
+        "21, 19, 4360"
+      ],
+      "inferenceFrames": 0,
+      "stats": {
+        "nodes": 14,
+        "edges": 13,
+        "frames": 1245,
+        "scheduled": true,
+        "reduced": false,
+        "low": false,
+        "visible": true,
+        "mode": "idle",
+        "amplitude": 0,
+        "dpr": 1.2505966951283747,
+        "pixels": 274576,
+        "settling": false,
+        "fps": 165.00137658373598,
+        "p95FrameMs": 6.099999904632568,
+        "meanDrawMs": 0.061666667585571606
+      },
+      "trace": {
+        "Layout": {
+          "count": 0,
+          "ms": 0
+        },
+        "UpdateLayoutTree": {
+          "count": 0,
+          "ms": 0
+        },
+        "Paint": {
+          "count": 0,
+          "ms": 0
+        },
+        "FunctionCall": {
+          "count": 2028,
+          "ms": 116.42599999999995
+        },
+        "RasterTask": {
+          "count": 0,
+          "ms": 0
+        }
+      }
+    },
+    {
+      "zoom": 1.25,
+      "actualZoom": 1.25,
+      "zoomMode": "native",
+      "viewport": {
+        "width": 1152,
+        "height": 800,
+        "dpr": 1.25,
+        "cssZoom": "1"
+      },
+      "workload": "ollama",
+      "fps": 165.03463895549712,
+      "p95FrameMs": 6.100000000000364,
+      "rendererMainCpuPercent": 11.32438894019286,
+      "gpuSystemSamples": [
+        "30, 25, 4408",
+        "19, 20, 4401",
+        "62, 56, 4390",
+        "94, 83, 4394",
+        "94, 84, 4391",
+        "17, 14, 4385"
+      ],
+      "inferenceFrames": 649,
+      "stats": {
+        "nodes": 14,
+        "edges": 13,
+        "frames": 1245,
+        "scheduled": true,
+        "reduced": false,
+        "low": false,
+        "visible": true,
+        "mode": "idle",
+        "amplitude": 0,
+        "dpr": 1.25,
+        "pixels": 273529,
+        "settling": false,
+        "fps": 165.00137658373598,
+        "p95FrameMs": 6.099999904632568,
+        "meanDrawMs": 0.06500000096857547
+      },
+      "trace": {
+        "Layout": {
+          "count": 387,
+          "ms": 77.57199999999995
+        },
+        "UpdateLayoutTree": {
+          "count": 1034,
+          "ms": 15.071999999999985
+        },
+        "Paint": {
+          "count": 1222,
+          "ms": 84.05000000000004
+        },
+        "FunctionCall": {
+          "count": 2409,
+          "ms": 120.92700000000042
+        },
+        "RasterTask": {
+          "count": 0,
+          "ms": 0
+        }
+      },
+      "engine": "ollama"
+    },
+    {
+      "zoom": 1.4,
+      "actualZoom": 1.4,
+      "zoomMode": "native",
+      "viewport": {
+        "width": 1028,
+        "height": 714,
+        "dpr": 1.399999976158142,
+        "cssZoom": "1"
+      },
+      "workload": "idle",
+      "fps": 165.1666666666564,
+      "p95FrameMs": 6.100000000000364,
+      "rendererMainCpuPercent": 4.412588432596634,
+      "gpuSystemSamples": [
+        "11, 2, 4418",
+        "8, 2, 4411",
+        "11, 8, 4407",
+        "23, 10, 4407",
+        "19, 13, 4367",
+        "20, 21, 4364"
+      ],
+      "inferenceFrames": 0,
+      "stats": {
+        "nodes": 14,
+        "edges": 13,
+        "frames": 1242,
+        "scheduled": true,
+        "reduced": false,
+        "low": false,
+        "visible": true,
+        "mode": "idle",
+        "amplitude": 0,
+        "dpr": 1.399999976158142,
+        "pixels": 318784,
+        "settling": false,
+        "fps": 165.00137658373598,
+        "p95FrameMs": 6.199999809265137,
+        "meanDrawMs": 0.04944444518122408
+      },
+      "trace": {
+        "Layout": {
+          "count": 0,
+          "ms": 0
+        },
+        "UpdateLayoutTree": {
+          "count": 0,
+          "ms": 0
+        },
+        "Paint": {
+          "count": 0,
+          "ms": 0
+        },
+        "FunctionCall": {
+          "count": 2027,
+          "ms": 113.63300000000011
+        },
+        "RasterTask": {
+          "count": 0,
+          "ms": 0
+        }
+      }
+    },
+    {
+      "zoom": 1.4,
+      "actualZoom": 1.4,
+      "zoomMode": "native",
+      "viewport": {
+        "width": 1028,
+        "height": 714,
+        "dpr": 1.399999976158142,
+        "cssZoom": "1"
+      },
+      "workload": "ollama",
+      "fps": 165.0483819929051,
+      "p95FrameMs": 6.100000000000364,
+      "rendererMainCpuPercent": 11.450104277004245,
+      "gpuSystemSamples": [
+        "28, 23, 4398",
+        "33, 29, 4398",
+        "94, 78, 4392",
+        "94, 80, 4391",
+        "94, 83, 4392",
+        "74, 65, 4388"
+      ],
+      "inferenceFrames": 682,
+      "stats": {
+        "nodes": 14,
+        "edges": 13,
+        "frames": 1243,
+        "scheduled": true,
+        "reduced": false,
+        "low": false,
+        "visible": true,
+        "mode": "idle",
+        "amplitude": 0,
+        "dpr": 1.399999976158142,
+        "pixels": 318784,
+        "settling": false,
+        "fps": 164.9862527321491,
+        "p95FrameMs": 6.199999809265137,
+        "meanDrawMs": 0.057777778638733755
+      },
+      "trace": {
+        "Layout": {
+          "count": 398,
+          "ms": 79.17799999999997
+        },
+        "UpdateLayoutTree": {
+          "count": 1078,
+          "ms": 16.293000000000024
+        },
+        "Paint": {
+          "count": 1252,
+          "ms": 86.11700000000003
+        },
+        "FunctionCall": {
+          "count": 2418,
+          "ms": 119.17200000000027
+        },
+        "RasterTask": {
+          "count": 0,
+          "ms": 0
+        }
+      },
+      "engine": "ollama"
+    }
+  ]
+}

@@ -32,6 +32,7 @@
     compact=stage.clientWidth<=1100;
     const open=panel.classList.contains('graph-focused');
     panel.inert=compact&&!open;
+    window.localmindScene?.setVisible(!compact||open);
     for(const id of ['graphNav','graphToggle'])byId(id).setAttribute('aria-expanded',String(!compact||open));
   }
   function setGraph(open,restore=false){

@@ -44,9 +44,10 @@ Transcription is an indeterminate pending state, never a fake partial transcript
 Tool nodes light only after server results; the API has no live tool-start event.
 
 Renderer limits: 36 nodes, at most 35 edges, 52 decorative particles, 1.5 maximum
-pixel ratio and 1.6 million canvas pixels. Idle drawing is capped at about12fps;
-active drawing at about30fps; economical interaction at about12fps. These are
-scheduler limits, **not measured achieved frame rates**. Economical/reduced modes
+pixel ratio and 1.6 million canvas pixels. Normal rendering now follows display
+refresh using requestAnimationFrame; only explicit economical audio interaction
+is throttled to about12fps. See CONSTELLATION_PERFORMANCE.md for real Windows /
+RTX 4070 measurements at native browser zoom. Economical/reduced modes
 remove physics/drift, and economical mode removes glow. Hidden/offscreen canvas
 does not render. No WebGL dependency or continuous Markdown rendering was added.
 

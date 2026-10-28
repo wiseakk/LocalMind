@@ -326,7 +326,9 @@ async function run(name,fn){await fn();passed++;console.log('PASS '+name)}
   });
   await run('Canvas scheduling stops in economical mode and when hidden',async()=>{
     const dom=makeDom(null,w=>{
-      const ctx=new Proxy({},{get:(target,key)=>key in target?target[key]:()=>{}});
+      // jsdom has no layout: model a visible desktop stage explicitly.
+      Object.defineProperty(w.document.querySelector('.stage'),'clientWidth',{value:1200});
+      const ctx=new Proxy({measureText:text=>({width:text.length*6})},{get:(target,key)=>key in target?target[key]:()=>{}});
       w.CanvasRenderingContext2D=function(){};w.HTMLCanvasElement.prototype.getContext=()=>ctx;
       w.HTMLCanvasElement.prototype.getBoundingClientRect=()=>({left:0,top:0,width:500,height:400});
     }),w=dom.window,d=w.document;

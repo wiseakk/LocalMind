@@ -240,3 +240,37 @@ Backend/API/security unchanged. Windows microphone/speaker/GPU not tested here.
 Start: `powershell -ExecutionPolicy Bypass -File .\start_windows.ps1`.
 Offline demo after asset downloads and troubleshooting remain in README.md;
 40 explanatory defense answers remain in docs/DEFENSE_QA.md. No push/deploy.
+
+## 2026-10-28 — Constellation Canvas performance verified
+
+Profiled original and optimized Canvas with Chrome DevTools Performance traces
+on real Windows 10 build 19045 / RTX 4070 (D3D11 hardware acceleration confirmed).
+Genuine native Chrome tab zoom 100/125/140% was set and read back in an isolated
+benchmark browser profile. Fourteen nodes, six-second windows, actual installed
+qwen3:4b generation; no mock LLM on this benchmark path. Final response diagnostics
+confirmed engine ollama in all three cases. No models downloaded.
+
+Idle FPS improved from 11.8 to approximately 165 at every scale. Ollama request
+windows improved from 25.2/23.8/25.3 to 165.0/165.0/165.0 FPS. p95 frame intervals
+improved from approximately 85-91 ms to 6.1 ms. Renderer CPU and whole-device GPU
+samples are recorded honestly, including the higher absolute idle CPU needed for
+14 times as many frames (about 4.4% of one core). Raw traces, metadata, raw JSON
+and visual screenshot: .test-artifacts/canvas-native-evidence/. Committed numeric
+snapshot and methodology: docs/CONSTELLATION_PERFORMANCE.json and .md.
+
+Removed normal 12/30 FPS timeouts; use rAF timestamps, cached backgrounds/text/
+glow sprites, bounded fixed-time physics with settling, capped/adaptive DPR and
+explicit drawer/document/offscreen suspension. Optional developer FPS overlay is
+off by default: localmindScene.setDiagnostics(true). Theme, colors, interactions,
+voice consent/playback behavior, security controls and server API are preserved.
+Physical microphone/speaker and GPU STT were not tested in this scoped repair.
+
+Verification: original 19 browser scenarios plus two focused cache/lifecycle/
+zoom-drag/typing regressions: 19 passed, 2 expected skips. 28 DOM checks pass.
+391 Python tests and 35 subtests pass. Seven JS syntax checks, benchmark syntax
+and diff check pass. Independent Reviewer/Security review found no remaining
+blocker after CPU timing, suspended overlay and observable drag-test corrections.
+
+Start: powershell -ExecutionPolicy Bypass -File .\start_windows.ps1
+Offline demo after asset downloads and troubleshooting remain in README.md;
+40 explanatory defense answers remain in docs/DEFENSE_QA.md. No push/deployment.

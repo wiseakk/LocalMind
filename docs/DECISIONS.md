@@ -146,3 +146,19 @@ widths <=1100 CSS pixels, use a Constellation drawer with toggle/close, Escape,
 focus restoration, aria-expanded and inert closed content. Container width
 responds to CSS zoom and narrow windows. Preserve backend/API/CSP, voice and
 original browser tests/assertions. No browser scrollIntoView workaround.
+
+## 2026-10-28 — Canvas performance architecture
+
+Profile the existing renderer with Chromium DevTools Protocol Performance traces,
+frame intervals and NVIDIA read-only utilization before changing it. Distinguish
+CSS scale stress from real browser/DPR reflow; keep the drawer open for profiling.
+Use rAF timestamps with bounded fixed-time physics substeps, adaptive settling,
+reusable node coordinates, cached raster labels/glow sprites and decorative layers.
+Invalidate caches only for geometry/font/quality changes. Retain subtle drift,
+colors, audio reactivity, reduced-motion and bounded graph size. Never silently
+cap normal animation at 30 FPS; low-resource mode remains explicit opt-in.
+Cap backing-store DPR 1–1.5 (absolute pixel budget), adapt quality to measured
+CPU draw cost with hysteresis; measure Chrome backend before claiming GPU gains.
+Optional developer overlay must be off by default and contain no private data.
+MDN primary API references: https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Optimizing_canvas
+and https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame .
