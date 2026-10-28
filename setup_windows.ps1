@@ -1,4 +1,4 @@
-param([switch]$Voice, [switch]$Dev)
+﻿param([switch]$Voice, [switch]$Dev)
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 if (-not (Test-Path '.venv\Scripts\python.exe')) {

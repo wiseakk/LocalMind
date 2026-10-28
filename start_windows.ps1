@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 if (-not (Test-Path '.venv')) {
     throw 'Сначала выполни .\setup_windows.ps1 (однократная установка с сетью).'
