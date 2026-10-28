@@ -211,3 +211,32 @@ blocked-external-HTTP browser evidence or local-generation performance trace.
 Windows microphone/speaker/GPU and real HA devices remain untested. No models
 installed; no merge, push, publication or unrelated backend work. Preserve the
 existing start_windows.ps1, offline demo, troubleshooting and40 defense answers.
+
+## 2026-10-28 — responsive zoom repair verified
+
+Both reported 125%/140% browser regressions pass. Full original 19-scenario
+Playwright suite: **17 passed, 2 expected skips** (headed chrome zoom and opt-in
+real Ollama trace). DOM: **28 passed**. Python: **391 passed, 35 subtests passed**,
+existing pytest cache ACL warning. Seven JS syntax checks and diff check pass.
+Original browser assertions/tests are unchanged. Reviewed browser screenshots.
+
+Inspected computed styles, bounding rectangles and ancestor overflow at
+100/125/140% CSS zoom and equivalent reduced viewports. Before at 1440x1000:
+workspace rendered heights 1000/1250/1400; message tops 809/1012/1133.45;
+microphone bottoms 972/1215.25/1361.22. Ancestors had visible overflow;
+conversation had auto overflow but the oversized containing workspace placed
+essential controls outside the viewport. Reduced-viewport reflow did not
+reproduce this specific error: CSS zoom differs from browser chrome zoom.
+After: workspace height 1000 at every scale; message bottoms 865/832/811.84;
+microphone bottoms 972/965.25/961.22. Percent viewport sizing fixes the cause.
+
+Constellation becomes a toggleable drawer at <=1100 CSS pixels of available
+main width. Closed drawer is inert; Escape restores focus. Independent chat
+scroll leaves the composer fixed in place. Additional geometry checks pass at
+390x600, 844x390 and 760x560. Reproduce with `node scripts/inspect_layout.mjs`;
+JSON computed-style/overflow reports and PNGs: `.test-artifacts/layout/` (ignored).
+Backend/API/security unchanged. Windows microphone/speaker/GPU not tested here.
+
+Start: `powershell -ExecutionPolicy Bypass -File .\start_windows.ps1`.
+Offline demo after asset downloads and troubleshooting remain in README.md;
+40 explanatory defense answers remain in docs/DEFENSE_QA.md. No push/deploy.

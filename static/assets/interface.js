@@ -26,12 +26,35 @@
   }
   media?.addEventListener('change',appearance);
   byId('reduceMotion').addEventListener('change',appearance);byId('lowPerformance').addEventListener('change',appearance);appearance();
-  byId('graphNav').addEventListener('click',()=>{
-    byId('graphNav').classList.add('selected');byId('graphNav').setAttribute('aria-current','location');byId('chatNav').classList.remove('selected');byId('chatNav').removeAttribute('aria-current');
-    byId('skyPanel').classList.add('graph-focused');byId('skyPanel').scrollIntoView?.({block:'start',behavior:document.documentElement.dataset.reducedMotion==='true'?'instant':'smooth'});
-    byId('nodeSelect').focus({preventScroll:true});closeSidebar();
+  const panel=byId('skyPanel'),stage=document.querySelector('.stage');
+  let compact=false,graphOpener=byId('graphToggle');
+  function syncGraphAccess(){
+    compact=stage.clientWidth<=1100;
+    const open=panel.classList.contains('graph-focused');
+    panel.inert=compact&&!open;
+    for(const id of ['graphNav','graphToggle'])byId(id).setAttribute('aria-expanded',String(!compact||open));
+  }
+  function setGraph(open,restore=false){
+    panel.classList.toggle('graph-focused',open);
+    byId('graphNav').classList.toggle('selected',open);
+    byId('chatNav').classList.toggle('selected',!open);
+    if(open){byId('graphNav').setAttribute('aria-current','location');byId('chatNav').removeAttribute('aria-current');}
+    else{byId('graphNav').removeAttribute('aria-current');byId('chatNav').setAttribute('aria-current','page');}
+    syncGraphAccess();
+    if(open)byId('nodeSelect').focus({preventScroll:true});
+    else if(restore)(compact?byId('graphToggle'):graphOpener).focus({preventScroll:true});
+    window.localmindScene?.redraw();
+  }
+  for(const id of ['graphNav','graphToggle'])byId(id).addEventListener('click',()=>{
+    graphOpener=byId(id);setGraph(!panel.classList.contains('graph-focused'));closeSidebar();
   });
-  byId('chatNav').addEventListener('click',()=>{byId('chatNav').classList.add('selected');byId('chatNav').setAttribute('aria-current','page');byId('graphNav').classList.remove('selected');byId('graphNav').removeAttribute('aria-current');byId('skyPanel').classList.remove('graph-focused');byId('message').scrollIntoView?.({block:'nearest'});});
+  byId('closeGraph').addEventListener('click',()=>setGraph(false,true));
+  byId('chatNav').addEventListener('click',()=>setGraph(false));
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&!document.querySelector('dialog[open]')&&compact&&panel.classList.contains('graph-focused'))setGraph(false,true);
+  });
+  if(window.ResizeObserver)new ResizeObserver(syncGraphAccess).observe(stage);
+  syncGraphAccess();
   for(const id of ['settingsOpen','appsOpen'])byId(id).addEventListener('click',closeSidebar);
   // Native <dialog> handles focus containment, Escape and focus return. Explicitly
   // restore its opener too, including when the opener lives in the mobile rail.

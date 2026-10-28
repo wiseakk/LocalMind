@@ -136,3 +136,13 @@ fails Access is denied. Native Zen access was denied by automatic review. Do
 not fabricate screenshots, real zoom, performance traces or hardware evidence.
 UI milestone remains pending browser gate; do not merge/integrate yet. Details,
 repeatable commands and before/after report: docs/CONSTELLATION_UI.md.
+
+## 2026-10-28 — focused responsive layout repair
+
+CSS root zoom scales 100dvh without reducing its computed value. Use percent
+heights through html/body and remove workspace/mobile minimum-height floors.
+Retain min-height:0 and independent conversation overflow. At main-container
+widths <=1100 CSS pixels, use a Constellation drawer with toggle/close, Escape,
+focus restoration, aria-expanded and inert closed content. Container width
+responds to CSS zoom and narrow windows. Preserve backend/API/CSP, voice and
+original browser tests/assertions. No browser scrollIntoView workaround.

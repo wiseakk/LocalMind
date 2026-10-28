@@ -25,6 +25,9 @@
 
 *{
   box-sizing:border-box}
+html,body{
+  height:100%;
+  min-height:0}
 body{
   margin:0;
   background:var(--bg);
@@ -76,8 +79,9 @@ svg.icon{
 .workspace{
   display:grid;
   grid-template-columns:80px minmax(0,1fr);
-  height:100dvh;
-  min-height:560px}
+  height:100%;
+  min-height:0;
+  grid-template-rows:minmax(0,1fr)}
 .sidebar{
   padding:25px 14px;
   border-right:1px solid var(--line);
@@ -150,6 +154,7 @@ svg.icon{
   writing-mode:vertical-rl;
   color:#837b91}
 .main{
+  container-type:inline-size;
   display:flex;
   flex-direction:column;
   min-width:0;
@@ -208,6 +213,7 @@ svg.icon{
 #sidebarToggle{
   display:none}
 .stage{
+  position:relative;
   display:grid;
   grid-template-columns:minmax(340px,1.12fr) minmax(310px,1fr);
   min-height:0;
@@ -405,7 +411,9 @@ h1 em{
   animation-delay:.4s}
 .composer-area{
   padding:12px 30px 24px;
-  flex-shrink:0}
+  flex-shrink:0;
+  max-height:100%;
+  overflow:auto}
 .composer-status{
   display:flex;
   justify-content:space-between;
@@ -1012,7 +1020,7 @@ h1{
 @media(max-width:760px){
   .workspace{
   grid-template-columns:minmax(0,1fr);
-  min-height:560px}
+  min-height:0}
 .sidebar{
   position:fixed;
   inset:0 auto 0 0;
@@ -1055,10 +1063,10 @@ h1{
 .stage{
   display:flex;
   flex-direction:column;
-  overflow:auto}
+  overflow:visible}
 .dialogue-column{
   flex:1;
-  min-height:470px;
+  min-height:0;
   border-right:0}
 .dialogue-column>.section-heading{
   min-height:44px;
@@ -1066,7 +1074,7 @@ h1{
   font-size:8px}
 .conversation{
   padding:0 23px;
-  min-height:140px}
+  min-height:0}
 .welcome{
   padding:22px 0 10px}
 .eyebrow{
@@ -1140,8 +1148,6 @@ dialog{
   font-size:11px}
 h2{
   font-size:20px}
-.sky-panel.graph-focused{
-  min-height:calc(100dvh - 65px)}
 .desktop-break{
   display:none}
 }
@@ -1192,3 +1198,26 @@ h1{
 }
 .assistant-label .icon{width:17px;height:17px}
 .streaming .rendered-message::after{content:'';display:inline-block;width:2px;height:12px;background:var(--accent);margin-left:4px;animation:pulse 1.1s infinite}
+
+#graphToggle,#closeGraph{display:none}
+/* Container width follows the available CSS pixels, including CSS zoom. */
+@container (max-width:1100px){
+  .stage{grid-template-columns:minmax(0,1fr)}
+  .dialogue-column{border-right:0}
+  #graphToggle,#closeGraph{display:inline-flex}
+  .sky-panel{
+    position:absolute;
+    inset:0 0 0 auto;
+    width:min(420px,100%);
+    min-height:0;
+    overflow:auto;
+    border-left:1px solid var(--line);
+    box-shadow:-18px 0 60px #0006;
+    z-index:4;
+    visibility:hidden;
+    transform:scale(.98);
+    transition:transform .25s,visibility .25s}
+  .sky-panel.graph-focused{visibility:visible;transform:none}
+  .sky-stage{flex:1 0 150px;min-height:150px}
+  .sky-panel .section-heading,.graph-inspector,.sky-footer{flex-shrink:0}
+}
