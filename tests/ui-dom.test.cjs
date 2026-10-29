@@ -49,9 +49,9 @@ function makeCanvasDom(){
     try{
       await pause(10);
       const apps=Array.from({length:10},(_,i)=>({id:String(i),name:'Узел '+i,allowed:false}));
-      scene.observeApps(apps);scene.observeConversation();
+      scene.observeApps(apps);scene.observeConversation(apps.map(a=>a.name).join(", ")+" lamp");
       scene.observeInfo({demo:true,devices:[{id:'lamp',name:'Лампа'}]});scene.setFiles([{id:'fixture',label:'Вложение 1'}]);
-      assert.equal(scene.stats().nodes,14);
+      assert.equal(scene.stats().nodes,16);
       for(let now=1;now<6000;now+=1000/60)probe.step(now);
       assert.equal(scene.stats().settling,false);
       const option=d.querySelector('#nodeSelect option[value="app:0"]');
@@ -86,6 +86,39 @@ function makeCanvasDom(){
       scene.reset();probe.step(6090);
       assert.equal(d.querySelector('#nodeTitle').textContent,'LocalMind');assert.equal(select.value,'assistant');
       assert.equal(d.querySelector('#skyPanel').dataset.activity,'idle');assert.equal(probe.pending(),0);
+    }finally{dom.window.close()}
+  });
+  await run('constellation separates catalog membership from references, modes and acknowledged context',async()=>{
+    const dom=makeDom(),w=dom.window,d=w.document,scene=w.localmindScene;
+    try{
+      await pause(10);
+      scene.observeApps([{id:'editor',name:'Редактор',allowed:false},{id:'unrelated',name:'Другое',allowed:true}]);
+      scene.observeInfo({demo:false,devices:[{id:'lamp',name:'Лампа',state:false}]});
+      scene.setSources([{id:'private',allowed:true,available:true,filename:'private.txt'}]);
+      assert.equal(scene.stats().nodes,1);
+      scene.observeConversation('Объясни RSA');scene.observeConversation('Открой editor');
+      assert.equal(d.querySelectorAll('#nodeSelect option[value="app:editor"]').length,1);
+      assert.equal(d.querySelectorAll('#nodeSelect option[value="app:unrelated"]').length,0);
+      assert.equal(d.querySelectorAll('#nodeSelect option[value="device:lamp"]').length,0);
+      assert.equal(d.querySelectorAll('#nodeSelect option[value^="source:"]').length,0);
+      assert.equal(d.querySelectorAll('#nodeSelect option[value^="topic:"]').length,2);
+      scene.setMode('focus');assert.equal(d.querySelectorAll('#nodeSelect option[value^="topic:"]').length,1);
+      scene.setMode('devices');assert.equal(scene.stats().nodes,2);
+      const select=d.querySelector('#nodeSelect');select.value='device:lamp';select.dispatchEvent(new w.Event('change'));
+      assert.ok(d.querySelector('#nodeDetail').textContent.includes('не подтверждает физическое состояние'));
+      scene.setFiles([{id:'doc',label:'Документ',state:'ready'},{id:'picture',label:'Изображение',state:'image'}]);
+      scene.setMode('files');assert.equal(scene.stats().nodes,3);
+      select.value='file:doc';select.dispatchEvent(new w.Event('change'));assert.ok(d.querySelector('#nodeDetail').textContent.includes('ещё не добавлен'));
+      scene.setFiles([{id:'doc',label:'Документ',state:'added'}]);assert.ok(d.querySelector('#nodeDetail').textContent.includes('Сервер подтвердил'));
+      scene.observeSources([{source_id:'reference',filename:'hidden.txt',line_start:2,line_end:5}]);
+      assert.equal(d.querySelectorAll('#nodeSelect option[value="source:reference"]').length,1);
+      assert.ok(!select.textContent.includes('hidden.txt'));
+      scene.setMode('map');assert.equal(scene.stats().displayMode,'map');
+      scene.toolResults([{action:'set_light',resolved_target:'lamp',mode:'REAL',success:true,execution_status:'request_accepted',observed_state:null}]);
+      select.value='tool:set_light:lamp';select.dispatchEvent(new w.Event('change'));
+      assert.ok(d.querySelector('#nodeDetail').textContent.includes('физическое состояние не подтверждено'));
+      scene.setMode('ambient');assert.equal(scene.stats().displayMode,'ambient');
+      assert.ok(scene.stats().edges<=35);scene.reset();assert.equal(scene.stats().nodes,1);
     }finally{dom.window.close()}
   });
   await run('DPR-only transitions re-arm resolution detection and rebuild once within pixel limits',async()=>{
@@ -274,11 +307,11 @@ function makeCanvasDom(){
       assert.notEqual(requests[0].body.generation_id,requests[1].body.generation_id);
     }finally{w.stopSpeech();dom.window.close()}
   });
-  await run('attachment preparation keeps bytes local; empty MIME, mixed invalid files and private names',async()=>{
-    const requests=[],dom=makeDom(async(url,options)=>{requests.push({url,options});return Response.json({server_instance:'test',demo:true,model:'test',devices:[],apps:[],voice:{}});});
-    const w=dom.window,d=w.document;
+  await run('attachment upload is local, server acknowledged and privacy labels are safe',async()=>{
+    const dom=makeDom(),w=dom.window,d=w.document,requests=[];
     try{
-      await pause(10);requests.length=0;
+      await pause(10);
+      w.localmindAttachments.configure({getSession:async()=>{w.localmindAttachments.adoptConversation('attach-session');return {conversation_id:'attach-session',server_instance:'test'};},request:async(url,options)=>{requests.push({url,options});return Response.json({id:'document-one',conversation_id:'attach-session',server_instance:'test',state:'ready',characters:17,preview:'local-only-secret'});}});
       const hostile='<img src=x onerror=alert(1)>\u202esecret.txt';
       w.localmindAttachments.add([new w.File(['local-only-secret'],hostile,{type:''}),new w.File(['x'],'bad.exe',{type:'application/octet-stream'}),new w.File(['x'],'mismatch.pdf',{type:'text/plain'}),new w.File([],'empty.md',{type:'text/markdown'})]);
       await pause(10);
@@ -286,8 +319,10 @@ function makeCanvasDom(){
       assert.equal(d.querySelectorAll('.attachment.error').length,3);
       assert.ok(!d.querySelector('#attachmentList').textContent.includes('secret'));
       assert.ok(!d.querySelector('#nodeSelect').textContent.includes('secret'));
-      assert.ok(d.querySelector('#attachmentNotice').textContent.includes('НЕ переданы модели'));
-      assert.equal(requests.length,0);
+      assert.ok(d.querySelector('#attachmentNotice').textContent.includes('\u043b\u043e\u043a\u0430\u043b\u044c\u043d\u044b\u043c \u0441\u0435\u0440\u0432\u0435\u0440\u043e\u043c'));
+      assert.equal(requests.length,1);assert.equal(requests[0].url,'/api/attachments');
+      assert.deepEqual(Array.from(w.localmindAttachments.contextIds()),['document-one']);
+      w.localmindAttachments.acknowledge([{id:'document-one'}]);assert.equal(w.localmindAttachments.snapshot()[0].state,'added');
       d.querySelector('#showFilenames').checked=true;d.querySelector('#showFilenames').dispatchEvent(new w.Event('change'));
       assert.ok(d.querySelector('.attachment-name').textContent.includes('<img'));
       assert.ok(!d.querySelector('.attachment-name').textContent.includes('\u202e'));
@@ -301,6 +336,7 @@ function makeCanvasDom(){
     let reads=0;const dom=makeDom(null,w=>{const original=w.FileReader.prototype.readAsArrayBuffer;w.FileReader.prototype.readAsArrayBuffer=function(blob){reads++;return original.call(this,blob)}});
     const w=dom.window,d=w.document,make=(name,size)=>{const f=new w.File(['x'],name,{type:name.endsWith('.png')?'image/png':'text/plain'});Object.defineProperty(f,'size',{value:size});return f;};
     try{
+      w.localmindAttachments.configure({getSession:async()=>{w.localmindAttachments.adoptConversation('limit-session');return {conversation_id:'limit-session',server_instance:'test'};},request:async()=>Response.json({id:'limit-doc',conversation_id:'limit-session',server_instance:'test',state:'ready',characters:1,preview:'x'})});
       w.localmindAttachments.add(Array.from({length:9},(_,i)=>make(i+'.png',1)));assert.equal(w.localmindAttachments.snapshot().length,0);assert.equal(reads,0);
       w.localmindAttachments.add([make('large.png',10*1024*1024+1)]);await pause(10);
       assert.equal(w.localmindAttachments.snapshot()[0].state,'error');assert.equal(reads,0);
@@ -329,17 +365,20 @@ function makeCanvasDom(){
       assert.ok(!d.querySelector('#nodeSelect').textContent.includes('Вложение'));
     }finally{dom.window.close()}
   });
-  await run('preview processing is explicit and removal cancels every deferred transition',async()=>{
+  await run('document preview shows actual extracted text and removal revokes future context',async()=>{
     const dom=makeDom(),w=dom.window,d=w.document;
     try{
+      w.localmindAttachments.configure({getSession:async()=>{w.localmindAttachments.adoptConversation('preview-session');return {conversation_id:'preview-session',server_instance:'test'};},request:async()=>Response.json({id:'preview-doc',conversation_id:'preview-session',server_instance:'test',state:'ready',characters:1,preview:'x'})});
       w.localmindAttachments.add([new w.File(['x'],'note.md',{type:'text/markdown'})]);await pause(10);
-      d.querySelector('.preview-button').click();assert.equal(w.localmindAttachments.snapshot()[0].state,'indexing');
-      assert.ok(d.querySelector('.attachment-state').textContent.includes('Превью'));
-      d.querySelector('.attachment .icon-button').click();assert.equal(w.localmindAttachments.snapshot()[0].hasFile,false);
-      await pause(1600);assert.equal(d.querySelectorAll('.attachment').length,0);assert.equal(w.localmindAttachments.snapshot().length,0);
+      d.querySelector('.preview-button').click();assert.equal(w.localmindAttachments.snapshot()[0].state,'ready');
+      assert.equal(d.querySelector('#previewText').textContent,'x');
+      assert.equal(d.querySelector('#attachmentPreview').open,true);
+      d.querySelector('.attachment .icon-button').click();
+      assert.equal(d.querySelectorAll('.attachment').length,0);assert.equal(w.localmindAttachments.snapshot().length,0);
+      assert.deepEqual(Array.from(w.localmindAttachments.contextIds()),[]);
     }finally{dom.window.close()}
   });
-  await run('file paste/drop/select stay local and ordinary text paste is not intercepted',async()=>{
+  await run('file paste/drop/select use local processing and ordinary text paste is not intercepted',async()=>{
     const dom=makeDom(),w=dom.window,d=w.document;
     try{
       const input=d.querySelector('#fileInput'),file=new w.File(['a'],'paste.txt',{type:'text/plain'});
@@ -356,7 +395,7 @@ function makeCanvasDom(){
     try{
       await pause(10);const scene=w.localmindScene;
       scene.observeApps(Array.from({length:100},(_,i)=>({id:'app'+i,name:'App '+i,allowed:false})));
-      scene.observeInfo({demo:true,devices:Array.from({length:100},(_,i)=>({id:'dev'+i,name:'Device '+i}))});scene.observeConversation();
+      scene.observeInfo({demo:true,devices:Array.from({length:100},(_,i)=>({id:'dev'+i,name:'Device '+i}))});scene.observeConversation("app0");
       scene.setFiles(Array.from({length:100},(_,i)=>({id:'f'+i,label:'Вложение '+i})));
       scene.setSources(Array.from({length:100},(_,i)=>({id:'s'+i,label:'private source '+i,path:'private.txt',available:true,allowed:true})));
       scene.toolResults(Array.from({length:100},(_,i)=>({action:'action'+i,success:true})));
@@ -538,7 +577,7 @@ function makeCanvasDom(){
         if(readFinishesFirst){resolveStaleRead();await reading;resolveGrant();await pause(15);}
         else{resolveGrant();await pause(15);resolveStaleRead();await reading;}
         assert.equal(allowed,true);assert.equal(reads,3);assert.equal(d.querySelector('#appsList input').checked,true);assert.equal(d.querySelector('#appsList input').disabled,false);assert.equal(d.querySelector('#rescan').disabled,false);
-        const select=d.querySelector('#nodeSelect');select.value='app:editor';select.dispatchEvent(new w.Event('change'));assert.ok(d.querySelector('#nodeDetail').textContent.includes('Разрешение запуска выдано пользователем'));
+        w.localmindScene.observeConversation('editor');const select=d.querySelector('#nodeSelect');select.value='app:editor';select.dispatchEvent(new w.Event('change'));assert.ok(d.querySelector('#nodeDetail').textContent.includes('Разрешение запуска выдано пользователем'));
       }finally{dom.window.close()}
     }
   });

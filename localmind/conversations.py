@@ -29,6 +29,7 @@ class Conversation:
     focus: str | None = None
     topic: str = ''
     facts: list = field(default_factory=list)
+    attachments: dict = field(default_factory=dict)
     active: int = 0
     lock: object = field(default_factory=RLock)
 
@@ -108,6 +109,7 @@ class ConversationStore:
             conversation.history.clear()
             conversation.references.clear()
             conversation.facts.clear()
+            conversation.attachments.clear()
             conversation.focus, conversation.topic = None, ''
         finally:
             self.release(conversation)

@@ -2,6 +2,7 @@
 (() => {
   'use strict';
   const paths = {
+    plus:'M12 5v14M5 12h14',history:'M3 11a9 9 0 1 1 3 7M3 4v7h7M12 7v5l3 2',image:'M3 4h18v16H3V4Zm0 12 5-5 5 5 3-3 5 5M16 8h.01',wave:'M3 10v4M7 6v12M12 3v18M17 6v12M21 10v4',
     constellation:'M5 6 12 3 19 8 16 18 6 20 5 6 16 18M5 6 19 8M6 20 12 3M19 8 6 20',
     chat:'M7 18 3 21V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H7ZM7 8h10M7 12h6',
     apps:'M4 4h6v6H4ZM14 4h6v6h-6ZM4 14h6v6H4ZM14 14h6v6h-6Z',

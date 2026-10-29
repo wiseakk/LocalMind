@@ -21,7 +21,7 @@ async function checked(response) {
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
     try { const data = await response.json(); if (typeof data.detail === 'string') message = data.detail; } catch (_) { /* bounded generic error */ }
-    throw Error(message);
+    const error=Error(message);error.status=response.status;throw error;
   }
   return response;
 }
@@ -42,11 +42,15 @@ function pending(el) {
 }
 function renderStatus(el, value) {
   window.localmindScene?.toolResults(value.action_results);
+  window.localmindAttachments?.acknowledge(value.context_sources || []);
   el.querySelectorAll('.action-chip').forEach(x=>x.remove());
   for (const result of value.action_results || []) {
     const chip = document.createElement('div'); chip.className = 'action-chip' + (result.success ? '' : ' error');
     const states = {process_created:'Запуск начат; ожидаем окно', already_running:result.observed_state==='visible_window'?'Окно приложения уже открыто':'Приложение уже работает в фоне', launch_pending:'Приложение ещё запускается', observed:'Состояние подтверждено', request_accepted:'Команда принята; состояние пока не подтверждено'};
-    chip.textContent = (result.mode==='DEMO'?'ДЕМО · симуляция · ':'') + (result.success ? states[result.execution_status] || 'Проверка завершена' : 'Действие не выполнено');
+    const target=result.resolved_target || result.requested_target || result.target || result.data?.application || result.data?.device_id || result.action || 'Действие';
+    const observed={on:'включено',off:'выключено',visible_window:'видимое окно',running:'процесс работает',unknown:'неизвестно'};
+    const actual=result.observed_state&&result.execution_status!=='request_accepted'?' · Наблюдение: '+(observed[result.observed_state] || result.observed_state):'';
+    chip.textContent = (result.mode==='DEMO'?'ДЕМО · симуляция · ':'') + target + ' · ' + (result.success ? states[result.execution_status] || result.status_text || 'Проверка завершена' : result.error || 'Действие не выполнено')+actual;
     el.insertBefore(chip, el.querySelector('.rendered-message')); 
     if(result.execution_status==='permission_required') {
       const permission=document.createElement('button');permission.className='text-button';permission.textContent='Проверить разрешения файлов';
@@ -64,7 +68,8 @@ function renderStatus(el, value) {
   $('trace').textContent = JSON.stringify(value, null, 2); scrollEnd();
 }
 function lock(value) {
-  busy = value; $('send').disabled = value; $('mic').disabled = value || voiceBusy;
+  busy = value; $('send').disabled = value||currentConversation.archived; $('mic').disabled = value || voiceBusy||currentConversation.archived;
+  $('attach').disabled=value||currentConversation.archived;$('imageAttach').disabled=value||currentConversation.archived;
   window.localmindScene?.setActivity(value?'generating':'idle');
   if($('interruptReply'))$('interruptReply').disabled=!value;
   document.querySelectorAll('[data-example]').forEach(b=>b.disabled=value);
@@ -73,13 +78,18 @@ async function sendText(value) {
   if (busy || voiceBusy || recording || resetting) return;
   const text = value.trim(); if (!text) return;
   if (!serverInstance) { showError('Сначала восстановите подключение к серверу.'); return; }
+  if(currentConversation.archived){state('Архив доступен для чтения. Начните новый разговор.');return;}
+  if(window.localmindAttachments?.hasPending()){state('Дождитесь подготовки документов или удалите их.');return;}
   lock(true); stopSpeech(); $('welcome').hidden = true; $('draftReview').hidden = true;
-  window.localmindScene?.observeConversation();
+  window.localmindScene?.observeConversation(text,history);
+  if(!currentConversation.messages.length&&currentConversation.title==='Новый разговор')currentConversation.title=text.slice(0,60);
+  currentConversation.messages.push({role:'user',content:text});
+  updateConversationTitle();
   bubble(text, 'me'); $('message').value = '';
   const el = bubble('', 'assistant'); pending(el); state('Проверка намерения и разрешений…');
   // A retry after transport loss keeps this ID, so the server never repeats the action.
   const request = {request_id: crypto.randomUUID(), server_instance:serverInstance, conversation_id:conversationId, text, history: history.slice(-8), actions_authorized:true,
-    local_retrieval:Boolean($('useLocalSources')?.checked),
+    attachment_ids:window.localmindAttachments?.contextIds() || [],local_retrieval:Boolean($('useLocalSources')?.checked),
     response_length:$('responseLength').value, compose_actions:$('composeActions').checked,
     model:$('modelSelect').value || null, reasoning:$('reasoning').value,
     context_tokens:Number($('contextTokens').value),response_tokens:Number($('responseTokens').value),keep_alive_seconds:Number($('keepAlive').value)};
@@ -102,7 +112,7 @@ async function sendText(value) {
           const item = JSON.parse(line);
           if (item.type === 'error') throw Error(item.detail || 'Ошибка обработки');
           if (item.type === 'status') {
-            if(item.data.conversation_id) conversationId=item.data.conversation_id;
+            if(item.data.conversation_id){conversationId=item.data.conversation_id;window.localmindAttachments?.adoptConversation(conversationId);}
             renderStatus(el, item.data);
             if(!actionSpoken && item.data.action_results?.length && item.data.answer) {
               actionSpoken=true;speech.feed(item.data.speech_text || item.data.answer,true);
@@ -116,7 +126,7 @@ async function sendText(value) {
             el.querySelector('.pending')?.remove();
             renderLocalMindMessage(el.querySelector('.rendered-message'), deltaText); state('Отвечаю…'); scrollEnd();
           }
-          if (item.type === 'final') { finalValue = item.data; if(item.data.conversation_id)conversationId=item.data.conversation_id; renderStatus(el, item.data); }
+          if (item.type === 'final') { finalValue = item.data; if(item.data.conversation_id){conversationId=item.data.conversation_id;window.localmindAttachments?.adoptConversation(conversationId);} renderStatus(el, item.data); }
         }
         while (true) {
           const {value:chunk,done} = await reader.read();
@@ -144,6 +154,11 @@ async function sendText(value) {
     const raw = document.createElement('pre'); raw.textContent=JSON.stringify(finalValue,null,2);
     diagnostics.append(summary,meta,raw); el.append(diagnostics); history.push({role:'user',content:text},{role:'assistant',content:finalValue.answer});
     if (history.length > 16) history.splice(0,history.length-16);
+    currentConversation.messages.push({role:'assistant',content:finalValue.answer});
+    currentConversation.serverId=conversationId;currentConversation.instance=serverInstance;
+    currentConversation.results=(finalValue.action_results || []).slice(-8);
+    currentConversation.sources=(finalValue.sources || []).slice(-5);
+    window.localmindScene?.observeSources(finalValue.sources || []);
     state('Готов к разговору');
     if(!actionSpoken) speech.feed(deltaText ? '' : finalValue.answer,true);
     await refresh();
@@ -152,13 +167,19 @@ async function sendText(value) {
     el.querySelector('.pending')?.remove();
     el.querySelector('.rendered-message').textContent=turn.cancelled?'Ответ прерван.':'Ответ недоступен: '+error.message;
     state(turn.cancelled?'Ответ прерван; выполненное действие не отменяется.':'Ошибка связи. Полученный результат действия сохранён выше.');
+    currentConversation.messages.push({role:'assistant',content:el.querySelector('.rendered-message').textContent});
+    if(error.status===409&&conversationId){currentConversation.archived=true;updateConversationTitle();}
+    if(!$('message').value)$('message').value=text;
     await refresh();
-  } finally { el.classList.remove('streaming');inFlight=null;lock(false); $('message').focus(); scrollEnd(); }
+  } finally { el.classList.remove('streaming');inFlight=null;lock(false);saveConversation(); $('message').focus(); scrollEnd(); }
 }
 async function refresh() {
   try {
     const info = await (await checked(await fetch('/api/info', {headers:headers()}))).json();
-    if(serverInstance && serverInstance!==info.server_instance)conversationId=null;
+    if(serverInstance && serverInstance!==info.server_instance){
+      for(const item of conversations)if(item.serverId)item.archived=true;
+      conversationId=null;updateConversationTitle();
+    }
     serverInstance=info.server_instance;
     window.localmindScene?.observeInfo(info);
     $('status').textContent='Сервер подключён'; $('connectionDot').classList.add('online'); $('model').textContent=$('modelSelect').value || info.model;
@@ -173,6 +194,7 @@ async function refresh() {
       const status=document.createElement('span'); status.className='device-state';
       status.textContent=info.demo?(d.state?'● Включена':'○ Выключена'):'HA · состояние не опрошено'; row.append(name,status); $('devices').append(row);
     }
+    renderDevices(info);
     const voice=info.voice || {};
     const selectedVoice=voice.voices?.find(v=>v.id===($('ttsVoice').value || 'ru_RU-denis-medium'));
     $('voiceStatus').textContent=selectedVoice?.ready ? 'Ресурсы выбранного голоса найдены. Синтез выполняется локально; облачная замена отключена.' : 'Выбранный голос требует установки. Piper: docs/VOICE.md; Silero/Chatterbox: docs/NEXT_VOICE.md. Облачная озвучка не используется.';
@@ -344,13 +366,18 @@ async function loadFilePermissions() {
 const resetConversation=document.createElement('button');resetConversation.className='secondary';
 resetConversation.id='resetConversation';resetConversation.textContent='Начать новый разговор';
 resetConversation.addEventListener('click',async()=>{
-  if(busy||resetConversation.disabled)return;
+  if(busy||resetting||sessionCreation)return;
   resetting=true;resetConversation.disabled=true;$('send').disabled=true;$('mic').disabled=true;
-  try {
+  // Invalidate capture immediately, before awaiting server context reset.
+  voiceEpoch++;transcriptController?.abort();if(recording?.state==='recording')recording.stop();stopSpeech();
+  try{
     if(conversationId)await checked(await fetch('/api/conversations/reset',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({conversation_id:conversationId})}));
-    voiceEpoch++;transcriptController?.abort();if(recording?.state==='recording')recording.stop();
-    conversationId=null;history.length=0;stopSpeech();window.localmindAttachments?.reset();window.localmindScene?.reset();$('draftReview').hidden=true;$('message').value='';$('rawTranscript').textContent='';$('thread').replaceChildren();$('welcome').hidden=false;state('Новый разговор');
-  }catch(e){showError(e.message)}finally{resetting=false;resetConversation.disabled=false;$('send').disabled=busy||voiceBusy||Boolean(recording);$('mic').disabled=busy||voiceBusy;}
+    window.localmindAttachments?.clearConversation(conversationId || currentConversation.id);
+    window.localmindAttachments?.setConversation(currentConversation.id);
+    conversationId=null;history.length=0;currentConversation.messages=[];currentConversation.draft='';currentConversation.serverId=null;currentConversation.transcript='';currentConversation.archived=false;
+    window.localmindScene?.reset();$('draftReview').hidden=true;$('message').value='';$('rawTranscript').textContent='';$('thread').replaceChildren();$('welcome').hidden=false;updateConversationTitle();saveConversation();state('Новый разговор');
+  }catch(error){showError(error.message);}
+  finally{resetting=false;resetConversation.disabled=false;$('send').disabled=busy||voiceBusy||Boolean(recording);$('mic').disabled=busy||voiceBusy;}
 });
 $('sessionControls').append(resetConversation);
 const retrievalLabel=document.createElement('label');retrievalLabel.className='check';
@@ -374,6 +401,7 @@ async function loadLocalSources() {
   }catch(e){sourcesControl.textContent=e.message;}
 }
 const interruptReply=document.createElement('button');interruptReply.id='interruptReply';interruptReply.className='text-button';
+interruptReply.type='button';
 interruptReply.textContent='Прервать ответ';interruptReply.disabled=true;
 interruptReply.addEventListener('click',async()=>{
   const turn=inFlight;if(!turn)return;
@@ -384,3 +412,200 @@ interruptReply.addEventListener('click',async()=>{
 $('stopAudio').before(interruptReply);
 // Read-only discovery never grants a capability or launches an application.
 loadApps();
+
+// History stores presentation only. Server IDs and capability grants are never
+// resurrected from disk; restored text is always an explicitly read-only archive.
+const HISTORY_KEY='localmind.blacksite.history.v1';
+const conversations=[];
+function emptyConversation(){return {id:crypto.randomUUID(),title:'Новый разговор',draft:'',messages:[],serverId:null,instance:null,archived:false,view:null,transcript:''};}
+let currentConversation=emptyConversation(),renaming=null,sessionCreation=null;
+conversations.push(currentConversation);
+function updateConversationTitle(){
+  $('conversationTitle').textContent=currentConversation.title+(currentConversation.archived?' · АРХИВ':'');
+  $('conversationTitle').classList.toggle('archive-notice',currentConversation.archived);
+  $('message').readOnly=currentConversation.archived;
+  $('send').disabled=currentConversation.archived||busy||resetting||voiceBusy||Boolean(recording);
+  $('mic').disabled=currentConversation.archived||busy||resetting||voiceBusy;
+  $('attach').disabled=currentConversation.archived||busy||resetting;
+  $('imageAttach').disabled=currentConversation.archived||busy||resetting;
+}
+function saveConversation(){
+  currentConversation.draft=$('message').value;
+  currentConversation.serverId=conversationId;
+  currentConversation.instance=serverInstance;
+  currentConversation.transcript=$('draftReview').hidden?'':$('rawTranscript').textContent;
+  persistConversations();
+}
+function persistConversations(){
+  if(!$('persistHistory').checked)return;
+  try{
+    // Deliberate text opt-in, with bounded storage; never keys, blobs or tool data.
+    const records=conversations.slice(-40).map(c=>({title:c.title.slice(0,80),draft:c.draft.slice(0,2000),messages:c.messages.slice(-80).map(m=>({role:m.role,content:m.content.slice(0,8192)}))}));
+    localStorage.setItem(HISTORY_KEY,JSON.stringify(records));
+    $('historyStorage').textContent='Текст истории сохранён в этом браузере. Файлы, ключи и звук не сохраняются.';
+  }catch(_){$('historyStorage').textContent='Браузер запретил сохранение или хранилище заполнено. История остаётся в памяти вкладки.';}
+}
+function canSwitch(){
+  if(busy||voiceBusy||recording||resetting||sessionCreation){state('Завершите или прервите текущий ответ / запись перед сменой разговора.');return false;}
+  return true;
+}
+function transitionControls(value){
+  resetting=value;updateConversationTitle();
+}
+async function selectConversation(item,ownedTransaction=false){
+  if(!ownedTransaction&&!canSwitch())return false;
+  resetting=true;
+  transitionControls(true);
+  try{
+    saveConversation();
+    if(item.serverId&&!item.archived){
+      if(item.instance!==serverInstance)item.archived=true;
+      else try{await checked(await fetch('/api/conversations/'+encodeURIComponent(item.serverId),{headers:headers()}));}
+      catch(error){if(error.status===409||error.status===404)item.archived=true;else throw error;}
+    }
+    voiceEpoch++;transcriptController?.abort();stopSpeech();
+    const fragment=document.createDocumentFragment();while($('thread').firstChild)fragment.append($('thread').firstChild);
+    currentConversation.view=fragment;currentConversation=item;
+    conversationId=item.archived?null:item.serverId;
+    history.splice(0,history.length,...(item.archived?[]:item.messages.slice(-16)));
+    window.localmindScene?.reset();
+    window.localmindAttachments?.setConversation(item.archived?item.id:item.serverId || item.id);
+    if(!item.archived&&(item.serverId||item.messages.length))window.localmindScene?.observeConversation('',item.messages);
+    if(!item.archived){window.localmindScene?.toolResults(item.results || []);window.localmindScene?.observeSources(item.sources || []);}
+    if(item.view){$('thread').append(item.view);item.view=null;}
+    else for(const m of item.messages)bubble(m.content,m.role==='user'?'me':'assistant');
+    $('welcome').hidden=item.messages.length>0;
+    $('message').value=item.draft;
+    $('draftReview').hidden=!item.transcript;$('rawTranscript').textContent=item.transcript;
+    updateConversationTitle();renderHistory();
+    state(item.archived?'Архив · серверная память истекла. Для продолжения начните новый разговор.':'Готов к разговору');
+    return true;
+  }catch(error){showError(error.message);return false;}
+  finally{if(!ownedTransaction)transitionControls(false);}
+}
+async function newConversation(){
+  if(!canSwitch())return;
+  if(conversations.length>=40){showError('В истории уже 40 разговоров. Удалите ненужные перед созданием нового.');return;}
+  const item=emptyConversation();conversations.push(item);
+  if(await selectConversation(item)){
+    $('historyDialog').close();$('settingsDialog').close();$('message').focus();persistConversations();
+  }else conversations.splice(conversations.indexOf(item),1);
+}
+function renderHistory(){
+  $('historyList').replaceChildren();
+  for(const item of [...conversations].reverse()){
+    const row=document.createElement('div');row.className='history-entry'+(item===currentConversation?' active':'');
+    const choose=document.createElement('button');choose.textContent=item.title;
+    const detail=document.createElement('small');detail.textContent=(item.archived?'Архив · только чтение':'Память этой сессии')+' · '+item.messages.length+' сообщений';choose.append(detail);
+    choose.addEventListener('click',async()=>{if(await selectConversation(item)){$('historyDialog').close();$('message').focus();}});
+    const rename=document.createElement('button');rename.className='text-button';rename.textContent='Имя';rename.setAttribute('aria-label','Переименовать '+item.title);
+    rename.addEventListener('click',()=>{renaming=item;$('renameInput').value=item.title;$('renameDialog').showModal();$('renameInput').focus();});
+    const remove=document.createElement('button');remove.className='text-button';remove.textContent='Удалить';remove.setAttribute('aria-label','Удалить '+item.title);
+    remove.addEventListener('click',async()=>{
+      if(!canSwitch())return;
+      transitionControls(true);
+      try{
+      // Clear server context before discarding its ID. Never replay its messages.
+      if(item.serverId&&!item.archived&&item.instance===serverInstance){
+        try{await checked(await fetch('/api/conversations/reset',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({conversation_id:item.serverId})}));}
+        catch(error){if(error.status!==409){showError(error.message);return;}}
+      }
+      window.localmindAttachments?.clearConversation(item.serverId || item.id);
+      if(item===currentConversation){const replacement=conversations.find(c=>c!==item)||emptyConversation();if(!conversations.includes(replacement))conversations.push(replacement);if(!await selectConversation(replacement,true))return;}
+      conversations.splice(conversations.indexOf(item),1);renderHistory();persistConversations();
+      }finally{transitionControls(false);}
+    });
+    row.append(choose,rename,remove);$('historyList').append(row);
+  }
+}
+$('message').addEventListener('input',()=>{currentConversation.draft=$('message').value;});
+$('message').addEventListener('change',saveConversation);
+$('historyOpen').addEventListener('click',()=>{saveConversation();renderHistory();$('historyDialog').showModal();});
+$('historyNew').addEventListener('click',newConversation);$('newChat').addEventListener('click',newConversation);
+$('renameForm').addEventListener('submit',e=>{e.preventDefault();const title=$('renameInput').value.trim();if(renaming&&title){renaming.title=title;updateConversationTitle();renderHistory();persistConversations();$('renameDialog').close();}});
+$('persistHistory').addEventListener('change',()=>{
+  if($('persistHistory').checked){saveConversation();}
+  else try{localStorage.removeItem(HISTORY_KEY);$('historyStorage').textContent='Локальная копия удалена. История только в памяти вкладки.';}catch(_){$('historyStorage').textContent='Браузер запретил доступ к сохранённой копии.';}
+});
+$('clearHistory').addEventListener('click',async()=>{
+  if(!canSwitch())return;
+  transitionControls(true);
+  try{
+  for(const item of conversations){
+    if(item.serverId&&!item.archived&&item.instance===serverInstance){
+      try{await checked(await fetch('/api/conversations/reset',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({conversation_id:item.serverId})}));}
+      catch(error){if(error.status!==409){showError(error.message);return;}}
+      item.archived=true;
+    }
+  }
+  window.localmindAttachments?.reset();
+  const item=emptyConversation();conversations.push(item);if(!await selectConversation(item,true))return;conversations.splice(0,conversations.length,item);
+  $('persistHistory').checked=false;
+  try{localStorage.removeItem(HISTORY_KEY);$('historyStorage').textContent='История и локальная копия удалены.';}catch(_){$('historyStorage').textContent='История вкладки удалена. Браузер запретил доступ к локальной копии.';}
+  renderHistory();
+  }finally{updateConversationTitle();transitionControls(false);}
+});
+try{
+  const stored=localStorage.getItem(HISTORY_KEY);
+  if(stored&&stored.length<=3000000){const parsed=JSON.parse(stored);if(Array.isArray(parsed)){
+    for(const raw of parsed.slice(-39)){
+      if(typeof raw.title!=='string'||!Array.isArray(raw.messages))continue;
+      const item=emptyConversation();item.title=raw.title.slice(0,80);item.draft=typeof raw.draft==='string'?raw.draft.slice(0,2000):'';item.archived=true;
+      item.messages=raw.messages.filter(m=>m&&['user','assistant'].includes(m.role)&&typeof m.content==='string').slice(-80).map(m=>({role:m.role,content:m.content.slice(0,8192)}));conversations.push(item);
+    }
+    $('persistHistory').checked=true;
+  }}
+}catch(_){$('historyStorage').textContent='Сохранённая история недоступна. Текущая сессия работает в памяти.';}
+window.localmindSession={
+  headers,
+  get:()=>({conversation_id:conversationId,server_instance:serverInstance}),
+  ensure:async()=>{
+    if(busy||resetting)throw Error('Дождитесь завершения текущего ответа или смены разговора.');
+    if(currentConversation.archived)throw Error('Архив доступен только для чтения. Начните новый разговор.');
+    if(!serverInstance)throw Error('Нет подключения к локальному серверу.');
+    if(conversationId)return {conversation_id:conversationId,server_instance:serverInstance};
+    if(!sessionCreation){
+      sessionCreation=(async()=>{
+        const instance=serverInstance;
+        const data=await(await checked(await fetch('/api/conversations',{method:'POST',headers:jsonHeaders(),body:'{}'}))).json();
+        if(instance!==serverInstance||data.server_instance!==instance||typeof data.conversation_id!=='string')throw Error('Сервер перезапущен. Повторите добавление документа.');
+        conversationId=data.conversation_id;currentConversation.serverId=conversationId;currentConversation.instance=instance;window.localmindAttachments?.adoptConversation(conversationId);
+        return {conversation_id:conversationId,server_instance:instance};
+      })().finally(()=>{sessionCreation=null;});
+    }
+    return sessionCreation;
+  }
+};
+function renderDevices(info){
+  $('deviceDrawerList').replaceChildren();$('deviceDrawerNote').textContent=info.demo?'DEMO · симуляция. Физические устройства не переключаются.':'REAL · Home Assistant. Состояние физического устройства не опрошено.';
+  for(const device of info.devices || []){
+    const row=document.createElement('div');row.className='device';
+    const name=document.createElement('span');name.textContent=device.name;
+    const status=document.createElement('span');status.className='device-state';status.textContent=info.demo?'DEMO · '+(device.state?'Включено':'Выключено'):'REAL · состояние неизвестно';
+    row.append(name,status);
+    if(device.id==='desk_light'){
+      const actions=document.createElement('div');actions.className='device-actions';
+      for(const [caption,command] of [['Включить','Включи настольную лампу'],['Выключить','Выключи настольную лампу']]){
+        const button=document.createElement('button');button.className='secondary';button.textContent=caption;button.addEventListener('click',()=>{
+          if(!canSwitch()||currentConversation.archived)return;
+          $('message').value=command;currentConversation.draft=command;$('devicesDialog').close();$('message').focus();state('Команда подготовлена. Проверьте и нажмите «Отправить».');
+        });actions.append(button);
+      }
+      row.append(actions);
+    }
+    $('deviceDrawerList').append(row);
+  }
+  if(!info.devices?.length)$('deviceDrawerList').textContent='Настроенных устройств нет.';
+}
+for(const [button,dialog] of [['filesOpen','filesDialog'],['devicesOpen','devicesDialog']])$(button).addEventListener('click',()=>{$(dialog).showModal();if(button==='devicesOpen')refresh();});
+$('drawerAttach').addEventListener('click',()=>{$('filesDialog').close();$('fileInput').click();});
+$('model').addEventListener('click',()=>$('settingsOpen').click());
+$('voiceMode').addEventListener('click',()=>{
+  $('speak').checked=!$('speak').checked;$('voiceMode').setAttribute('aria-pressed',String($('speak').checked));
+  if(!$('speak').checked)stopSpeech();
+  state($('speak').checked?'Голосовой режим: ответы озвучиваются. Для записи нажмите микрофон.':'Голосовой режим выключен.');
+});
+$('speak').addEventListener('change',()=>$('voiceMode').setAttribute('aria-pressed',String($('speak').checked)));
+window.addEventListener('pagehide',saveConversation);
+window.localmindAttachments?.adoptConversation(currentConversation.id);
+updateConversationTitle();

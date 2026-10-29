@@ -5,8 +5,9 @@
   // jsdom does not implement Canvas; the accessible graph remains fully usable.
   const ctx=typeof window.CanvasRenderingContext2D==='function'?canvas.getContext('2d',{alpha:false}):null;
   const MAX_NODES=36,TAU=Math.PI*2;
-  const kinds={assistant:'АССИСТЕНТ',conversation:'ДИАЛОГ',app:'ПРИЛОЖЕНИЕ',device:'УСТРОЙСТВО',file:'ВЛОЖЕНИЕ',source:'СПРАВОЧНИК',tool:'РЕЗУЛЬТАТ'};
+  const kinds={assistant:'АССИСТЕНТ',memory:'ПАМЯТЬ СЕССИИ',conversation:'ДИАЛОГ',topic:'ТЕМА',app:'ПРИЛОЖЕНИЕ',device:'УСТРОЙСТВО',file:'ДОКУМЕНТ',source:'ИСТОЧНИК',tool:'ДЕЙСТВИЕ'};
   const activityNames={idle:'Спокойная орбита',listening:'Слушаю · входной звук',transcribing:'Распознавание · ожидаем текст',generating:'Формируется ответ',speaking:'Озвучка · выходной звук',tool:'Получен результат действия'};
+  let edges=[],displayMode='ambient';
   let nodes=[],selected='assistant',mode='idle',reduced=false,low=false,visible=true,closing=false;
   let panelVisible=true;
   let width=1,height=1,timer=null,last=0,frameCount=0,dirty=true,drag=null,parallaxX=0,parallaxY=0,toolUntil=0,toolTimer=null;
@@ -16,17 +17,59 @@
   const intervals=new Float32Array(180),costs=new Float32Array(180),glows=new Map();
   function wakePhysics(){settling=true;settleTime=0;stableSteps=0;}
   const particles=Array.from({length:52},(_,i)=>({x:((i*73+19)%251)/251,y:((i*117+7)%257)/257,r:i%7===0?1.15:.55}));
-  const observation={apps:[],devices:[],files:[],sources:[],conversation:false,tools:[]};
+  const observation={apps:[],devices:[],files:[],sources:[],usedSources:[],conversation:false,topics:[],tools:[]};
+  const displayModes=new Set(['ambient','focus','map','devices','files']);
+  const mentioned=(text,value)=>typeof value==='string'&&value.length>=3&&text.toLocaleLowerCase().includes(value.toLocaleLowerCase());
+  function topicFor(text){let hash=2166136261;for(const char of text)hash=Math.imul(hash^char.charCodeAt(0),16777619);return 'topic:'+(hash>>>0).toString(36);}
+  function remember(text){if(typeof text!=='string'||!text.trim())return;const clean=text.trim().slice(0,2000),id=topicFor(clean);if(observation.topics.some(t=>t.id===id))return;observation.topics.push({id,text:clean});observation.topics=observation.topics.slice(-5);}
+  function setMode(value){if(!displayModes.has(value)||displayMode===value)return;displayMode=value;get('skyPanel').dataset.displayMode=value;const select=get('constellationMode');if(select)select.value=value;rebuild();redraw();}
   const escapedLabel=(value,fallback)=>typeof value==='string'?value.slice(0,80):fallback;
   function rebuild(){
-    const items=[{id:'assistant',kind:'assistant',label:'LocalMind',detail:'Связи с каталогом, устройствами и текущим диалогом. Это не рассуждения модели. Постоянная память не подключена.'}];
-    if(observation.conversation)items.push({id:'conversation',kind:'conversation',label:'Текущий диалог',detail:'Контекст только этой сессии. История не сохраняется на диск.'});
-    for(const app of observation.apps)items.push({id:'app:'+app.id,kind:'app',label:escapedLabel(app.name,'Приложение'),detail:app.allowed?'Обнаружено в каталоге. Разрешение запуска выдано пользователем.':'Обнаружено в каталоге. Обнаружение не предоставляет разрешение запуска.'});
-    for(const [i,device] of observation.devices.entries())items.push({id:'device:'+String(device.id??i),kind:'device',label:escapedLabel(device.name,'Устройство'),detail:device.demo?'DEMO · симуляция. Физическое устройство не переключается.':'Настроенная цель Home Assistant; состояние не опрошено.'});
-    for(const file of observation.files)items.push({id:'file:'+file.id,kind:'file',label:file.label,detail:'Выбранный локальный файл. Содержимое не передано модели. Индексация — только демонстрация интерфейса.'});
-    for(const source of observation.sources)items.push({id:'source:'+source.id,kind:'source',label:'Разрешённый справочник',detail:'Настроенный TXT/MD источник. Разрешено чтение; используется только при включённой локальной справке.'});
-    for(const tool of observation.tools)items.push(tool);
-    const next=items.slice(0,MAX_NODES);
+    const items=[],relationships=[];
+    const add=(node,parent,relation)=>{
+      if(items.length>=MAX_NODES||items.some(n=>n.id===node.id))return;
+      items.push(node);if(parent&&relationships.length<MAX_NODES-1)relationships.push({from:parent,to:node.id,relation});
+    };
+    add({id:'assistant',kind:'assistant',label:'LocalMind',detail:'Локальный контекст. Связи показывают ссылки в диалоге и результаты сервера; выбор узла не выдаёт разрешений.'});
+    const devicesOnly=displayMode==='devices',filesOnly=displayMode==='files';
+    if(observation.conversation&&!devicesOnly&&!filesOnly){
+      add({id:'memory',kind:'memory',label:'Память сессии',detail:'Контекст текущего разговора в памяти сервера. Это не постоянная память и не разрешение повторять действия.'},'assistant','контекст сессии');
+      add({id:'conversation',kind:'conversation',label:'Текущий диалог',detail:'Сообщения активного разговора. Архивная история не восстанавливает разрешения и не запускает действия.'},'memory','активный разговор');
+      const topics=displayMode==='focus'?observation.topics.slice(-1):observation.topics;
+      for(const topic of topics)add({id:topic.id,kind:'topic',label:topic.text.replace(/\s+/g,' ').slice(0,42),detail:'Тема из сообщения пользователя: '+topic.text.slice(0,160)},'conversation','сообщение пользователя');
+    }
+    const topics=displayMode==='focus'?observation.topics.slice(-1):observation.topics;
+    const reference=(...values)=>{
+      const key=values[0];
+      const topic=topics.find(t=>t.references?.has(key)||values.some(value=>mentioned(t.text,value)));
+      if(topic){topic.references??=new Set();topic.references.add(key);}
+      return topic&&items.some(n=>n.id===topic.id)?topic.id:undefined;
+    };
+    const contextParent=items.some(n=>n.id==='conversation')?'conversation':'assistant';
+    if(!devicesOnly)for(const file of observation.files){
+      const state=file.state||'ready',inContext=state==='added'||state==='context'||file.added===true;
+      add({id:'file:'+file.id,kind:'file',label:escapedLabel(file.label,'Документ'),detail:inContext?'Сервер подтвердил добавление извлечённого текста в контекст. Источник — выбранный документ.':'Выбранный локальный файл. '+(state==='image'||file.image?'Только превью: визуальное понимание не заявлено.':'Текст ещё не добавлен в контекст модели.')},reference('file:'+file.id,file.label)||contextParent,inContext?'добавлен в контекст':'выбран пользователем');
+    }
+    if(!devicesOnly)for(const source of observation.usedSources){
+      add({id:'source:'+source.id,kind:'source',label:'Источник ответа',detail:'Ответ сервера указал локальный источник'+(Number.isInteger(source.line_start)?', строки '+source.line_start+'–'+source.line_end:'')+'. Содержимое — справка, не разрешение действий.'},contextParent,'источник ответа');
+    }
+    if(!devicesOnly&&!filesOnly)for(const app of observation.apps){
+      const parent=reference('app:'+app.id,app.name,app.id),used=observation.tools.find(t=>t.target===app.id);
+      if(!parent&&!used)continue;
+      add({id:'app:'+app.id,kind:'app',label:escapedLabel(app.name,'Приложение'),detail:app.allowed?'Обнаружено в каталоге. Разрешение запуска выдано пользователем.':'Обнаружено в каталоге. Обнаружение не предоставляет разрешение запуска.'},parent||contextParent,parent?'упомянуто в сообщении':'цель результата');
+    }
+    if(!filesOnly)for(const [i,device] of observation.devices.entries()){
+      const parent=reference('device:'+device.id,device.name,device.id),used=observation.tools.find(t=>t.target===String(device.id));
+      if(!devicesOnly&&!parent&&!used)continue;
+      const state=device.state===true?'включено':device.state===false?'выключено':'неизвестно';
+      add({id:'device:'+String(device.id??i),kind:'device',label:escapedLabel(device.name,'Устройство'),detail:device.demo?'DEMO · симуляция. Состояние симуляции: '+state+'. Физическое устройство не переключается.':'REAL · настроенная цель Home Assistant. Принятая команда не подтверждает физическое состояние.'},parent||contextParent,devicesOnly?'настроено на сервере':parent?'упомянуто в сообщении':'цель результата');
+    }
+    if(!devicesOnly&&!filesOnly)for(const tool of observation.tools){
+      const target=items.find(n=>n.id==='app:'+tool.target||n.id==='device:'+tool.target);
+      add(tool,target?.id||reference(tool.requested)||contextParent,'результат сервера');
+    }
+    const next=items;
+    edges=relationships.filter(e=>next.some(n=>n.id===e.from)&&next.some(n=>n.id===e.to));
     const topology=next.length!==nodes.length||next.some((n,i)=>n.id!==nodes[i]?.id);
     const labels=topology||next.some((n,i)=>n.label!==nodes[i].label);
     // Polls and every completed turn repeat observations. Keep live objects,
@@ -49,16 +92,17 @@
       const options=nodes.map(n=>{const option=document.createElement('option');option.value=n.id;option.textContent=n.label;return option;});
       get('nodeSelect').replaceChildren(...options);get('nodeSelect').value=selected;
     }
-    if(topology){get('graphCount').textContent=nodes.length+' узл. · '+Math.max(0,nodes.length-1)+' связ.';wakePhysics();}
+    if(topology){get('graphCount').textContent=nodes.length+' узл. · '+edges.length+' связ.';wakePhysics();}
     inspect();redraw();
   }
   function inspect(){
     const n=nodes.find(n=>n.id===selected)||nodes[0];
     get('nodeTitle').textContent=n.label;get('nodeType').textContent=kinds[n.kind];
-    get('nodeDetail').textContent=n.detail+(n.kind!=='assistant'?' Связь: LocalMind → '+n.label+'.':'');
+    const edge=edges.find(e=>e.to===n.id);
+    get('nodeDetail').textContent=n.detail+(edge?' Связь: '+edge.relation+'.':'');
     get('nodeSelect').value=n.id;dirty=true;
   }
-  function select(id){selected=id;inspect();redraw();}
+  function select(id){if(!nodes.some(n=>n.id===id))return;selected=id;inspect();redraw();}
   function audioActive(){const c=amplitude.current;return Boolean(c&&(c.kind==='listening'||(!c.source.paused&&!c.source.ended)));}
   function effective(){return audioActive()&&amplitude.current.kind==='speaking'?'speaking':mode==='idle'&&performance.now()<toolUntil?'tool':mode;}
   function announce(m=effective()){if(m===announced)return;announced=m;get('skyPanel').dataset.activity=m;get('graphActivity').textContent=activityNames[m];}
@@ -90,7 +134,7 @@
   }
   function buildLayers(){
     background=layer(width,height,true);const b=background.context;
-    b.fillStyle='#121116';b.fillRect(0,0,width,height);b.strokeStyle='#a881cd12';b.lineWidth=1;
+    b.fillStyle='#0b0a0e';b.fillRect(0,0,width,height);b.strokeStyle='#a881cd09';b.lineWidth=1;
     for(const r of [.55,1,1.4]){b.beginPath();b.ellipse(width*.5,height*.47,scale()*r,scale()*r*.77,-.34,0,TAU);b.stroke();}
     starfield=layer(width+8,height);const s=starfield.context;s.fillStyle='#9b82bb';
     for(let i=0;i<particles.length;i++){const p=particles[i];s.globalAlpha=.17+(i%3)*.09;s.beginPath();s.arc(p.x*width+4,p.y*height,p.r,0,TAU);s.fill();}
@@ -130,10 +174,10 @@
       n.sx=width*.5+(n.x+(drift?Math.sin(now*.00013+n.index)*.014:0))*geometryScale+parallaxX;
       n.sy=height*.47+(n.y+(drift?Math.cos(now*.00011+n.index)*.014:0))*geometryScale+parallaxY;
     }
-    const root=nodes[0];
-    for(let i=1;i<nodes.length;i++){
-      const n=nodes[i],on=n.id===selected||n.active>now;
-      ctx.strokeStyle=on?'#b697dd88':active?'#a17cc94d':'#86709d33';ctx.lineWidth=on?1.2:.7;
+    for(const [i,edge] of edges.entries()){
+      const root=nodes.find(n=>n.id===edge.from),n=nodes.find(n=>n.id===edge.to);
+      const on=n.id===selected||root.id===selected||n.active>now;
+      ctx.strokeStyle=on?'#b697dd77':active?'#a17cc935':'#86709d27';ctx.lineWidth=on?1.1:.65;
       ctx.beginPath();ctx.moveTo(root.sx,root.sy);ctx.quadraticCurveTo((root.sx+n.sx)*.5+10,(root.sy+n.sy)*.5-12,n.sx,n.sy);ctx.stroke();
       if(!reduced&&!low&&(m==='generating'||m==='transcribing'||n.active>now)){
         const t=((now*.00023+i*.17)%1),x=root.sx+(n.sx-root.sx)*t,y=root.sy+(n.sy-root.sy)*t;
@@ -148,6 +192,17 @@
       ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,r,0,TAU);ctx.fill();
       if(root||on){ctx.strokeStyle=color+'44';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,r+7+(root?pulse*4:0),0,TAU);ctx.stroke();}
       const label=labelFor(n,on);ctx.drawImage(label.image,x-label.w/2,y+r+(root?25:17)-label.h+5,label.w,label.h);
+      // Actual time-domain samples share this renderer's existing frame chain.
+      // No waveform or animation is invented while playback is paused/stopped.
+      if(root&&audioActive()&&!reduced&&!low){
+        ctx.beginPath();ctx.strokeStyle='#d7b8e6aa';ctx.lineWidth=1.2;
+        for(let i=0;i<amplitude.buffer.length;i+=4){
+          const wx=x-44+i/amplitude.buffer.length*88;
+          const wy=y+48+(amplitude.buffer[i]-128)/128*18;
+          if(i===0)ctx.moveTo(wx,wy);else ctx.lineTo(wx,wy);
+        }
+        ctx.stroke();
+      }
     }
     ctx.globalAlpha=1;
   }
@@ -187,7 +242,7 @@
     // Absolute pixel cap also protects unusually large/high-DPI monitors.
     const nextFactor=Math.min(dpr,Math.sqrt(1600000/(w*h)));
     if(w!==width||h!==height||Math.abs(nextFactor-factor)>.01||!background){
-      width=w;height=h;factor=nextFactor;geometryScale=Math.max(36,Math.min(width*.38,height*.34,220));
+      width=w;height=h;factor=nextFactor;geometryScale=Math.max(36,Math.min(width*.42,height*.38,420));
       canvas.width=Math.max(1,Math.floor(width*factor));canvas.height=Math.max(1,Math.floor(height*factor));
       ctx?.setTransform(factor,0,0,factor,0,0);cacheDirty=true;
     }redraw();
@@ -259,26 +314,31 @@
       if(enabled&&!diagnostics){diagnostics=document.createElement('output');diagnostics.className='canvas-diagnostics';diagnostics.setAttribute('aria-hidden','true');canvas.parentElement.append(diagnostics);}
       else if(!enabled&&diagnostics){diagnostics.remove();diagnostics=null;}overlayLast=0;redraw();
     },
+    setMode,
     observeInfo(info){observation.devices=(info.devices||[]).slice(0,8).map(d=>({...d,demo:info.demo}));rebuild();},
     observeApps(apps){observation.apps=apps.slice(0,10);rebuild();},
-    observeConversation(){observation.conversation=true;rebuild();},
+    observeConversation(text,messages){observation.conversation=true;for(const message of (messages||[]).slice(-10))if(message.role==='user')remember(message.content);remember(text);rebuild();},
     setFiles(files){observation.files=files.slice(0,8);rebuild();},
-    setSources(sources){observation.sources=sources.filter(s=>s.allowed&&s.available).slice(0,5);rebuild();},
+    setSources(sources){observation.sources=sources.filter(s=>s.allowed&&s.available).slice(0,5);},
+    observeSources(sources){observation.usedSources=(sources||[]).slice(0,5).map((s,i)=>({...s,id:String(s.id||s.source_id||i)}));rebuild();},
     toolResults(results){for(const result of (results||[]).slice(0,8)){
-      // Only a completed authoritative result can light a target; no live start event exists.
-      const target=String(result.resolved_target||'');
-      let n=nodes.find(n=>n.id==='app:'+target||n.id==='device:'+target);
-      if(!n){const id='tool:'+String(result.action||'action');let tool=observation.tools.find(t=>t.id===id);
-        if(!tool&&observation.tools.length<3){tool={id,kind:'tool',label:'Результат действия',detail:'Сервер вернул результат. '+(result.success?'Проверка завершена.':'Действие не выполнено.')};observation.tools.push(tool);rebuild();}n=nodes.find(n=>n.id===id);
-      }
-      if(n?.kind==='tool'){const detail='Сервер вернул результат. '+(result.success?'Проверка завершена.':'Действие не выполнено.');n.detail=detail;const stored=observation.tools.find(t=>t.id===n.id);if(stored)stored.detail=detail;if(selected===n.id)inspect();}
-      if(n)n.active=performance.now()+2000;
+      // Only server results create action relationships. Requested target and
+      // observed state remain distinct, particularly for REAL request_accepted.
+      const target=String(result.resolved_target||''),action=String(result.action||'action');
+      const id='tool:'+action+':'+target;
+      const accepted=result.execution_status==='request_accepted';
+      const detail=(result.mode==='DEMO'?'DEMO · симуляция. ':'')+(result.success?(accepted?'Команда принята; физическое состояние не подтверждено.':'Сервер вернул результат: '+String(result.execution_status||'завершено')+'.'):'Действие не выполнено.')+' Наблюдаемое состояние: '+String(result.observed_state||'не сообщено')+'.';
+      let tool=observation.tools.find(t=>t.id===id);
+      if(!tool&&observation.tools.length<5){tool={id,kind:'tool',label:escapedLabel(action,'Действие'),detail,target,requested:String(result.requested_target||'')};observation.tools.push(tool);}
+      else if(tool)tool.detail=detail;
+      rebuild();const n=nodes.find(n=>n.id===id);if(n)n.active=performance.now()+2000;
     }if(results?.length){toolUntil=performance.now()+2000;clearTimeout(toolTimer);toolTimer=setTimeout(()=>{toolUntil=0;redraw();},2000);redraw();}},
-    reset(){observation.conversation=false;observation.files=[];observation.tools=[];toolUntil=0;clearTimeout(toolTimer);mode='idle';selected='assistant';rebuild();inspect();announce();redraw();},
+    reset(){observation.conversation=false;observation.topics=[];observation.files=[];observation.usedSources=[];observation.tools=[];toolUntil=0;clearTimeout(toolTimer);mode='idle';selected='assistant';rebuild();inspect();announce();redraw();},
     // Small diagnostic snapshot, without filenames, paths or document content.
-    stats({timings=true}={}){return {nodes:nodes.length,edges:Math.max(0,nodes.length-1),frames:frameCount,scheduled:timer!==null,reduced,low,visible:isVisible(),mode:effective(),amplitude:amplitude.sample(),dpr:factor,pixels:canvas.width*canvas.height,settling,...(timings?timing():{})};}
+    stats({timings=true}={}){return {nodes:nodes.length,edges:edges.length,displayMode,frames:frameCount,scheduled:timer!==null,reduced,low,visible:isVisible(),mode:effective(),amplitude:amplitude.sample(),dpr:factor,pixels:canvas.width*canvas.height,settling,...(timings?timing():{})};}
   };
   document.fonts?.addEventListener('loadingdone',()=>{for(const n of nodes)n.labelCache=null;redraw();});
   document.fonts?.ready.then(()=>{for(const n of nodes)n.labelCache=null;redraw();});
-  watchResolution();rebuild();resize();
+  get('constellationMode')?.addEventListener('change',e=>setMode(e.target.value));
+  get('skyPanel').dataset.displayMode=displayMode;watchResolution();rebuild();resize();
 })();

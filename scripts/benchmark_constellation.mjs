@@ -9,6 +9,7 @@ const exec=promisify(execFile),out=process.env.CONSTELLATION_BENCH_OUT||'.test-a
 const duration=Number(process.env.CONSTELLATION_BENCH_MS||6000);
 const zoomMode='native';
 if(!Number.isFinite(duration)||duration<1000||duration>60000)throw new Error('Sample duration must be 1000–60000 ms');
+const baseURL=process.env.LOCALMIND_TEST_URL || 'http://127.0.0.1:8765';
 const baseline=process.env.CONSTELLATION_BASE_REF;
 if(baseline&&!/^[a-f0-9]{7,40}$/.test(baseline))throw new Error('Baseline must be a commit hash');
 await mkdir(out,{recursive:true});
@@ -33,11 +34,15 @@ try {
   for(const zoom of [1,1.25,1.4])for(const workload of ['idle','ollama']){
     const page=await context.newPage();
     await page.setViewportSize({width:1440,height:1000});
-    if(baseline)for(const file of ['constellation.js','interface.js']){
+    if(baseline)for(const file of ['app.css','app.js','constellation.js','interface.js','attachments.js','icons.js','speech.js']){
       const {stdout}=await exec('git',['show',`${baseline}:static/assets/${file}`]);
-      await page.route(`**/assets/${file}`,r=>r.fulfill({contentType:'application/javascript',body:stdout}));
+      await page.route(`**/assets/${file}`,r=>r.fulfill({contentType:file.endsWith('.css')?'text/css':'application/javascript',body:stdout}));
     }
-    await page.goto('http://127.0.0.1:8765');
+    if(baseline){
+      const {stdout}=await exec('git',['show',`${baseline}:static/index.html`]);
+      await page.route(baseURL.replace(/\/$/,'')+'/',r=>r.fulfill({contentType:'text/html',body:stdout}));
+    }
+    await page.goto(baseURL);
     const actualZoom=await worker.evaluate(async zoom=>{
       const tabs=await chrome.tabs.query({url:'http://127.0.0.1:8765/*'});
       if(tabs.length!==1)throw new Error('Expected exactly one local benchmark tab');
@@ -55,12 +60,15 @@ try {
       localmindScene.observeInfo({demo:true,devices:[{id:'lamp',name:'Лампа'}]});
       localmindScene.setFiles([{id:'fixture',label:'Вложение 1'}]);
       localmindScene.setSources([]);
-      localmindScene.observeConversation();
+      localmindScene.observeConversation(Array.from({length:10},(_,i)=>'Приложение '+i).join(', ')+' lamp');
     });
-    if(await page.locator('#graphToggle').isVisible())await page.locator('#graphToggle').click();
+    // The new scene runs behind conversation controls. Do not expand Map:
+    // inference and typing must be measured in the actual conversation layout.
+    if(!(await page.evaluate(()=>localmindScene.stats().visible))&&await page.locator('#graphToggle').isVisible())await page.locator('#graphToggle').click();
     await page.waitForTimeout(1500);
     const initial=await page.evaluate(()=>localmindScene.stats());
-    if(initial.nodes!==14||!initial.visible||initial.low||initial.reduced)throw new Error('Expected fourteen visible nodes with normal animation');
+    const expectedNodes=baseline?14:16;
+    if(initial.nodes!==expectedNodes||!initial.visible||initial.low||initial.reduced)throw new Error(`Expected ${expectedNodes} visible observed/contextual nodes with normal animation; got ${JSON.stringify(initial)}`);
     await page.screenshot({path:`${out}/${zoom}-${workload}.png`});
     const cdp=await page.context().newCDPSession(page);await cdp.send('Performance.enable');
     let startupMs=null;

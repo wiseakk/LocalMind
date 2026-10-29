@@ -26,6 +26,8 @@ from .requests import RequestStore, RequestBusy, RequestConflict
 from .generation import GenerationSettings
 from .conversations import conversations, ConversationError
 from .file_access import file_access, FileAccessError
+from .attachments import (AttachmentError, MAX_FILE_BYTES, add_document,
+                          document_context, extract_document)
 from .voice import VoiceError, voice_status, transcribe_audio, synthesize_speech, MAX_UPLOAD_BYTES
 
 @asynccontextmanager
@@ -68,9 +70,14 @@ class ChatRequest(BaseModel):
     keep_alive_seconds: int = Field(default=300, ge=0, le=900)
     conversation_id: str | None = Field(default=None, min_length=32, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
     local_retrieval: bool = False
+    attachment_ids: list[Annotated[str, Field(min_length=32, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')]] = Field(default_factory=list, max_length=8)
 
 class ConversationRequest(BaseModel):
     conversation_id: str = Field(min_length=32, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
+
+class AttachmentRemoveRequest(ConversationRequest):
+    attachment_id: str = Field(min_length=32, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
+    server_instance: str = Field(min_length=32, max_length=32)
 
 class FolderPermissionRequest(BaseModel):
     allowed: bool
@@ -153,7 +160,8 @@ async def local_boundary(request: Request, call_next):
         if not _body_slots.acquire(blocking=False):
             return JSONResponse({'detail':'Слишком много одновременных загрузок'},status_code=429)
         try:
-            maximum = MAX_UPLOAD_BYTES + 65536 if request.url.path == '/api/transcribe' else 65536
+            maximum = (MAX_UPLOAD_BYTES + 65536 if request.url.path == '/api/transcribe' else
+                       MAX_FILE_BYTES + 65536 if request.url.path == '/api/attachments' else 65536)
             body = bytearray()
             async with asyncio.timeout(BODY_TIMEOUT_SECONDS):
                 async for chunk in request.stream():
@@ -203,8 +211,10 @@ def _entry(data: ChatRequest):
         # used to establish memory, permissions, targets or outcomes.
         conversation = conversations.acquire(data.conversation_id or conversations.create())
         try:
+            context = document_context(conversation, data.attachment_ids)
             prepared = prepare_reply(data.text, [], data.actions_authorized, data.response_length,
-                                     data.compose_actions, generation, conversation=conversation, local_retrieval=data.local_retrieval)
+                                     data.compose_actions, generation, conversation=conversation, local_retrieval=data.local_retrieval,
+                                     document_facts=context)
             def finish(final):
                 try:
                     conversation.remember(data.text, final or prepared.initial, prepared.reference)
@@ -231,8 +241,72 @@ def chat(data:ChatRequest, x_localmind_key: Annotated[str | None, Header()] = No
         return _entry(data).final.result(timeout=90)
     except FutureTimeout as exc:
         raise HTTPException(504,'Ответ ещё обрабатывается. Повторите с тем же request_id.') from exc
+    except (ConversationError, AttachmentError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@app.post('/api/conversations')
+def create_conversation(x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    try:
+        return {'conversation_id': conversations.create(), 'server_instance': SERVER_INSTANCE}
     except ConversationError as exc:
         raise HTTPException(409, str(exc)) from exc
+
+
+@app.get('/api/conversations/{conversation_id}')
+def conversation_status(conversation_id: str, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    conversation = None
+    try:
+        conversation = conversations.acquire(conversation_id)
+        return {'conversation_id': conversation.id, 'server_instance': SERVER_INSTANCE,
+                'attachments': [doc.public() for doc in conversation.attachments.values()]}
+    except ConversationError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    finally:
+        if conversation:
+            conversations.release(conversation)
+
+
+@app.post('/api/attachments')
+def upload_attachment(file: Annotated[UploadFile, File()], conversation_id: Annotated[str, Form()],
+                      server_instance: Annotated[str, Form()],
+                      x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    if server_instance != SERVER_INSTANCE:
+        raise HTTPException(409, 'Сервер перезапущен. Добавь документ в новый разговор.')
+    conversation = None
+    try:
+        conversation = conversations.acquire(conversation_id)
+        data = file.file.read(MAX_FILE_BYTES + 1)
+        document = extract_document(data, file.filename)
+        add_document(conversation, document)
+        return {**document.public(preview=True), 'conversation_id': conversation.id,
+                'server_instance': SERVER_INSTANCE}
+    except (ConversationError, AttachmentError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+    finally:
+        file.file.close()
+        if conversation:
+            conversations.release(conversation)
+
+
+@app.post('/api/attachments/remove')
+def remove_attachment(data: AttachmentRemoveRequest, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    if data.server_instance != SERVER_INSTANCE:
+        raise HTTPException(409, 'Сервер перезапущен. Вложение больше недоступно.')
+    conversation = None
+    try:
+        conversation = conversations.acquire(data.conversation_id)
+        conversation.attachments.pop(data.attachment_id, None)
+        return {'ok': True}
+    except ConversationError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    finally:
+        if conversation:
+            conversations.release(conversation)
 
 
 @app.post('/api/conversations/reset')
@@ -339,11 +413,16 @@ def file_permission(data: FilePermissionRequest, x_localmind_key: Annotated[str 
 @app.post('/api/chat/stream')
 def chat_stream(data:ChatRequest, x_localmind_key: Annotated[str | None, Header()] = None):
     authorize(x_localmind_key)
-    entry = _entry(data)
+    try:
+        entry = _entry(data)
+        initial = entry.initial.result(timeout=90)
+    except FutureTimeout as exc:
+        raise HTTPException(504, 'Ответ ещё обрабатывается. Повтори с тем же request_id.') from exc
+    except (ConversationError, AttachmentError) as exc:
+        raise HTTPException(409, str(exc)) from exc
     async def events():
         # result() runs in a separate waiter; cancellation cannot cancel shared futures.
         try:
-            initial=await asyncio.to_thread(entry.initial.result,90)
             yield json.dumps({'type':'status','data':initial},ensure_ascii=False)+'\n'
             offset = 0
             deadline = time.monotonic() + 90

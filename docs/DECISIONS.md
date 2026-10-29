@@ -1,5 +1,39 @@
 # Архитектурные решения DevCrew
 
+## 2026-10-29 — Blacksite scene and trustworthy context
+
+Keep the existing Canvas/audio/streaming modules and override the layout as one
+fullscreen scene. Cache Canvas layers, maintain one animation chain, settling,
+DPR<=1.5 and the 1.6M-pixel cap. Atmosphere uses static CSS gradients; no continuous
+blur or animated full-window filters. Native dialogs contain drawer focus.
+Map hides/inerts the conversation without recreating its draft, restores the
+previous mode and returns focus to a visible opener. Narrow composers wrap.
+
+Conversation history is presentation, not authority. Session entries retain their
+server identity only in RAM; localStorage opt-in serializes bounded text/title/
+draft only. Reloaded/expired entries are archives. Never replay history to rebuild
+server memory. Serialize switches, destructive history changes and capture reset;
+ignore late STT by epoch. Attachments migrate local draft groups to opaque server
+IDs, retaining initial image-only drafts without cross-conversation leakage.
+
+Use additive APIs and optional attachment_ids. Validate IDs before routing any
+action. Store extracted text in expiring conversations; never accept client paths.
+Pass document reference text only to dialogue inference with no tools. Do not feed
+it to action planning or authorization. Acknowledgement exposes context_sources;
+a ready upload alone is not model-context evidence. REAL HA request acceptance is
+separate from observed physical state; result chips show target/status/observation.
+
+Use pypdf>=6.21.3,<7 for bounded PDF extraction and stdlib ZIP/XML for DOCX. Complex
+parsing occurs in a disposable fixed-module process with memory/time/concurrency
+limits, archive/XML and page limits; fail closed if isolation is unavailable.
+Parser arguments never include filenames, model output, paths or commands.
+Initial dependency/model provisioning is explicit; inference stays local.
+
+Visual/browser and native performance gates remain mandatory before acceptance.
+Managed sandbox spawn EPERM and native browser access rejection cannot be replaced
+with DOM or historical GPU measurements. Report real local document integration
+separately from mock-based CI and untested microphone/GPU/physical HA behavior.
+
 ## 2026-10-29 — scoped Canvas reconciliation and evidence repair
 
 Builder follows the existing architecture on `e4a71c8`: no visual redesign,

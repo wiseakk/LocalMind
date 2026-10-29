@@ -28,13 +28,16 @@ test('all interface fonts and assets load locally with external HTTP blocked',as
 });
 
 test('graph selection, pointer drag, recenter and keyboard movement',async({page})=>{
-  await page.goto('/');await expect(page.locator('#nodeSelect option')).toHaveCount(3);
+  await page.goto('/');await expect(page.locator('#nodeSelect option')).toHaveCount(1);
+  await page.evaluate(()=>localmindScene.observeConversation('editor desk_light'));
+  await page.locator('#graphToggle').click();
+  await expect(page.locator('#nodeSelect option')).toHaveCount(6);
   await page.locator('#nodeSelect').selectOption('app:editor');await expect(page.locator('#nodeDetail')).toContainText('не предоставляет');
   await page.locator('#nodeSelect').press('Alt+ArrowRight');await page.locator('#moveNode').click();
   const box=await page.locator('#constellation').boundingBox();
   await page.mouse.move(box.x+box.width/2,box.y+box.height*.47);await page.mouse.down();await page.mouse.move(box.x+box.width*.62,box.y+box.height*.4,{steps:8});await page.mouse.up();
   await expect(page.locator('#nodeTitle')).toHaveText('LocalMind');await page.locator('#centerGraph').click();
-  expect(await page.evaluate(()=>localmindScene.stats().nodes)).toBe(3);
+  expect(await page.evaluate(()=>localmindScene.stats().nodes)).toBe(6);
   await page.screenshot({path:'test-results/constellation-desktop.png',fullPage:true});
 });
 
@@ -48,23 +51,44 @@ test('motion controls suspend idle work, respect OS preference and retain readab
   await expect(page.locator('h1')).toBeVisible();await expect(page.locator('#message')).toBeInViewport();
 });
 
-test('file selection/drop/paste, privacy consent and safe removal stay in browser memory',async({page})=>{
-  const mutations=[];page.on('request',r=>{if(r.method()==='POST')mutations.push(r.url());});
-  await page.goto('/');
-  await page.locator('#fileInput').setInputFiles([{name:'<private>.txt',mimeType:'',buffer:Buffer.from('local')},{name:'invalid.exe',mimeType:'application/octet-stream',buffer:Buffer.from('invalid')}]);
+test('documents use local upload, extracted preview, acknowledgement and safe removal',async({page})=>{
+  const mutations=[],uploaded=[];let serial=0;
+  const conversation='c'.repeat(32),instance=info.server_instance;
+  page.on('request',r=>{if(r.method()==='POST')mutations.push(new URL(r.url()).pathname);});
+  await page.route('**/api/conversations',r=>r.fulfill({json:{conversation_id:conversation,server_instance:instance}}));
+  await page.route('**/api/attachments',r=>{
+    const id=String(++serial).padStart(32,'a');uploaded.push(id);
+    return r.fulfill({json:{id,name:'private.txt',size:5,characters:5,truncated:false,preview:'local',state:'ready',conversation_id:conversation,server_instance:instance}});
+  });
+  await page.route('**/api/attachments/remove',r=>r.fulfill({json:{ok:true}}));
+  await page.route('**/api/chat/stream',r=>{
+    const body=r.request().postDataJSON(),result={answer:'Document fixture answer',engine:'mock',action_results:[],conversation_id:conversation,context_sources:body.attachment_ids.map(id=>({id,name:'private.txt',characters:5,truncated:false}))};
+    return r.fulfill({contentType:'application/x-ndjson',body:JSON.stringify({type:'status',data:result})+'\n'+JSON.stringify({type:'final',data:result})+'\n'});
+  });
+  await page.route('**/api/tts/cancel',r=>r.fulfill({json:{ok:true}}));
+  await page.goto('/');await expect(page.locator('#status')).toHaveText('\u0421\u0435\u0440\u0432\u0435\u0440 \u043f\u043e\u0434\u043a\u043b\u044e\u0447\u0451\u043d');
+  await page.locator('#fileInput').setInputFiles([{name:'<private>.txt',mimeType:'text/plain',buffer:Buffer.from('local')},{name:'invalid.exe',mimeType:'application/octet-stream',buffer:Buffer.from('invalid')}]);
   await expect(page.locator('.attachment')).toHaveCount(2);await expect(page.locator('.attachment.error')).toHaveCount(1);
-  await expect(page.locator('#attachmentList')).not.toContainText('<private>');await expect(page.locator('#attachmentNotice')).toContainText('НЕ переданы модели');
+  await expect(page.locator('.attachment').first()).toHaveAttribute('data-state','ready');
+  await expect(page.locator('#attachmentList')).not.toContainText('<private>');
+  expect(uploaded).toHaveLength(1);expect(await page.evaluate(()=>localmindAttachments.contextIds())).toEqual(uploaded);
+  await page.evaluate(()=>{document.querySelector('#speak').checked=false;});
+  await page.locator('#message').fill('Describe the attachment');await page.locator('#send').click();await expect(page.locator('#send')).toBeEnabled();
+  await expect(page.locator('.attachment').first()).toHaveAttribute('data-state','added');
   await page.locator('#settingsOpen').click();await page.locator('#tab-appearance').click();await page.locator('#showFilenames').check();await page.keyboard.press('Escape');
   await expect(page.locator('.attachment-name').first()).toHaveText('<private>.txt');expect(await page.locator('.attachment-name img').count()).toBe(0);
-  await page.locator('.preview-button').first().click();await expect(page.locator('.attachment-state').first()).toContainText('Превью: индексация');
-  await page.getByRole('button',{name:'Удалить вложение 1',exact:true}).click();await expect(page.locator('.attachment')).toHaveCount(1);
+  await page.locator('.preview-button').first().click();await expect(page.locator('#attachmentPreview')).toBeVisible();await expect(page.locator('#previewText')).toHaveText('local');
+  await page.locator('#previewClose').click();await page.locator('.attachment').first().locator('.icon-button').click();await expect(page.locator('.attachment')).toHaveCount(1);
+  expect(await page.evaluate(()=>localmindAttachments.contextIds())).toEqual([]);
   await page.evaluate(()=>{
     const transfer=new DataTransfer();transfer.items.add(new File(['drop'],'drop.md',{type:'text/markdown'}));
     document.querySelector('#dropZone').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:transfer}));
     const paste=new DataTransfer();paste.items.add(new File(['paste'],'paste.csv',{type:'text/csv'}));
     document.querySelector('#message').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:paste}));
   });
-  await expect(page.locator('.attachment')).toHaveCount(3);expect(mutations).toEqual([]);
+  await expect(page.locator('.attachment')).toHaveCount(3);
+  await expect.poll(()=>uploaded.length).toBe(3);await expect.poll(()=>page.evaluate(()=>localmindAttachments.hasPending())).toBe(false);
+  expect(mutations.every(path=>['/api/conversations','/api/attachments','/api/attachments/remove','/api/chat/stream','/api/tts/cancel'].includes(path))).toBe(true);
 });
 
 test('valid raster decodes to Canvas and malformed raster never becomes ready',async({page})=>{
@@ -121,7 +145,7 @@ test('generation interaction trace (mock stream; no local LLM benchmark)',async(
     await route.fulfill({contentType:'application/x-ndjson',body:JSON.stringify({type:'delta',sequence:1,text:'Локальный тест интерфейса.'})+'\n'+JSON.stringify({type:'final',data:{answer:'Локальный тест интерфейса.',engine:'mock',action_results:[]}})+'\n'});
   });
   await page.goto('/');await page.locator('#message').fill('Проверка');await page.locator('#send').click();
-  await expect(page.locator('#graphActivity')).toHaveText('Формируется ответ');await page.locator('#centerGraph').click();
+  await expect(page.locator('#graphActivity')).toHaveText('Формируется ответ');await page.locator('#graphToggle').click();await page.locator('#centerGraph').click();
   await expect(page.locator('#send')).toBeEnabled();await context.tracing.stop({path:'test-results/constellation-mock-generation-trace.zip'});
 });
 
@@ -133,7 +157,7 @@ test('optional real Ollama generation performance trace',async({page,context},te
   const cdp=await context.newCDPSession(page);
   await cdp.send('Tracing.start',{categories:'devtools.timeline,blink.user_timing',transferMode:'ReturnAsStream'});
   await page.locator('#message').fill('Объясни за три предложения, как работает радуга.');await page.locator('#send').click();
-  await page.locator('#centerGraph').click();await expect(page.locator('#send')).toBeEnabled({timeout:125000});
+  await page.locator('#graphToggle').click();await page.locator('#centerGraph').click();await expect(page.locator('#send')).toBeEnabled({timeout:125000});
   const completed=new Promise(resolve=>cdp.once('Tracing.tracingComplete',resolve));await cdp.send('Tracing.end');
   const {stream}=await completed;let trace='';
   while(true){const chunk=await cdp.send('IO.read',{handle:stream});trace+=chunk.data;if(chunk.eof)break;}

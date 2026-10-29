@@ -1,5 +1,46 @@
 ﻿# DevCrew — проверяемый статус LocalMind 1.0
 
+## 2026-10-29 — Blacksite workspace implementation; browser acceptance blocked
+
+Unified fullscreen scene replaces the permanent chat/right-graph split. Added
+Ambient/Focus/Map/Devices/Files, contextual edges, elegant local-font composition,
+dock controls and native Settings/Files/Devices/History drawers. Live history has
+separate drafts, rename/delete and opt-in text-only persistence; reload/expiry
+produces read-only archives without action replay or restored server grants.
+
+Real bounded TXT/MD/CSV/PDF/DOCX ingestion now reaches local inference. Disposable
+PDF/DOCX workers enforce 10 seconds/256 MiB; extracted text is conversation-scoped.
+Images remain browser previews without a vision claim. Added-to-context requires
+server acknowledgement. Source/truncation metadata stays explicit. Existing CSP,
+allowlists, streaming replay/cancellation and speech review are preserved.
+
+Actual local integration on a dedicated localhost8877 instance launched through
+start_windows.ps1 used installed qwen3:4b to recover three unique codes from TXT,
+PDF and DOCX in a real streamed answer. No model download; no mock on that path.
+Default port8765 was occupied and left untouched. Reproduction and startup logs
+are in ignored .test-artifacts/. DEMO devices were reported by the live server.
+
+Automated evidence: 403 Python tests and 35 subtests green (two optional speech tests
+skip without numpy/faster-whisper); 32 existing/updated DOM checks, eight attachment
+lifecycle checks and seven history checks pass. JS syntax, local asset resolution,
+synthetic renderer metrics and diff whitespace checks pass. Browser coverage now
+has 33 scenarios, including desktop/mobile CSS-scale100/125/140%, but execution
+fails before tests with spawn EPERM. Both before/after Canvas benchmarks likewise
+produce failure artifacts, no new FPS/GPU numbers. Native browser fallback was
+rejected for Zen. No new screenshots or native zoom acceptance are claimed.
+
+Read-only frontend/backend reviews exposed attachment group, archive graph,
+reset/deletion race, result metadata, mobile focus and narrow dock issues; fixes
+were verified with focused DOM/security regressions where executable. No scoped
+unresolved P0/P1 security issue remains. Visual polish, actual microphone, GPU STT,
+physical speakers/HA and full external-network-blocked browser demo still require
+hardware/browser acceptance. This milestone is implemented, not conference-ready
+acceptance. Earlier performance numbers are historical and do not validate this UI.
+
+Start: .\start_windows.ps1. Offline demo, troubleshooting and privacy semantics:
+docs/BLACKSITE.md and README.md. Forty explanatory defense answers are preserved
+in docs/DEFENSE_QA.md. No push, publication, deployment or unrelated server changes.
+
 ## 2026-10-29 — current Canvas builder revalidation (browser gate blocked)
 
 Base `e4a71c8`. Scoped reconciliation/cache/DPR fixes preserve Canvas design,

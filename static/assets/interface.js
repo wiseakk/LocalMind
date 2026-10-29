@@ -26,24 +26,28 @@
   }
   media?.addEventListener('change',appearance);
   byId('reduceMotion').addEventListener('change',appearance);byId('lowPerformance').addEventListener('change',appearance);appearance();
-  const panel=byId('skyPanel'),stage=document.querySelector('.stage');
-  let compact=false,graphOpener=byId('graphToggle');
+  const panel=byId('skyPanel');
+  let graphOpener=byId('graphToggle'),previousMode='ambient';
   function syncGraphAccess(){
-    compact=stage.clientWidth<=1100;
     const open=panel.classList.contains('graph-focused');
-    panel.inert=compact&&!open;
-    window.localmindScene?.setVisible(!compact||open);
-    for(const id of ['graphNav','graphToggle'])byId(id).setAttribute('aria-expanded',String(!compact||open));
+    panel.inert=false;
+    window.localmindScene?.setVisible(true);
+    document.querySelector('.dialogue-column').inert=open;
+    for(const id of ['graphNav','graphToggle'])byId(id).setAttribute('aria-expanded',String(open));
   }
   function setGraph(open,restore=false){
+    const wasOpen=panel.classList.contains('graph-focused');
+    if(open&&!wasOpen){if(byId('constellationMode').value!=='map')previousMode=byId('constellationMode').value;window.localmindScene?.setMode('map');byId('constellationMode').value='map';}
+    if(!open&&wasOpen){window.localmindScene?.setMode(previousMode);byId('constellationMode').value=previousMode;}
     panel.classList.toggle('graph-focused',open);
+    document.body.classList.toggle('map-open',open);
     byId('graphNav').classList.toggle('selected',open);
     byId('chatNav').classList.toggle('selected',!open);
     if(open){byId('graphNav').setAttribute('aria-current','location');byId('chatNav').removeAttribute('aria-current');}
     else{byId('graphNav').removeAttribute('aria-current');byId('chatNav').setAttribute('aria-current','page');}
     syncGraphAccess();
     if(open)byId('nodeSelect').focus({preventScroll:true});
-    else if(restore)(compact?byId('graphToggle'):graphOpener).focus({preventScroll:true});
+    else if(restore)(byId('sidebar').inert&&byId('sidebar').contains(graphOpener)?byId('graphToggle'):graphOpener).focus({preventScroll:true});
     window.localmindScene?.redraw();
   }
   for(const id of ['graphNav','graphToggle'])byId(id).addEventListener('click',()=>{
@@ -51,15 +55,19 @@
   });
   byId('closeGraph').addEventListener('click',()=>setGraph(false,true));
   byId('chatNav').addEventListener('click',()=>setGraph(false));
-  document.addEventListener('keydown',e=>{
-    if(e.key==='Escape'&&!document.querySelector('dialog[open]')&&compact&&panel.classList.contains('graph-focused'))setGraph(false,true);
+  byId('constellationMode').addEventListener('change',()=>{
+    if(byId('constellationMode').value==='map')setGraph(true);
+    else if(panel.classList.contains('graph-focused')){previousMode=byId('constellationMode').value;setGraph(false,true);}
+    else previousMode=byId('constellationMode').value;
   });
-  if(window.ResizeObserver)new ResizeObserver(syncGraphAccess).observe(stage);
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&!document.querySelector('dialog[open]')&&panel.classList.contains('graph-focused')){e.preventDefault();setGraph(false,true);}
+  });
   syncGraphAccess();
-  for(const id of ['settingsOpen','appsOpen'])byId(id).addEventListener('click',closeSidebar);
+  for(const id of ['settingsOpen','appsOpen','historyOpen','filesOpen','devicesOpen'])byId(id).addEventListener('click',closeSidebar);
   // Native <dialog> handles focus containment, Escape and focus return. Explicitly
   // restore its opener too, including when the opener lives in the mobile rail.
-  for(const [id,opener] of [['settingsDialog','settingsOpen'],['appsDialog','appsOpen']]){
+  for(const [id,opener] of [['settingsDialog','settingsOpen'],['appsDialog','appsOpen'],['historyDialog','historyOpen'],['filesDialog','filesOpen'],['devicesDialog','devicesOpen']]){
     byId(id).addEventListener('close',()=>{
       if(!document.querySelector('dialog[open]'))(window.matchMedia?.('(max-width:760px)').matches?byId('sidebarToggle'):byId(opener)).focus();
     });

@@ -4,9 +4,10 @@ test('observation refresh reuses labels and selection without restarting settled
   await page.goto('/');await page.evaluate(()=>document.fonts.ready);
   await page.evaluate(()=>{
     window.fixtureApps=Array.from({length:10},(_,i)=>({id:String(i),name:'Узел '+i,allowed:false}));
-    localmindScene.observeApps(fixtureApps);localmindScene.observeConversation();
+    localmindScene.observeApps(fixtureApps);localmindScene.observeConversation(fixtureApps.map(a=>a.name).join(", "));
   });
   await expect.poll(()=>page.evaluate(()=>localmindScene.stats().settling),{timeout:10000}).toBe(false);
+  await page.locator('#graphToggle').click();
   await page.locator('#nodeSelect').selectOption('app:0');
   const probe=await page.evaluate(()=>{
     const proto=CanvasRenderingContext2D.prototype,fill=proto.fillText,measure=proto.measureText;
@@ -33,14 +34,14 @@ test('Canvas updates backing DPR when CSS dimensions remain fixed',async({page,c
   for(const dpr of [1.4,2,1.25,1]){
     // This isolates resolution changes; it is not a native browser zoom benchmark.
     await cdp.send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:dpr,mobile:false});
-    await expect.poll(()=>page.evaluate(()=>localmindScene.stats().dpr)).toBeCloseTo(Math.min(1.5,dpr),2);
+    await expect.poll(()=>page.evaluate(()=>localmindScene.stats().dpr)).toBeCloseTo(Math.min(1.5,dpr,Math.sqrt(1600000/(logical.width*logical.height))),2);
     expect(await page.locator('#constellation').evaluate(c=>({width:c.clientWidth,height:c.clientHeight}))).toEqual(logical);
     expect(await page.evaluate(()=>localmindScene.stats().pixels)).toBeLessThanOrEqual(1600000);
   }
   await cdp.send('Emulation.clearDeviceMetricsOverride');
 });
 
-test('Canvas caches text and glows, exposes opt-in timing and suspends the closed drawer',async({page})=>{
+test('Canvas caches text and glows, exposes opt-in timing and remains a visible background',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('/');
   await page.evaluate(()=>document.fonts.ready);
   await expect(page.locator('.canvas-diagnostics')).toHaveCount(0);
@@ -63,11 +64,12 @@ test('Canvas caches text and glows, exposes opt-in timing and suspends the close
   expect(stats.dpr).toBeLessThanOrEqual(1.5);expect(stats.pixels).toBeLessThanOrEqual(1600000);
   await expect(page.locator('.canvas-diagnostics')).toContainText('FPS');
   await page.setViewportSize({width:1000,height:700});
-  await expect.poll(()=>page.evaluate(()=>localmindScene.stats().visible)).toBe(false);
+  await expect.poll(()=>page.evaluate(()=>localmindScene.stats().visible)).toBe(true);
+  await page.evaluate(()=>localmindScene.setVisible(false));
   const stopped=await page.evaluate(()=>localmindScene.stats().frames);await page.waitForTimeout(150);
   expect(await page.evaluate(()=>localmindScene.stats().frames)).toBe(stopped);
   await expect(page.locator('.canvas-diagnostics')).toContainText('приостановлено');
-  await page.locator('#graphToggle').click();
+  await page.evaluate(()=>localmindScene.setVisible(true));
   await expect.poll(()=>page.evaluate(()=>localmindScene.stats().frames)).toBeGreaterThan(stopped);
   await page.evaluate(()=>localmindScene.setDiagnostics(false));await expect(page.locator('.canvas-diagnostics')).toHaveCount(0);
   expect(errors).toEqual([]);
