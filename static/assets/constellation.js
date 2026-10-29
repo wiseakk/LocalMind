@@ -26,17 +26,31 @@
     for(const file of observation.files)items.push({id:'file:'+file.id,kind:'file',label:file.label,detail:'Выбранный локальный файл. Содержимое не передано модели. Индексация — только демонстрация интерфейса.'});
     for(const source of observation.sources)items.push({id:'source:'+source.id,kind:'source',label:'Разрешённый справочник',detail:'Настроенный TXT/MD источник. Разрешено чтение; используется только при включённой локальной справке.'});
     for(const tool of observation.tools)items.push(tool);
+    const next=items.slice(0,MAX_NODES);
+    const topology=next.length!==nodes.length||next.some((n,i)=>n.id!==nodes[i]?.id);
+    const labels=topology||next.some((n,i)=>n.label!==nodes[i].label);
+    // Polls and every completed turn repeat observations. Keep live objects,
+    // dragged targets, cached labels and the settled solver when nothing changed.
+    if(!topology&&next.every((n,i)=>n.kind===nodes[i].kind&&n.label===nodes[i].label&&n.detail===nodes[i].detail))return;
     const old=new Map(nodes.map(n=>[n.id,n]));
-    nodes=items.slice(0,MAX_NODES).map((n,i)=>{
+    nodes=next.map((n,i)=>{
       const prior=old.get(n.id),angle=i*2.39996;
       const ring=i===0?0:(.55+((i*7)%5)*.11);
-      return {...n,x:prior?.x??(reduced||low?Math.cos(angle)*ring:0),y:prior?.y??(reduced||low?Math.sin(angle)*ring:0),vx:prior?.vx??0,vy:prior?.vy??0,tx:Math.cos(angle)*ring,ty:Math.sin(angle)*ring,active:prior?.active??0,sx:0,sy:0,index:i,labelCache:null};
+      if(prior){
+        if(prior.label!==n.label||prior.kind!==n.kind)prior.labelCache=null;
+        if(prior.index!==i){prior.tx=Math.cos(angle)*ring;prior.ty=Math.sin(angle)*ring;}
+        Object.assign(prior,n,{index:i});return prior;
+      }
+      return {...n,x:reduced||low?Math.cos(angle)*ring:0,y:reduced||low?Math.sin(angle)*ring:0,vx:0,vy:0,tx:Math.cos(angle)*ring,ty:Math.sin(angle)*ring,active:0,sx:0,sy:0,index:i,labelCache:null};
     });
+    if(drag&&!nodes.includes(drag))drag=null;
     if(!nodes.some(n=>n.id===selected))selected='assistant';
-    const options=nodes.map(n=>{const option=document.createElement('option');option.value=n.id;option.textContent=n.label;return option;});
-    get('nodeSelect').replaceChildren(...options);get('nodeSelect').value=selected;
-    get('graphCount').textContent=nodes.length+' узл. · '+Math.max(0,nodes.length-1)+' связ.';
-    wakePhysics();inspect();redraw();
+    if(labels){
+      const options=nodes.map(n=>{const option=document.createElement('option');option.value=n.id;option.textContent=n.label;return option;});
+      get('nodeSelect').replaceChildren(...options);get('nodeSelect').value=selected;
+    }
+    if(topology){get('graphCount').textContent=nodes.length+' узл. · '+Math.max(0,nodes.length-1)+' связ.';wakePhysics();}
+    inspect();redraw();
   }
   function inspect(){
     const n=nodes.find(n=>n.id===selected)||nodes[0];
@@ -194,10 +208,20 @@
   get('moveNode').addEventListener('click',()=>move(.12,0));
   get('centerGraph').addEventListener('click',()=>{nodes=[];parallaxX=parallaxY=0;rebuild();});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)stopFrames();else redraw();});
-  if(window.ResizeObserver)new ResizeObserver(resize).observe(canvas);else window.addEventListener('resize',resize);
+  if(window.ResizeObserver)new ResizeObserver(resize).observe(canvas);
+  window.addEventListener('resize',resize);
+  // ResizeObserver observes CSS geometry, not backing resolution. A monitor/DPR
+  // transition can leave the CSS size unchanged; re-arm after every transition.
+  let resolutionQuery=null;
+  function watchResolution(){
+    resolutionQuery?.removeEventListener('change',resolutionChanged);
+    resolutionQuery=window.matchMedia?.(`(resolution: ${window.devicePixelRatio||1}dppx)`);
+    resolutionQuery?.addEventListener('change',resolutionChanged);
+  }
+  function resolutionChanged(){watchResolution();resize();}
   if(window.IntersectionObserver)new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;if(!visible)stopFrames();else redraw();}).observe(canvas);
-  window.addEventListener('pagehide',()=>{closing=true;stopFrames();clearTimeout(toolTimer);amplitude.stop();amplitude.context?.close().catch(()=>{});amplitude.context=null;});
-  window.addEventListener('pageshow',()=>{closing=false;redraw();});
+  window.addEventListener('pagehide',()=>{closing=true;stopFrames();resolutionQuery?.removeEventListener('change',resolutionChanged);clearTimeout(toolTimer);amplitude.stop();amplitude.context?.close().catch(()=>{});amplitude.context=null;});
+  window.addEventListener('pageshow',()=>{closing=false;watchResolution();resize();});
   // Audio samples come exclusively from the active capture/playback source.
   const amplitude={context:null,current:null,buffer:new Uint8Array(256),
     unlock(){const Context=window.AudioContext||window.webkitAudioContext;if(!Context)return null;
@@ -230,7 +254,7 @@
   window.LocalMindAudio=amplitude;
   window.localmindScene={setActivity,redraw,
     setVisible(value){if(panelVisible===Boolean(value))return;panelVisible=Boolean(value);if(panelVisible)redraw();else stopFrames();},
-    configure(options){reduced=options.reduced;low=options.low;stopFrames();for(const n of nodes)n.vx=n.vy=0;wakePhysics();resize();},
+    configure(options){if(reduced===options.reduced&&low===options.low)return;reduced=options.reduced;low=options.low;stopFrames();for(const n of nodes)n.vx=n.vy=0;wakePhysics();resize();},
     setDiagnostics(enabled){
       if(enabled&&!diagnostics){diagnostics=document.createElement('output');diagnostics.className='canvas-diagnostics';diagnostics.setAttribute('aria-hidden','true');canvas.parentElement.append(diagnostics);}
       else if(!enabled&&diagnostics){diagnostics.remove();diagnostics=null;}overlayLast=0;redraw();
@@ -250,11 +274,11 @@
       if(n?.kind==='tool'){const detail='Сервер вернул результат. '+(result.success?'Проверка завершена.':'Действие не выполнено.');n.detail=detail;const stored=observation.tools.find(t=>t.id===n.id);if(stored)stored.detail=detail;if(selected===n.id)inspect();}
       if(n)n.active=performance.now()+2000;
     }if(results?.length){toolUntil=performance.now()+2000;clearTimeout(toolTimer);toolTimer=setTimeout(()=>{toolUntil=0;redraw();},2000);redraw();}},
-    reset(){observation.conversation=false;observation.files=[];observation.tools=[];toolUntil=0;clearTimeout(toolTimer);mode='idle';selected='assistant';rebuild();},
+    reset(){observation.conversation=false;observation.files=[];observation.tools=[];toolUntil=0;clearTimeout(toolTimer);mode='idle';selected='assistant';rebuild();inspect();announce();redraw();},
     // Small diagnostic snapshot, without filenames, paths or document content.
-    stats(){return {nodes:nodes.length,edges:Math.max(0,nodes.length-1),frames:frameCount,scheduled:timer!==null,reduced,low,visible:isVisible(),mode:effective(),amplitude:amplitude.sample(),dpr:factor,pixels:canvas.width*canvas.height,settling,...timing()};}
+    stats({timings=true}={}){return {nodes:nodes.length,edges:Math.max(0,nodes.length-1),frames:frameCount,scheduled:timer!==null,reduced,low,visible:isVisible(),mode:effective(),amplitude:amplitude.sample(),dpr:factor,pixels:canvas.width*canvas.height,settling,...(timings?timing():{})};}
   };
   document.fonts?.addEventListener('loadingdone',()=>{for(const n of nodes)n.labelCache=null;redraw();});
   document.fonts?.ready.then(()=>{for(const n of nodes)n.labelCache=null;redraw();});
-  rebuild();resize();
+  watchResolution();rebuild();resize();
 })();

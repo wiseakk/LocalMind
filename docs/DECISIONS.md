@@ -1,5 +1,34 @@
 # Архитектурные решения DevCrew
 
+## 2026-10-29 — scoped Canvas reconciliation and evidence repair
+
+Builder follows the existing architecture on `e4a71c8`: no visual redesign,
+renderer rewrite or speculative GPU scheduling changes without live profiling.
+Controlled fourteen-node submission probes demonstrate repeated observations
+discarding 28 label surfaces and restarting settled physics. Reconcile bounded
+observations by visible identity/content, preserve live nodes and dragged targets,
+invalidate only changed labels and wake physics on topology changes. Explicit
+reset still refreshes selection/activity even when observations are unchanged.
+
+ResizeObserver alone does not observe DPR-only changes. Re-arm a resolution
+media query, retain window resize handling and refresh on page restore. Keep
+the existing quality/pixel caps, cached glows/layers and motion/audio behavior.
+Source: https://developer.mozilla.org/en-US/docs/Web/API/Window/devicePixelRatio .
+
+Keep default diagnostic snapshots compatible; allow polling without sample
+sorting. Benchmark the first-delta-to-final streamed-output window separately
+from startup/idle tails, retain actual duration, distinguish Canvas submissions
+from rAF/presentation and retain timestamped whole-device NVIDIA utilization.
+Trace summaries are clipped to explicit sample markers; raw dropped/presented
+event counts require DevTools Frames inspection rather than an FPS assumption.
+
+Verification and remaining gaps are recorded in
+docs/CONSTELLATION_PERFORMANCE_REVALIDATION.md. Python/DOM/static checks pass,
+including the deterministic expiry-test correction; Chromium/Playwright launch
+is blocked by EPERM in this session. Do not reuse historical FPS as current
+evidence, commit before browser verification or weaken system permissions.
+Changes remain in this isolated checkout, with no backend/API or model changes.
+
 ## 2026-10-28 — M0 запуск и установка
 
 Обычный запуск не должен обращаться к сети для pip. `setup_windows.ps1` создаёт окружение и устанавливает зависимости явно; `start_windows.ps1` использует готовое окружение. `start.py` задаёт UTF-8 для redirected Windows stdout и отключает доверие proxy headers. Базовый тест-набор: 18 passed, 35 subtests; сервер реально стартовал на loopback.

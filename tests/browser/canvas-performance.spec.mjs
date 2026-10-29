@@ -1,5 +1,45 @@
 import {test,expect} from '@playwright/test';
 
+test('observation refresh reuses labels and selection without restarting settled physics',async({page})=>{
+  await page.goto('/');await page.evaluate(()=>document.fonts.ready);
+  await page.evaluate(()=>{
+    window.fixtureApps=Array.from({length:10},(_,i)=>({id:String(i),name:'Узел '+i,allowed:false}));
+    localmindScene.observeApps(fixtureApps);localmindScene.observeConversation();
+  });
+  await expect.poll(()=>page.evaluate(()=>localmindScene.stats().settling),{timeout:10000}).toBe(false);
+  await page.locator('#nodeSelect').selectOption('app:0');
+  const probe=await page.evaluate(()=>{
+    const proto=CanvasRenderingContext2D.prototype,fill=proto.fillText,measure=proto.measureText;
+    let texts=0,measures=0;proto.fillText=function(...args){texts++;return fill.apply(this,args)};
+    proto.measureText=function(...args){measures++;return measure.apply(this,args)};
+    const option=document.querySelector('#nodeSelect option[value="app:0"]');
+    for(let i=0;i<20;i++){localmindScene.observeApps(fixtureApps.map(a=>({...a})));localmindScene.observeConversation();}
+    localmindScene.observeApps(fixtureApps.map(a=>({...a,allowed:a.id==='0'})));
+    window.observationProbe=()=>({texts,measures,sameOption:option===document.querySelector('#nodeSelect option[value="app:0"]'),settling:localmindScene.stats().settling});
+    return observationProbe();
+  });
+  expect(probe).toEqual({texts:0,measures:0,sameOption:true,settling:false});
+  await page.waitForTimeout(150);expect(await page.evaluate(()=>observationProbe())).toEqual(probe);
+  await expect(page.locator('#nodeDetail')).toContainText('выдано пользователем');
+  await page.evaluate(()=>localmindScene.observeApps(fixtureApps.map(a=>({...a,name:a.id==='0'?'Новое имя':a.name}))));
+  await expect(page.locator('#nodeTitle')).toHaveText('Новое имя');
+  await expect.poll(()=>page.evaluate(()=>observationProbe().texts)).toBe(2);
+});
+
+test('Canvas updates backing DPR when CSS dimensions remain fixed',async({page,context})=>{
+  await page.goto('/');await page.evaluate(()=>document.fonts.ready);
+  const cdp=await context.newCDPSession(page);
+  const logical=await page.locator('#constellation').evaluate(c=>({width:c.clientWidth,height:c.clientHeight}));
+  for(const dpr of [1.4,2,1.25,1]){
+    // This isolates resolution changes; it is not a native browser zoom benchmark.
+    await cdp.send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:dpr,mobile:false});
+    await expect.poll(()=>page.evaluate(()=>localmindScene.stats().dpr)).toBeCloseTo(Math.min(1.5,dpr),2);
+    expect(await page.locator('#constellation').evaluate(c=>({width:c.clientWidth,height:c.clientHeight}))).toEqual(logical);
+    expect(await page.evaluate(()=>localmindScene.stats().pixels)).toBeLessThanOrEqual(1600000);
+  }
+  await cdp.send('Emulation.clearDeviceMetricsOverride');
+});
+
 test('Canvas caches text and glows, exposes opt-in timing and suspends the closed drawer',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('/');
   await page.evaluate(()=>document.fonts.ready);

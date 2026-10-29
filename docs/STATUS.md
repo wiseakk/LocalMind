@@ -1,5 +1,36 @@
 ﻿# DevCrew — проверяемый статус LocalMind 1.0
 
+## 2026-10-29 — current Canvas builder revalidation (browser gate blocked)
+
+Base `e4a71c8`. Scoped reconciliation/cache/DPR fixes preserve Canvas design,
+existing animation/voice interfaces and backend. Fourteen-node controlled
+submission tests reproduce the old observation-refresh cache churn and verify
+zero added label rasterization/measurement/contexts after the fix. Unchanged
+observations keep physics settled and preserve drag targets. Resolution-only
+transitions and hide/restore retain capped backing resolution and one rAF chain.
+Benchmark polling now avoids timing sorts and separates active streamed output,
+Canvas submissions, rAF callbacks and trace frame events.
+
+Current checks: **391 Python tests + 35 subtests**, **31 DOM checks**, synthetic
+benchmark reducers/sampler, JS syntax, 76 local assets and diff whitespace pass.
+The baseline request-expiry test race was made deterministic without backend
+changes. The documented entry command starts the loopback app; actual installed
+qwen3:4b produced a streamed answer with final engine ollama and no actions.
+
+Required Playwright rerun discovers 23 scenarios but cannot start its worker
+(`spawn EPERM`). The 30000 ms native-zoom benchmark cannot launch Chromium
+(`spawn EPERM`), with zero completed cases. No current FPS, p95, browser CPU/GPU,
+native 100/125/140% zoom, visual comparison or displayed-frame evidence exists.
+Windows physical microphone, TTS audibility and GPU STT remain untested.
+**The 60 FPS hardware target and browser gate remain open; no commit was made.**
+Full evidence, environment, remaining checks and reproduction:
+[CONSTELLATION_PERFORMANCE_REVALIDATION.md](CONSTELLATION_PERFORMANCE_REVALIDATION.md).
+Earlier sections below retain their historical results and limitations.
+
+Start: `powershell -ExecutionPolicy Bypass -File .\start_windows.ps1`.
+Offline demo/troubleshooting remain in README.md; 40 explanatory defense answers
+remain in docs/DEFENSE_QA.md. No model downloads, push, merge or deployment.
+
 Дата: 28.10.2026. Исходный checkout `5a140c6`; первоначально чистый.
 Изменения реализованы в существующем worktree. **Полная аппаратная и визуальная
 приёмка не завершена.** Новых Git-коммитов нет: `git add`/`git commit` получили

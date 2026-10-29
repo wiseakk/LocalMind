@@ -18,7 +18,106 @@ function makeDom(fetcher,setup) {
   return dom;
 }
 async function run(name,fn){await fn();passed++;console.log('PASS '+name)}
+// Controlled rAF and Canvas submission spy: lifecycle/cache tests, not GPU/FPS evidence.
+function makeCanvasDom(){
+  return makeDom(null,w=>{
+    const frames=new Map(),contexts=new WeakMap();let id=0;
+    const probe=w.canvasProbe={text:0,measure:0,blur:0,layers:0,queries:[],arcs:[]};
+    Object.defineProperty(w.document.querySelector('.stage'),'clientWidth',{value:1200});
+    w.requestAnimationFrame=callback=>{frames.set(++id,callback);return id};
+    w.cancelAnimationFrame=id=>frames.delete(id);
+    probe.step=now=>{probe.arcs=[];const callbacks=[...frames.values()];frames.clear();callbacks.forEach(fn=>fn(now));assert.ok(frames.size<=1,'one animation chain')};
+    probe.pending=()=>frames.size;
+    w.CanvasRenderingContext2D=function(){};
+    w.HTMLCanvasElement.prototype.getBoundingClientRect=()=>({left:0,top:0,width:500,height:400});
+    w.HTMLCanvasElement.prototype.getContext=function(){
+      if(!contexts.has(this)){
+        probe.layers++;const main=this.id==='constellation';
+        contexts.set(this,new Proxy({
+          measureText:text=>{probe.measure++;return {width:text.length*6}},
+          fillText:()=>probe.text++,arc:(x,y,r)=>{if(main)probe.arcs.push({x,y,r})}
+        },{get:(target,key)=>key in target?target[key]:()=>{},set:(target,key,value)=>{if(key==='shadowBlur'&&value)probe.blur++;target[key]=value;return true}}));
+      }return contexts.get(this);
+    };
+    w.matchMedia=media=>{const query=new w.EventTarget();query.media=media;query.matches=false;probe.queries.push(query);return query};
+    w.document.fonts=new w.EventTarget();w.document.fonts.ready=Promise.resolve();
+  });
+}
 (async()=>{
+  await run('repeated graph observations preserve options, cached text, drag targets and settled physics',async()=>{
+    const dom=makeCanvasDom(),w=dom.window,d=w.document,probe=w.canvasProbe,scene=w.localmindScene;
+    try{
+      await pause(10);
+      const apps=Array.from({length:10},(_,i)=>({id:String(i),name:'Узел '+i,allowed:false}));
+      scene.observeApps(apps);scene.observeConversation();
+      scene.observeInfo({demo:true,devices:[{id:'lamp',name:'Лампа'}]});scene.setFiles([{id:'fixture',label:'Вложение 1'}]);
+      assert.equal(scene.stats().nodes,14);
+      for(let now=1;now<6000;now+=1000/60)probe.step(now);
+      assert.equal(scene.stats().settling,false);
+      const option=d.querySelector('#nodeSelect option[value="app:0"]');
+      const before={text:probe.text,measure:probe.measure,blur:probe.blur,layers:probe.layers};
+      for(let i=0;i<30;i++){scene.observeApps(apps.map(app=>({...app})));scene.observeConversation();}
+      probe.step(6010);
+      assert.equal(scene.stats().settling,false);assert.equal(d.querySelector('#nodeSelect option[value="app:0"]'),option);
+      assert.deepEqual({text:probe.text,measure:probe.measure,blur:probe.blur,layers:probe.layers},before);
+      const select=d.querySelector('#nodeSelect');select.value='app:0';select.dispatchEvent(new w.Event('change'));
+      scene.observeApps(apps.map((app,i)=>({...app,allowed:i===0})));
+      probe.step(6020);assert.ok(d.querySelector('#nodeDetail').textContent.includes('выдано пользователем'));
+      assert.equal(probe.text,before.text);assert.equal(scene.stats().settling,false);
+      scene.observeApps(apps.map((app,i)=>({...app,name:i===0?'Новое имя':app.name})));
+      probe.step(6030);assert.equal(probe.text,before.text+2);assert.equal(probe.measure,before.measure+1);
+      assert.equal(d.querySelector('#nodeTitle').textContent,'Новое имя');
+      scene.configure({reduced:true,low:false});probe.step(6040);
+      const canvas=d.querySelector('#constellation');
+      canvas.dispatchEvent(new w.MouseEvent('pointerdown',{clientX:250,clientY:188}));
+      scene.observeConversation();
+      canvas.dispatchEvent(new w.MouseEvent('pointermove',{clientX:300,clientY:220}));probe.step(6050);
+      assert.deepEqual({...probe.arcs.find(p=>p.r===7)},{x:300,y:220,r:7});
+      canvas.dispatchEvent(new w.Event('lostpointercapture'));
+      canvas.dispatchEvent(new w.MouseEvent('pointermove',{clientX:330,clientY:240}));probe.step(6060);
+      assert.deepEqual({...probe.arcs.find(p=>p.r===7)},{x:300,y:220,r:7});
+      d.querySelector('#centerGraph').click();probe.step(6070);
+      assert.deepEqual({...probe.arcs.find(p=>p.r===7)},{x:250,y:188,r:7});
+      let sorts=0;const sort=w.Array.prototype.sort;w.Array.prototype.sort=function(...args){sorts++;return sort.apply(this,args)};
+      assert.equal(scene.stats({timings:false}).fps,undefined);assert.equal(sorts,0);
+      scene.stats();assert.equal(sorts,1);
+      scene.reset();probe.step(6080);
+      select.value='app:0';select.dispatchEvent(new w.Event('change'));scene.setActivity('generating');
+      scene.reset();probe.step(6090);
+      assert.equal(d.querySelector('#nodeTitle').textContent,'LocalMind');assert.equal(select.value,'assistant');
+      assert.equal(d.querySelector('#skyPanel').dataset.activity,'idle');assert.equal(probe.pending(),0);
+    }finally{dom.window.close()}
+  });
+  await run('DPR-only transitions re-arm resolution detection and rebuild once within pixel limits',async()=>{
+    const dom=makeCanvasDom(),w=dom.window,d=w.document,probe=w.canvasProbe,scene=w.localmindScene;
+    try{
+      await pause(10);probe.step(10);
+      const canvas=d.querySelector('#constellation'),query=()=>probe.queries.filter(q=>q.media.startsWith('(resolution:')).at(-1);
+      const original=query();Object.defineProperty(w,'devicePixelRatio',{configurable:true,value:1.4});original.dispatchEvent(new w.Event('change'));probe.step(20);
+      assert.equal(canvas.width,700);assert.equal(scene.stats().dpr,1.4);assert.notEqual(query(),original);
+      const layers=probe.layers;original.dispatchEvent(new w.Event('change'));probe.step(30);assert.equal(probe.layers,layers);
+      const previous=query();Object.defineProperty(w,'devicePixelRatio',{configurable:true,value:2});previous.dispatchEvent(new w.Event('change'));probe.step(40);
+      assert.equal(scene.stats().dpr,1.5);assert.ok(scene.stats().pixels<=1600000);
+      scene.configure({reduced:false,low:true});probe.step(50);assert.equal(scene.stats().dpr,1);
+      const economical=probe.layers;w.dispatchEvent(new w.Event('resize'));probe.step(60);assert.equal(probe.layers,economical);
+      scene.configure({reduced:false,low:true});assert.equal(probe.pending(),0);
+      d.fonts.dispatchEvent(new w.Event('loadingdone'));probe.step(70);assert.ok(probe.layers>economical);
+    }finally{dom.window.close()}
+  });
+  await run('Canvas hide/resume resets time, keeps one rAF chain and refreshes DPR on restore',async()=>{
+    const dom=makeCanvasDom(),w=dom.window,d=w.document,probe=w.canvasProbe,scene=w.localmindScene;
+    try{
+      await pause(10);probe.step(10);
+      Object.defineProperty(d,'hidden',{configurable:true,value:true});d.dispatchEvent(new w.Event('visibilitychange'));
+      const frames=scene.stats().frames;assert.equal(probe.pending(),0);probe.step(100000);assert.equal(scene.stats().frames,frames);
+      Object.defineProperty(d,'hidden',{configurable:true,value:false});d.dispatchEvent(new w.Event('visibilitychange'));scene.redraw();scene.redraw();
+      assert.equal(probe.pending(),1);probe.step(100010);assert.equal(scene.stats().frames,frames+1);
+      scene.setVisible(false);assert.equal(probe.pending(),0);scene.setVisible(true);probe.step(100020);
+      w.dispatchEvent(new w.Event('pagehide'));assert.equal(probe.pending(),0);
+      Object.defineProperty(w,'devicePixelRatio',{configurable:true,value:1.25});w.dispatchEvent(new w.Event('pageshow'));probe.step(200000);
+      assert.equal(scene.stats().dpr,1.25);assert.equal(probe.pending(),1);
+    }finally{dom.window.close()}
+  });
   await run('offline Markdown, code, tables, math, currency and XSS',async()=>{
     const dom=makeDom();const w=dom.window;
     try{

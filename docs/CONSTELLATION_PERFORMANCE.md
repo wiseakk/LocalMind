@@ -1,5 +1,9 @@
 # Constellation Canvas performance — 28 October 2026
 
+Historical measurements below describe the earlier checkout. Current builder
+revalidation on 29 October is **blocked at browser launch**, with no new FPS or
+GPU claims: see [current evidence and reproduction](CONSTELLATION_PERFORMANCE_REVALIDATION.md).
+
 The measured bottleneck was the scheduler: normal idle animation used an 84 ms
 timeout (about 12 FPS), and active animation a 34 ms timeout (about 30 FPS).
 This prevented smooth animation even when the GPU had spare capacity. Each
