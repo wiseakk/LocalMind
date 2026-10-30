@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from threading import Lock, Condition, Event
 import time
 import uuid
-from .generation import cancellation
+from .generation import cancellation, turn_deadline
 
 
 class RequestConflict(Exception):
@@ -96,6 +96,7 @@ class RequestStore:
     def _run(self, entry, prepare, complete):
         prepared, final = None, None
         token = cancellation.set(entry.cancelled)
+        deadline_token = turn_deadline.set(time.monotonic() + 90)
         try:
             prepared = prepare()
             prepared.on_delta = entry.publish
@@ -125,6 +126,7 @@ class RequestStore:
                     prepared.finish_turn(final)
             finally:
                 cancellation.reset(token)
+                turn_deadline.reset(deadline_token)
                 with entry.changed:
                     entry.changed.notify_all()
                 with self._lock:

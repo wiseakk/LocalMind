@@ -180,7 +180,7 @@ def test_context_is_bounded_with_explicit_truncation():
     conversation = memory.acquire(memory.create())
     try:
         for i in range(3):
-            add_document(conversation, Document(str(i), 'a.txt', 1, 'x' * MAX_TEXT, False))
+            add_document(conversation, Document(str(i), 'a.txt', 1, 'x' * 12000, False))
         context = document_context(conversation, ['0', '1', '2'])
         assert sum(len(doc['text']) for doc in context) == 32000
         assert context[-1]['truncated'] is True and context[-1]['characters'] == 8000

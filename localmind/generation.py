@@ -2,6 +2,7 @@
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 import re
+import time
 
 from .settings import settings
 
@@ -29,12 +30,16 @@ class GenerationSettings:
 effective_generation: ContextVar[GenerationSettings | None] = ContextVar('generation', default=None)
 text_delta = ContextVar('text_delta', default=None)
 cancellation = ContextVar('cancellation', default=None)
+turn_deadline = ContextVar('turn_deadline', default=None)
 
 
 def check_cancelled():
     event = cancellation.get()
     if event is not None and event.is_set():
         raise ValueError('Generation cancelled')
+    deadline = turn_deadline.get()
+    if deadline is not None and time.monotonic() >= deadline:
+        raise ValueError('Turn deadline exceeded')
 
 
 def defaults():

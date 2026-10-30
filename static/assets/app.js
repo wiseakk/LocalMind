@@ -76,7 +76,7 @@ function lock(value) {
 }
 async function sendText(value) {
   if (busy || voiceBusy || recording || resetting) return;
-  const text = value.trim(); if (!text) return;
+  const text = value.trim(); if (!text && !window.localmindAttachments?.contextIds().length) return;
   if (!serverInstance) { showError('Сначала восстановите подключение к серверу.'); return; }
   if(currentConversation.archived){state('Архив доступен для чтения. Начните новый разговор.');return;}
   if(window.localmindAttachments?.hasPending()){state('Дождитесь подготовки документов или удалите их.');return;}

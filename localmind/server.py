@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 import httpx
 
 from .settings import ROOT, settings
@@ -34,6 +34,7 @@ from .voice import VoiceError, voice_status, transcribe_audio, synthesize_speech
 async def lifespan(app):
     from .voice import warm_tts, shutdown_tts
     from .window_tools import window_tools
+    catalog.set_personal_mode(file_access.known_app_launch_allowed())
     warm_task = asyncio.create_task(asyncio.to_thread(warm_tts))
     try:
         yield
@@ -56,7 +57,7 @@ class HistoryMessage(BaseModel):
     content: str = Field(max_length=4000)
 
 class ChatRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=2000)
+    text: str = Field(default='', max_length=2000)
     history: list[HistoryMessage] = Field(default_factory=list, max_length=8)
     actions_authorized: bool = True
     request_id: str | None = Field(default=None, min_length=8, max_length=80, pattern=r'^[a-zA-Z0-9_-]+$')
@@ -72,6 +73,12 @@ class ChatRequest(BaseModel):
     local_retrieval: bool = False
     attachment_ids: list[Annotated[str, Field(min_length=32, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')]] = Field(default_factory=list, max_length=8)
 
+    @model_validator(mode='after')
+    def require_content(self):
+        if not self.text.strip() and not self.attachment_ids:
+            raise ValueError('Нужен текст или вложение.')
+        return self
+
 class ConversationRequest(BaseModel):
     conversation_id: str = Field(min_length=32, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
 
@@ -82,6 +89,27 @@ class AttachmentRemoveRequest(ConversationRequest):
 class FolderPermissionRequest(BaseModel):
     allowed: bool
     fingerprint: str = Field(min_length=64, max_length=64)
+
+class PersonalModeRequest(BaseModel):
+    enabled: bool
+    roots: list[Annotated[str, Field(min_length=1, max_length=1024)]] = Field(default_factory=list, max_length=16)
+    portable_roots: list[Annotated[str, Field(min_length=1, max_length=1024)]] = Field(default_factory=list, max_length=16)
+    server_instance: str = Field(min_length=32, max_length=32)
+
+class FileSearchRequest(ConversationRequest):
+    query: str = Field(default='', max_length=500)
+    extensions: list[str] | None = Field(default=None, max_length=8)
+    scope: str = Field(default='downloads', max_length=64)
+    sort_by: Literal['modified', 'created', 'size', 'name'] = 'modified'
+    order: Literal['asc', 'desc'] = 'desc'
+    recursive: bool = False
+    min_size: int | None = Field(default=None, ge=0, le=67108864)
+    max_size: int | None = Field(default=None, ge=0, le=67108864)
+
+class MutationConfirmation(ConversationRequest):
+    confirmation_id: str = Field(min_length=20, max_length=128)
+    approved: bool
+    server_instance: str = Field(min_length=32, max_length=32)
 
 class FilePermissionRequest(ConversationRequest):
     file_id: str = Field(min_length=20, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
@@ -211,7 +239,8 @@ def _entry(data: ChatRequest):
         # used to establish memory, permissions, targets or outcomes.
         conversation = conversations.acquire(data.conversation_id or conversations.create())
         try:
-            context = document_context(conversation, data.attachment_ids)
+            context = document_context(conversation, data.attachment_ids, query=data.text,
+                max_characters=max(256, (generation.context_tokens - generation.response_tokens - 1200) * 2))
             prepared = prepare_reply(data.text, [], data.actions_authorized, data.response_length,
                                      data.compose_actions, generation, conversation=conversation, local_retrieval=data.local_retrieval,
                                      document_facts=context)
@@ -363,7 +392,7 @@ def files(conversation_id: str | None = None, x_localmind_key: Annotated[str | N
                     selected = file_access.selected_info(conversation.id, ref.id)
             finally:
                 conversations.release(conversation)
-        return {'folder': folder, 'selected': selected}
+        return {'folder': folder, 'selected': selected, 'personal_mode': file_access.personal_info()}
     except (FileAccessError, ConversationError, OSError) as exc:
         raise HTTPException(409, str(exc) if isinstance(exc, ValueError) else 'Папка недоступна.') from exc
 
@@ -394,6 +423,65 @@ def folder_permission(data: FolderPermissionRequest, x_localmind_key: Annotated[
         return {'ok': True}
     except (FileAccessError, OSError) as exc:
         raise HTTPException(409, 'Папка недоступна или изменилась. Проверь разрешение повторно.') from exc
+
+
+@app.get('/api/permissions/personal')
+def personal_permissions(x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    return {**file_access.personal_info(), 'server_instance': SERVER_INSTANCE}
+
+
+@app.post('/api/permissions/personal')
+def set_personal_permissions(data: PersonalModeRequest, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    if data.server_instance != SERVER_INSTANCE:
+        raise HTTPException(409, 'Сервер перезапущен. Проверь разрешения повторно.')
+    try:
+        # Revoke broad launch permission first so failed validation never leaves
+        # a stale catalog permission in effect.
+        catalog.set_personal_mode(False)
+        file_access.set_personal_mode(data.enabled, data.roots)
+        catalog.configure_portable_roots(data.portable_roots if data.enabled else [])
+        catalog.set_personal_mode(data.enabled)
+        return file_access.personal_info()
+    except (FileAccessError, AppError, OSError) as exc:
+        raise HTTPException(409, str(exc) if isinstance(exc, ValueError) else 'Не удалось сохранить разрешения.') from exc
+
+
+@app.post('/api/files/search')
+def search_files(data: FileSearchRequest, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    conversation = None
+    try:
+        from .conversations import Reference
+        conversation = conversations.acquire(data.conversation_id)
+        result = file_access.search(conversation.id, **data.model_dump(exclude={'conversation_id'}))
+        if result.success and result.data and result.data.get('file_id'):
+            conversation.references['file'] = Reference('file', result.data['file_id'])
+            conversation.focus = 'file'
+        return result.to_dict()
+    except ConversationError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    finally:
+        if conversation:
+            conversations.release(conversation)
+
+
+@app.post('/api/files/confirm')
+def confirm_file_operation(data: MutationConfirmation, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    if data.server_instance != SERVER_INSTANCE:
+        raise HTTPException(409, 'Подтверждение истекло после перезапуска сервера.')
+    conversation = None
+    try:
+        from .file_mutations import file_mutations
+        conversation = conversations.acquire(data.conversation_id)
+        return file_mutations.confirm(conversation.id, data.confirmation_id, data.approved).to_dict()
+    except (ConversationError, FileAccessError) as exc:
+        raise HTTPException(409, str(exc)) from exc
+    finally:
+        if conversation:
+            conversations.release(conversation)
 
 
 @app.post('/api/files/open-permission')
@@ -492,12 +580,12 @@ def cancel_speech(data: SpeechCancelRequest, x_localmind_key: Annotated[str | No
 @app.get('/api/apps')
 def apps(x_localmind_key:Annotated[str | None,Header()]=None):
     authorize(x_localmind_key)
-    return {'apps':catalog.entries()}
+    return {'apps':catalog.entries(), 'statistics': catalog.statistics()}
 
 @app.post('/api/apps/refresh')
 def refresh_apps(x_localmind_key:Annotated[str | None,Header()]=None):
     authorize(x_localmind_key)
-    return {'apps':catalog.refresh()}
+    return {'apps':catalog.refresh(), 'statistics': catalog.statistics()}
 
 @app.post('/api/apps/permission')
 def permission(data:PermissionRequest,x_localmind_key:Annotated[str | None,Header()]=None):

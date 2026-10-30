@@ -1,0 +1,128 @@
+{
+  "generated_utc": "2026-10-29T12:34:37.559557+00:00",
+  "model": "qwen3.5:9b",
+  "kind": "real production API and real Ollama; fixture uploads; not browser visual or microphone evidence",
+  "model_downloaded": false,
+  "rows": [
+    {
+      "scenario": "image_object_and_text",
+      "intent": "attachment_question",
+      "tool": "local_upload_and_inference",
+      "resolved_target": [
+        "kHb4sCa1VjU66i90hSyiAeJPvsDaRCyG"
+      ],
+      "permission_decision": "explicit_attachment_in_owning_conversation",
+      "http_status": 200,
+      "observable_state": "included_in_inference",
+      "actual_request": [
+        {
+          "model": "qwen3.5:9b",
+          "path": "/api/chat",
+          "image_count": 1,
+          "image_sha256": [
+            "bbd5150ec1de52daaa9ca74230ca4620ef11d037e5b17bf6836acbc69eba683c"
+          ],
+          "document_marker_present": false,
+          "later_page_label_present": false,
+          "request_sha256": "46c4531b9eb172356e1716afdf597fe1e5ffe2a19688e12d62198bed35e05b9c"
+        }
+      ],
+      "final_response": "На изображении — красный треугольник с надписью LMV-8142 под ним.",
+      "latency_ms": 6188,
+      "model_answer_checks": {
+        "object": true,
+        "color": true,
+        "text": true
+      },
+      "failure_reason": null
+    },
+    {
+      "scenario": "image_only",
+      "intent": "attachment_question",
+      "tool": "local_upload_and_inference",
+      "resolved_target": [
+        "kHb4sCa1VjU66i90hSyiAeJPvsDaRCyG"
+      ],
+      "permission_decision": "explicit_attachment_in_owning_conversation",
+      "http_status": 200,
+      "observable_state": "included_in_inference",
+      "actual_request": [
+        {
+          "model": "qwen3.5:9b",
+          "path": "/api/chat",
+          "image_count": 1,
+          "image_sha256": [
+            "bbd5150ec1de52daaa9ca74230ca4620ef11d037e5b17bf6836acbc69eba683c"
+          ],
+          "document_marker_present": false,
+          "later_page_label_present": false,
+          "request_sha256": "09a829a9045ffe9823381f1055b41bcdfa671307962d5837eb0bc88f32100566"
+        }
+      ],
+      "final_response": "На изображении — красный равносторонний треугольник на белом фоне. Под ним чёрным шрифтом без засечек написана надпись: LMV-8142.",
+      "latency_ms": 1422,
+      "model_answer_checks": {
+        "text": true
+      },
+      "failure_reason": null
+    },
+    {
+      "scenario": "document_later_page_same_turn",
+      "intent": "attachment_question",
+      "tool": "local_upload_and_inference",
+      "resolved_target": [
+        "SO5nfwB6amxn6npUESF-ocghNCyodwQN"
+      ],
+      "permission_decision": "explicit_attachment_in_owning_conversation",
+      "http_status": 200,
+      "observable_state": "included_in_inference",
+      "actual_request": [
+        {
+          "model": "qwen3.5:9b",
+          "path": "/api/chat",
+          "image_count": 0,
+          "image_sha256": [],
+          "document_marker_present": true,
+          "later_page_label_present": true,
+          "request_sha256": "8e062b5271a6fd0a46bdadb648ccf828130892bcbc99843b63f8a3ee0953c547"
+        }
+      ],
+      "final_response": "На странице 22 документа later-page.pdf указан код проекта LM-DOC-9271 и утверждённый бюджет в размере 731 рубля.",
+      "latency_ms": 1375,
+      "model_answer_checks": {
+        "code": true,
+        "budget": true,
+        "page": true
+      },
+      "failure_reason": null
+    },
+    {
+      "scenario": "document_followup",
+      "intent": "attachment_question",
+      "tool": "local_upload_and_inference",
+      "resolved_target": [],
+      "permission_decision": "explicit_attachment_in_owning_conversation",
+      "http_status": 200,
+      "observable_state": null,
+      "actual_request": [
+        {
+          "model": "qwen3.5:9b",
+          "path": "/api/chat",
+          "image_count": 0,
+          "image_sha256": [],
+          "document_marker_present": true,
+          "later_page_label_present": false,
+          "request_sha256": "7b269b1b79ab0614e1eb5b13b859259dab0d1db2e6919ef8c02b337042272876"
+        }
+      ],
+      "final_response": "На странице 22 документа later-page.pdf код проекта — LM-DOC-9271, а бюджет составляет 731 рубль.",
+      "latency_ms": 860,
+      "model_answer_checks": {
+        "code": true,
+        "budget": true
+      },
+      "failure_reason": null
+    }
+  ],
+  "all_passed": true
+}

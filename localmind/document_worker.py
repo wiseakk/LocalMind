@@ -6,7 +6,7 @@ from .attachments import MAX_FILE_BYTES, _worker
 
 
 def main():
-    if len(sys.argv) != 2 or sys.argv[1] not in ('pdf', 'docx'):
+    if len(sys.argv) != 2 or sys.argv[1] not in ('pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp'):
         raise SystemExit(2)
     content = sys.stdin.buffer.read(MAX_FILE_BYTES + 1)
     if not content or len(content) > MAX_FILE_BYTES:

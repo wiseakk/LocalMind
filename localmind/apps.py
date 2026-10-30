@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import ctypes
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+import json
 import hashlib
 import os
 from pathlib import Path
@@ -20,6 +21,7 @@ import time
 import unicodedata
 from typing import Callable, Iterable
 import uuid
+import xml.etree.ElementTree as ET
 
 from .windows_state import launch_coordinator
 
@@ -44,8 +46,8 @@ KNOWN_ALIASES = {
     'msedge': ('Microsoft Edge', 'Edge', 'эдж'),
     'steam': ('Steam', 'стим'),
 }
-# Conservative supported GUI set. A new executable needs an explicit code review,
-# rather than letting an arbitrary discovered utility become a launch capability.
+# Compatibility aliases for older callers. Admission is based on discovery
+# evidence and the PE GUI subsystem, never membership in this set.
 SUPPORTED_GUI_EXECUTABLES = {
     'code', 'obsidian', 'discord', 'codex', 'chrome', 'firefox', 'msedge',
     '7zfm', 'winword', 'excel', 'powerpnt', 'mspub', 'msaccess', 'onenote',
@@ -61,6 +63,10 @@ DENIED_EXECUTABLES = {
     'ruby', 'php', 'explorer', 'control', 'mmc', 'msiexec', 'winget', 'curl',
     'wget', 'certutil', 'bitsadmin', 'installutil', 'dotnet', 'conhost',
     'terminal', 'wt', 'update', 'updater', 'setup', 'install', 'uninstall',
+    'regedit', 'bcdedit', 'diskpart', 'dism', 'sfc', 'net', 'netsh', 'sc',
+    'shutdown', 'format', 'systemsettingsadminflows', 'consent', 'runas',
+    'taskmgr', 'cmstp', 'fodhelper', 'computerdefaults', 'eventvwr',
+    'gcc', 'g++', 'gdb', 'git-bash', 'git-cmd', 'mintty', 'ssh', 'sshd',
 }
 
 
@@ -111,6 +117,9 @@ def validate_executable(raw: str | Path, arguments: str = '') -> Path:
         raise AppError('Скрипты, оболочки и системные запускатели не разрешены.')
     if re.search(r'(?:unins|uninst|uninstall|installer|setup)', stem):
         raise AppError('Установщики и удаление программ не разрешены.')
+    if (re.search(r'(?:^|[-_ ])(?:service|helper|crashpad|crashreporter|reset-settings)(?:$|[-_ ])', stem)
+            or stem.endswith(('helper', 'server', 'service'))):
+        raise AppError('Фоновый компонент не является запускаемым приложением.')
     # Never treat Codex CLI as the desktop application.
     if stem == 'codex' and any(p.casefold() in ('bin', 'npm', 'node_modules') for p in path.parts):
         raise AppError('Codex CLI не является настольным приложением.')
@@ -218,6 +227,10 @@ class AppSource:
     key: str
     name: str
     read: Callable[[], tuple[str, str, str]]  # target, arguments, source digest
+    origin: str = 'other'
+    launch_type: str = 'win32'
+    launch_id: str = ''
+    icon: str = ''
 
 
 def _shortcut_source(path: Path) -> AppSource:
@@ -230,25 +243,44 @@ def _shortcut_source(path: Path) -> AppSource:
         if before != _digest(source, 1024 * 1024):
             raise AppError('Ярлык изменился во время проверки.')
         return target, arguments, before
-    return AppSource('shortcut:' + str(path).casefold(), path.stem, read)
+    return AppSource('shortcut:' + str(path).casefold(), path.stem, read, 'shortcuts')
 
 
-def discover_sources() -> Iterable[AppSource]:
+def discover_sources(report=None, portable_roots=()) -> Iterable[AppSource]:
     """Bounded read-only scan; never follows directory reparse points."""
     if os.name != 'nt':
+        if report is not None:
+            report['unavailable_providers'].append('Windows')
         return
     seen = 0
+    shortcut_started = time.monotonic()
     for root in _known_roots():
         for directory, dirs, files in os.walk(root, followlinks=False):
+            if seen > 10000 or time.monotonic() - shortcut_started > 8:
+                if report is not None:
+                    report['truncated'] = True
+                break
             depth = len(Path(directory).relative_to(root).parts)
             dirs[:] = [d for d in dirs if depth < 6 and not _is_reparse(Path(directory) / d)]
             for filename in sorted(files):
                 seen += 1
-                if seen > 5000:
-                    return
+                if seen > 10000:
+                    if report is not None:
+                        report['truncated'] = True
+                    break
                 if filename.casefold().endswith('.lnk'):
                     yield _shortcut_source(Path(directory) / filename)
-    yield from _registry_sources()
+    for name, provider in (
+        ('app_paths', _registry_sources), ('uninstall', lambda: _uninstall_sources(report)),
+        ('start_apps', _packaged_sources), ('steam', _steam_sources),
+        ('running', _running_sources),
+        ('portable', lambda: _portable_sources(portable_roots, report)),
+    ):
+        try:
+            yield from provider()
+        except (AppError, OSError, ValueError, ImportError, subprocess.SubprocessError):
+            if report is not None:
+                report['unavailable_providers'].append(name)
 
 
 def _is_reparse(path: Path) -> bool:
@@ -265,7 +297,7 @@ def _registry_sources() -> Iterable[AppSource]:
         for view in (winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY):
             try:
                 with winreg.OpenKey(hive, base, 0, winreg.KEY_READ | view) as key:
-                    names = [winreg.EnumKey(key, i) for i in range(min(winreg.QueryInfoKey(key)[0], 512))]
+                    names = [winreg.EnumKey(key, i) for i in range(min(winreg.QueryInfoKey(key)[0], 4096))]
             except OSError:
                 continue
             for name in names:
@@ -281,7 +313,245 @@ def _registry_sources() -> Iterable[AppSource]:
                         return raw, '', hashlib.sha256(raw.encode('utf-8')).hexdigest()
                     except OSError as exc:
                         raise AppError('Регистрация приложения изменилась.') from exc
-                yield AppSource(f'registry:{hive_name}:{view}:{name.casefold()}', Path(name).stem, read)
+                yield AppSource(f'registry:{hive_name}:{view}:{name.casefold()}', Path(name).stem, read, 'app_paths')
+
+
+def _file_source(path: Path, name: str, origin: str, *, evidence=None) -> AppSource:
+    """A discovered file is still revalidated; a display icon is not evidence."""
+    def read():
+        actual = _safe_local_path(path)
+        if evidence is not None:
+            evidence()
+        return str(actual), '', hashlib.sha256(str(actual).casefold().encode()).hexdigest()
+    return AppSource(origin + ':' + str(path).casefold(), name[:120], read, origin)
+
+
+def _walk_executables(root: Path, *, depth=2, limit=2000, report=None):
+    if not root.is_absolute() or _is_reparse(root) or not root.is_dir():
+        return
+    scanned = 0
+    started = time.monotonic()
+    for directory, dirs, files in os.walk(root, followlinks=False):
+        if time.monotonic() - started > 5:
+            if report is not None:
+                report['truncated'] = True
+            return
+        level = len(Path(directory).relative_to(root).parts)
+        dirs[:] = sorted(d for d in dirs if level < depth and not _is_reparse(Path(directory) / d))
+        for filename in sorted(files):
+            scanned += 1
+            if scanned > limit:
+                if report is not None:
+                    report['truncated'] = True
+                return
+            if filename.casefold().endswith('.exe'):
+                yield Path(directory) / filename
+
+
+def _portable_sources(roots, report=None):
+    for root in roots:
+        for path in _walk_executables(Path(root), depth=4, limit=10000, report=report):
+            yield _file_source(path, path.stem, 'portable')
+
+
+def _uninstall_sources(report=None):
+    """Use installation directories, never UninstallString/DisplayIcon commands.
+
+    A matching GUI image in the installation root is required. Redistributables,
+    services and incidental helper binaries cannot become apps by their label.
+    """
+    import winreg
+    base = r'Software\Microsoft\Windows\CurrentVersion\Uninstall'
+    started = time.monotonic()
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        for view in (winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY):
+            try:
+                with winreg.OpenKey(hive, base, 0, winreg.KEY_READ | view) as key:
+                    names = [winreg.EnumKey(key, i) for i in range(min(winreg.QueryInfoKey(key)[0], 4096))]
+            except OSError:
+                continue
+            for name in names:
+                if time.monotonic() - started > 12:
+                    if report is not None:
+                        report['truncated'] = True
+                    return
+                try:
+                    with winreg.OpenKey(hive, base + '\\' + name, 0, winreg.KEY_READ | view) as key:
+                        display, kind = winreg.QueryValueEx(key, 'DisplayName')
+                        location, location_kind = winreg.QueryValueEx(key, 'InstallLocation')
+                        try:
+                            system_component = winreg.QueryValueEx(key, 'SystemComponent')[0]
+                        except OSError:
+                            system_component = 0
+                    if (system_component or kind != winreg.REG_SZ or location_kind != winreg.REG_SZ
+                            or not isinstance(display, str) or not isinstance(location, str)):
+                        continue
+                    root = Path(location.strip().strip('"'))
+                    label = normalize_name(display).replace(' ', '')
+                    for path in _walk_executables(root, depth=1, limit=512, report=report):
+                        stem = normalize_name(path.stem).replace(' ', '')
+                        folder = normalize_name(root.name).replace(' ', '')
+                        if len(stem) >= 3 and (stem in label or label in stem or stem == folder):
+                            yield _file_source(path, display, 'uninstall')
+                except (OSError, ValueError):
+                    continue
+
+
+# Fixed, read-only discovery adapters. No registry/LLM/user text is interpolated
+# into PowerShell, no profiles or policy changes, and no application is launched.
+_PACKAGE_DISCOVERY = r"""
+$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+$start=@{}; Get-StartApps | Select-Object -First 4096 | ForEach-Object { $start[$_.AppID]=$_.Name }
+$rows=@(Get-AppxPackage | Select-Object -First 1024 | ForEach-Object {
+  $p=$_; try { $m=Get-AppxPackageManifest -Package $p.PackageFullName -ErrorAction Stop
+    foreach($a in $m.Package.Applications.Application) {
+      $id=$p.PackageFamilyName+'!'+$a.Id
+      if($start.ContainsKey($id) -and $a.Executable) {
+        [PSCustomObject]@{name=$start[$id]; id=$id; root=$p.InstallLocation; executable=[string]$a.Executable}
+      }
+    }
+  } catch { }
+}); ConvertTo-Json -InputObject $rows -Compress -Depth 3
+"""
+_RUNNING_DISCOVERY = r"""
+$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
+$session=(Get-Process -Id $PID).SessionId
+$rows=@(Get-Process | Where-Object { $_.SessionId -eq $session -and $_.MainWindowHandle -ne 0 } |
+ Select-Object -First 512 | ForEach-Object { try { if($_.Path) {
+ [PSCustomObject]@{name=$_.ProcessName; path=$_.Path} } } catch { } })
+ConvertTo-Json -InputObject $rows -Compress -Depth 3
+"""
+
+
+def _powershell_rows(script):
+    if os.name != 'nt':
+        raise AppError('Требуется Windows.')
+    system = Path(os.environ.get('SystemRoot', r'C:\Windows'))
+    executable = system / 'System32' / 'WindowsPowerShell' / 'v1.0' / 'powershell.exe'
+    # This adapter accepts only constants in this module, never caller code.
+    if script not in (_PACKAGE_DISCOVERY, _RUNNING_DISCOVERY):
+        raise AppError('Неизвестный адаптер обнаружения.')
+    result = subprocess.run([str(executable), '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
+                            shell=False, capture_output=True, timeout=12,
+                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    if result.returncode or len(result.stdout) > 8 * 1024 * 1024:
+        raise AppError('Провайдер обнаружения Windows недоступен.')
+    try:
+        rows = json.loads(result.stdout.decode('utf-8-sig'))
+        if not isinstance(rows, list) or len(rows) > 4096:
+            raise ValueError('invalid rows')
+        return rows
+    except (UnicodeError, ValueError) as exc:
+        raise AppError('Провайдер вернул неверные метаданные.') from exc
+
+
+def _packaged_source(row):
+    if not isinstance(row, dict):
+        raise AppError('Неверная запись приложения Store.')
+    name, app_id = row.get('name'), row.get('id')
+    if (not isinstance(name, str) or not isinstance(app_id, str)
+            or not re.fullmatch(r'[A-Za-z0-9_.-]{1,200}![A-Za-z0-9_.-]{1,100}', app_id)):
+        raise AppError('Недопустимый идентификатор приложения Store.')
+    root, relative = Path(row.get('root', '')), Path(row.get('executable', ''))
+    if (not root.is_absolute() or relative.is_absolute() or not relative.parts
+            or any(part in ('.', '..') for part in relative.parts)):
+        raise AppError('Неверная цель пакета Store.')
+    manifest = root / 'AppxManifest.xml'
+    application_id = app_id.split('!', 1)[1]
+    def read():
+        document = _safe_local_path(manifest)
+        if document.stat().st_size > 2 * 1024 * 1024:
+            raise AppError('Слишком большой манифест Store.')
+        raw = document.read_bytes()
+        if b'<!DOCTYPE' in raw.upper() or b'<!ENTITY' in raw.upper():
+            raise AppError('Неподдерживаемый манифест Store.')
+        tree = ET.fromstring(raw)
+        application = next((element for element in tree.iter()
+                            if element.tag.rsplit('}', 1)[-1] == 'Application'
+                            and element.get('Id') == application_id), None)
+        if application is None or application.get('Executable') != str(relative):
+            raise AppError('Регистрация приложения Store изменилась.')
+        target = _safe_local_path(root / relative)
+        if not target.is_relative_to(root.resolve(strict=True)):
+            raise AppError('Цель Store выходит за каталог пакета.')
+        return str(target), '', hashlib.sha256(raw + app_id.encode()).hexdigest()
+    return AppSource('package:' + app_id, name[:120], read, 'start_apps', 'packaged', app_id)
+
+
+def _packaged_sources():
+    for row in _powershell_rows(_PACKAGE_DISCOVERY):
+        try:
+            yield _packaged_source(row)
+        except (AppError, TypeError, ValueError):
+            continue
+
+
+def _running_sources():
+    from .windows_state import inspect_application
+    for row in _powershell_rows(_RUNNING_DISCOVERY):
+        if not isinstance(row, dict):
+            continue
+        try:
+            path = validate_executable(row.get('path', ''))
+            # Get-Process is a candidate provider, not an ownership authority.
+            if inspect_application(path).state == 'visible_window':
+                yield _file_source(path, path.stem, 'running')
+        except (AppError, AttributeError, TypeError):
+            continue
+
+
+def _steam_sources():
+    """Read installed manifests; only a fixed numeric Steam launch is permitted."""
+    import winreg
+    roots = []
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Valve\Steam') as key:
+            root, kind = winreg.QueryValueEx(key, 'SteamPath')
+        if kind == winreg.REG_SZ:
+            roots.append(Path(root))
+    except OSError:
+        return
+    for root in roots[:1]:
+        steam = validate_executable(root / 'steam.exe')
+        libraries = [root]
+        library_file = root / 'steamapps' / 'libraryfolders.vdf'
+        try:
+            if library_file.stat().st_size < 1024 * 1024:
+                text = library_file.read_text(encoding='utf-8')
+                for value in re.findall(r'"path"\s+"([^"\r\n]{1,1000})"', text):
+                    candidate = Path(value.replace('\\\\', '\\'))
+                    if candidate.is_absolute() and not str(candidate).startswith('\\\\'):
+                        libraries.append(candidate)
+        except OSError:
+            pass
+        for library in dict.fromkeys(libraries):
+            folder = library / 'steamapps'
+            if _is_reparse(folder):
+                continue
+            for manifest in sorted(folder.glob('appmanifest_*.acf'))[:2048]:
+                try:
+                    raw = manifest.read_bytes()
+                    if len(raw) > 1024 * 1024:
+                        continue
+                    text = raw.decode('utf-8')
+                    values = dict(re.findall(r'"(appid|name|installdir)"\s+"([^"\r\n]+)"', text))
+                    app_id, name, directory = values['appid'], values['name'], values['installdir']
+                    if not re.fullmatch(r'[1-9][0-9]{0,9}', app_id) or manifest.name != f'appmanifest_{app_id}.acf':
+                        continue
+                    if any(separator in directory for separator in ('/', '\\', ':')) or directory in ('.', '..'):
+                        continue
+                    game_root = folder / 'common' / directory
+                    if not game_root.is_dir() or _is_reparse(game_root):
+                        continue
+                    expected = hashlib.sha256(raw).hexdigest()
+                    def read(manifest=manifest, expected=expected, steam=steam, game_root=game_root):
+                        if (not game_root.is_dir() or _is_reparse(game_root)
+                                or _digest(_safe_local_path(manifest), 1024 * 1024) != expected):
+                            raise AppError('Метаданные установленной игры Steam изменились.')
+                        return str(steam), '', expected
+                    yield AppSource('steam:' + app_id, name[:120], read, 'steam', 'steam', app_id)
+                except (OSError, UnicodeError, KeyError, ValueError):
+                    continue
 
 
 @dataclass(frozen=True)
@@ -292,21 +562,43 @@ class AppEntry:
     aliases: tuple[str, ...]
     fingerprint: str
     source: AppSource
+    sources: tuple[str, ...] = ()
+    launch_type: str = 'win32'
+    launch_id: str = ''
+    icon: str = ''
 
 
-def _entry(source: AppSource) -> AppEntry:
+def _entry(source: AppSource, digest_cache=None) -> AppEntry:
+    if re.search(r'(?:reset\s+settings|unload\s+kernel|restore\s+defaults|uninstall|redistributable|'
+                 r'удалени[ея]\s+программ|сброс\s+настроек)', normalize_name(source.name)):
+        raise AppError('Служебный или изменяющий настройки компонент не является приложением.')
     raw, arguments, source_digest = source.read()
     target = validate_executable(raw, arguments)
-    if target.stem.casefold() not in SUPPORTED_GUI_EXECUTABLES:
-        raise AppError('Это приложение пока не входит в проверенный каталог GUI.')
-    target_digest = _digest(target)
+    if source.launch_type not in ('win32', 'packaged', 'steam'):
+        raise AppError('Неподдерживаемый тип запуска.')
+    if source.launch_type == 'steam' and not re.fullmatch(r'[1-9][0-9]{0,9}', source.launch_id):
+        raise AppError('Неверный идентификатор Steam.')
+    if source.launch_type == 'packaged' and not re.fullmatch(r'[A-Za-z0-9_.-]{1,200}![A-Za-z0-9_.-]{1,100}', source.launch_id):
+        raise AppError('Неверный идентификатор Store.')
+    if digest_cache is None:
+        target_digest = _digest(target)
+    else:
+        stat = target.stat()
+        key = (str(target).casefold(), stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+        if key not in digest_cache:
+            digest_cache[key] = _digest(target)
+        target_digest = digest_cache[key]
     fingerprint = hashlib.sha256((source_digest + '\0' + str(target).casefold() + '\0' + target_digest).encode()).hexdigest()
-    app_id = 'app-' + hashlib.sha256(source.key.encode()).hexdigest()[:20]
+    # Start Menu, App Paths and a running process describe the same launch
+    # identity. Its ID must survive changes in provider enumeration order.
+    identity = '\0'.join((str(target).casefold(), source.launch_type, source.launch_id))
+    app_id = 'app-' + hashlib.sha256(identity.encode()).hexdigest()[:20]
     name = source.name[:120]
     aliases = tuple(dict.fromkeys(normalize_name(item) for item in (
         name, target.stem, *KNOWN_ALIASES.get(target.stem.casefold(), ()), app_id,
     ) if normalize_name(item)))
-    return AppEntry(app_id, name, target, aliases, fingerprint, source)
+    return AppEntry(app_id, name, target, aliases, fingerprint, source, (source.origin,),
+                    source.launch_type, source.launch_id, source.icon or str(target))
 
 
 @contextmanager
@@ -329,6 +621,61 @@ def _launch_guard(target: Path):
             kernel.CloseHandle(handle)
 
 
+class _ActivatedProcess:
+    """Own a native handle returned from package activation, never a bare PID."""
+    def __init__(self, pid):
+        self.kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        self.kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+        self.kernel.OpenProcess.restype = ctypes.c_void_p
+        self.kernel.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+        self.kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+        self.handle = self.kernel.OpenProcess(0x1000, False, pid)
+
+    def poll(self):
+        if not self.handle:
+            raise OSError('activated process unavailable')
+        code = ctypes.c_ulong()
+        if not self.kernel.GetExitCodeProcess(self.handle, ctypes.byref(code)):
+            raise OSError('activated process unavailable')
+        return None if code.value == 259 else code.value
+
+    def __del__(self):
+        if getattr(self, 'handle', None):
+            self.kernel.CloseHandle(self.handle)
+            self.handle = None
+
+
+def _activate_packaged(app_id):
+    """IApplicationActivationManager, with no app arguments or shell namespace."""
+    if os.name != 'nt' or not re.fullmatch(r'[A-Za-z0-9_.-]{1,200}![A-Za-z0-9_.-]{1,100}', app_id):
+        raise AppError('Недопустимая активация Store.')
+    ole = ctypes.WinDLL('ole32')
+    result = ole.CoInitializeEx(None, 2)
+    initialized = result in (0, 1)
+    if result < 0 and result != -2147417850:
+        raise AppError('Активация Store недоступна.')
+    pointer = ctypes.c_void_p()
+    try:
+        clsid = _GUID('45BA127D-10A8-46EA-8AB7-56EA9078943C')
+        iid = _GUID('2e941141-7f97-4756-ba1d-9decde894a3d')
+        if ole.CoCreateInstance(ctypes.byref(clsid), None, 1, ctypes.byref(iid), ctypes.byref(pointer)) < 0:
+            raise AppError('Активация Store недоступна.')
+        table = ctypes.cast(pointer, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+        activate = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.c_wchar_p,
+                                      ctypes.c_wchar_p, ctypes.c_ulong,
+                                      ctypes.POINTER(ctypes.c_ulong))(table[3])
+        pid = ctypes.c_ulong()
+        if activate(pointer, app_id, None, 2, ctypes.byref(pid)) < 0:  # AO_NOERRORUI
+            raise AppError('Windows отклонила активацию приложения Store.')
+        return _ActivatedProcess(pid.value)
+    finally:
+        if pointer.value:
+            table = ctypes.cast(pointer, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))).contents
+            ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(table[2])(pointer)
+        if initialized:
+            ole.CoUninitialize()
+
+
 class AppCatalog:
     def __init__(self, source_provider: Callable[[], Iterable[AppSource]] = discover_sources,
                  refresh_interval: float = 0):
@@ -340,6 +687,61 @@ class AppCatalog:
         self._refresh_interval = refresh_interval
         self._last_refresh = 0.0
         self._refreshed = False
+        self._personal_mode = False
+        self._portable_roots = ()
+        self._statistics = {'sources': {}, 'rejected': 0, 'duplicates': 0, 'truncated': False,
+                            'unavailable_providers': [], 'duration_ms': 0, 'applications': 0}
+        # Steam can hand off to a process of unknown image identity. Retain the
+        # submitted catalog ID until refresh instead of blindly launching twice.
+        self._steam_requested = set()
+
+    def configure_portable_roots(self, roots):
+        resolved = []
+        if not isinstance(roots, (tuple, list)) or len(roots) > 26:
+            raise AppError('Нужно выбрать не более 26 локальных каталогов.')
+        for raw in roots:
+            text = str(raw)
+            path = Path(text)
+            if (not path.is_absolute() or text.startswith(('\\\\', '//')) or ':' in text[2:]
+                    or not path.is_dir() or _is_reparse(path)):
+                raise AppError('Нужен существующий локальный каталог без ссылок.')
+            actual = path.resolve(strict=True)
+            if actual != path.absolute():
+                raise AppError('Каталог через ссылку не разрешён.')
+            resolved.append(actual)
+        with self._lock:
+            self._portable_roots = tuple(dict.fromkeys(resolved))
+
+    def set_personal_mode(self, enabled):
+        """Called only by the explicit user permission-profile endpoint."""
+        if type(enabled) is not bool:
+            raise AppError('Неверный профиль разрешений.')
+        with self._lock:
+            self._personal_mode = enabled
+
+    def is_allowed(self, app_id):
+        with self._lock:
+            entry = self._entries.get(app_id)
+            if entry is None:
+                return False
+            individual = self._permissions.get(app_id) == entry.fingerprint
+            ordinary = True
+            # A malicious Start Menu link must not turn a downloaded temporary
+            # binary into an automatically approved installed application.
+            for name in ('TEMP', 'TMP'):
+                raw = os.environ.get(name)
+                if raw:
+                    try:
+                        if entry.target.is_relative_to(Path(raw).resolve()):
+                            ordinary = False
+                    except (OSError, ValueError):
+                        ordinary = False
+            return bool(individual or (self._personal_mode and ordinary))
+
+    def statistics(self):
+        with self._lock:
+            return {**self._statistics, 'sources': {key: dict(value) for key, value in self._statistics['sources'].items()},
+                    'unavailable_providers': list(self._statistics['unavailable_providers'])}
 
     def refresh(self) -> list[dict]:
         if not self._refresh_lock.acquire(blocking=False):
@@ -353,17 +755,54 @@ class AppCatalog:
 
     def _refresh(self) -> list[dict]:
         found = {}
+        by_identity = {}
+        digest_cache = {}
+        report = {'sources': {}, 'rejected': 0, 'duplicates': 0, 'truncated': False,
+                  'unavailable_providers': [], 'duration_ms': 0, 'applications': 0}
         started = time.monotonic()
-        for count, source in enumerate(self._source_provider()):
-            if count >= 256 or time.monotonic() - started > 20:
+        provider = (discover_sources(report, self._portable_roots) if self._source_provider is discover_sources
+                    else self._source_provider())
+        for count, source in enumerate(provider):
+            if count >= 10000 or time.monotonic() - started > 45:
+                report['truncated'] = True
                 break
+            statistics = report['sources'].setdefault(source.origin, {'candidates': 0, 'accepted': 0, 'rejected': 0})
+            statistics['candidates'] += 1
             try:
-                entry = _entry(source)
+                entry = _entry(source, digest_cache)
                 # Duplicate metadata for one target must not create ambiguity.
-                existing = next((e for e in found.values() if e.target == entry.target), None)
+                # Multiple package app IDs in the same executable can represent
+                # distinct activities; Win32 metadata for that executable is a
+                # duplicate, not an additional application.
+                image = str(entry.target).casefold()
+                identity = (image, entry.launch_id)
+                existing = by_identity.get(identity)
+                if existing is None and entry.launch_type == 'packaged':
+                    old = by_identity.get((image, ''))
+                    if old is not None and old.launch_type == 'win32':
+                        existing = old
+                        by_identity.pop((image, ''), None)
+                elif existing is None and entry.launch_type == 'win32':
+                    packages = [item for (path, _), item in by_identity.items()
+                                if path == image and item.launch_type == 'packaged']
+                    if len(packages) == 1:
+                        existing = packages[0]
+                        identity = (image, existing.launch_id)
                 if existing is None:
                     found[entry.id] = entry
-            except (AppError, OSError, ValueError):
+                    by_identity[identity] = entry
+                else:
+                    preferred = entry if entry.launch_type == 'packaged' else existing
+                    merged = replace(preferred, id=existing.id,
+                                     aliases=tuple(dict.fromkeys((*existing.aliases, *entry.aliases))),
+                                     sources=tuple(dict.fromkeys((*existing.sources, *entry.sources))))
+                    found[existing.id] = merged
+                    by_identity[identity] = merged
+                    report['duplicates'] += 1
+                statistics['accepted'] += 1
+            except (AppError, OSError, ValueError, ET.ParseError):
+                report['rejected'] += 1
+                statistics['rejected'] += 1
                 continue
         with self._lock:
             self._entries = found
@@ -371,13 +810,18 @@ class AppCatalog:
                                  if key in found and found[key].fingerprint == fingerprint}
             self._refreshed = True
             self._last_refresh = time.monotonic()
+            report['applications'] = len(found)
+            report['duration_ms'] = round((self._last_refresh - started) * 1000, 2)
+            self._statistics = report
+            self._steam_requested.intersection_update(found)
             return self.entries()
 
     def entries(self) -> list[dict]:
         with self._lock:
             return [{'id': item.id, 'name': item.name, 'target': str(item.target),
                      'aliases': list(item.aliases), 'fingerprint': item.fingerprint,
-                     'allowed': self._permissions.get(item.id) == item.fingerprint}
+                     'allowed': self.is_allowed(item.id), 'sources': list(item.sources),
+                     'launch_type': item.launch_type, 'launch_id': item.launch_id, 'icon': item.icon}
                     for item in sorted(self._entries.values(), key=lambda item: item.name.casefold())]
 
     def aliases(self) -> dict[str, tuple[str, ...]]:
@@ -401,7 +845,7 @@ class AppCatalog:
         except (AppError, OSError, ValueError) as exc:
             self._permissions.pop(app_id, None)
             raise AppError('Цель приложения изменилась. Обнови каталог и разрешение.') from exc
-        return current
+        return replace(current, id=entry.id, aliases=entry.aliases, sources=entry.sources)
 
     def set_permission(self, app_id: str, allowed: bool, fingerprint: str) -> list[dict]:
         with self._lock:
@@ -421,13 +865,26 @@ class AppCatalog:
             with self._lock:
                 entry = self._revalidate(app_id)
                 target = entry.name
-                if self._permissions.get(app_id) != entry.fingerprint:
+                if not self.is_allowed(app_id):
                     raise AppError('Сначала разреши это приложение в настройках.')
                 with _launch_guard(entry.target):
                     self._revalidate(app_id)
-                    result = launch_coordinator.launch(entry.target, target,
-                        lambda: subprocess.Popen([str(entry.target)], shell=False, close_fds=True,
-                                                 cwd=str(entry.target.parent)))
+                    if entry.launch_type == 'steam':
+                        from .results import ActionResult
+                        if app_id in self._steam_requested:
+                            result = ActionResult(True, 'open_app', target, 'launch_pending',
+                                status_text=f'{target}: запрос Steam уже отправлен; окно игры пока не подтверждено.')
+                        else:
+                            subprocess.Popen([str(entry.target), '-applaunch', entry.launch_id], shell=False,
+                                             close_fds=True, cwd=str(entry.target.parent))
+                            self._steam_requested.add(app_id)
+                            result = ActionResult(True, 'open_app', target, 'request_accepted',
+                                status_text=f'{target}: запрос запуска передан Steam; окно игры пока не подтверждено.')
+                    else:
+                        spawn = (lambda: _activate_packaged(entry.launch_id)) if entry.launch_type == 'packaged' else (
+                            lambda: subprocess.Popen([str(entry.target)], shell=False, close_fds=True,
+                                                     cwd=str(entry.target.parent)))
+                        result = launch_coordinator.launch(entry.target, target, spawn)
             return {**result.to_dict(), 'duration_ms': round((time.perf_counter() - started) * 1000, 2)}
         except (AppError, OSError) as exc:
             # Exception text is controlled here, OS errors/paths are not reflected.

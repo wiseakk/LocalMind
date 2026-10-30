@@ -86,17 +86,20 @@ async function run(name,fn){await fn();console.log('PASS '+name);}
       for(const id of ['pauseAudio','stopAudio','interruptReply'])assert.equal(d.querySelector('#'+id).type,'button');
     }finally{dom.window.close();}
   });
-  await run('initial image-only draft survives conversation switching without a server upload',async()=>{
-    const {dom,w,d,requests}=setup();
+  await run('initial image-only draft uploads locally and survives conversation switching',async()=>{
+    const {dom,w,d,requests}=setup({fetch:async(url,init)=>url==='/api/attachments'?Response.json({
+      id:'image-upload',name:'initial.png',size:100,kind:'image',width:1,height:1,characters:0,truncated:false,
+      state:'ready',conversation_id:init.body.get('conversation_id'),server_instance:init.body.get('server_instance')
+    }):null});
     try{
       await pause(10);w.HTMLCanvasElement.prototype.getContext=()=>({drawImage(){}});w.createImageBitmap=async()=>({close(){}});
       const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGPojjn/HwAF4gK2//l6AAAAAABJRU5ErkJggg==','base64');
       w.localmindAttachments.add([new w.File([png],'initial.png',{type:'image/png'})]);await pause(20);
-      assert.equal(w.localmindAttachments.snapshot()[0].state,'image');await w.newConversation();
+      assert.equal(w.localmindAttachments.snapshot()[0].state,'ready');await w.newConversation();
       assert.equal(w.localmindAttachments.snapshot().length,0);
       d.querySelector('#historyOpen').click();d.querySelectorAll('.history-entry>button:first-child')[1].click();await pause(10);
-      assert.equal(w.localmindAttachments.snapshot()[0].state,'image');
-      assert.equal(requests.filter(r=>r.url==='/api/attachments').length,0);
+      assert.equal(w.localmindAttachments.snapshot()[0].state,'ready');
+      assert.equal(requests.filter(r=>r.url==='/api/attachments').length,1);
       d.querySelector('#constellationMode').value='files';d.querySelector('#constellationMode').dispatchEvent(new w.Event('change'));
       assert.ok(d.querySelector('#nodeSelect').textContent.includes('Вложение'));
     }finally{dom.window.close();}

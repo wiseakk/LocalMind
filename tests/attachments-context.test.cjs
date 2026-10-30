@@ -53,14 +53,14 @@ async function run(name,fn){await fn();console.log('PASS '+name);}
       a.setConversation('other');assert.equal(a.snapshot().length,0);a.setConversation('one');assert.deepEqual([...a.contextIds()],['doc']);
     }finally{dom.window.close();}
   });
-  await run('messages-first server identity preserves image-only draft rows',async()=>{
-    const {dom,w,a}=fixture(async()=>{throw Error('images must not upload');});
+  await run('images upload locally and preserve server reference across conversation switching',async()=>{
+    let calls=0;const {dom,w,a}=fixture(async()=>{calls++;return Response.json({...ready('image-ref'),kind:'image',characters:0,width:2,height:2});});
     try{
       w.HTMLCanvasElement.prototype.getContext=()=>({drawImage(){}});w.createImageBitmap=async()=>({close(){}});
       const bytes=new Uint8Array(24),view=new DataView(bytes.buffer);view.setUint32(0,0x89504e47);view.setUint32(4,0x0d0a1a0a);view.setUint32(16,2);view.setUint32(20,2);
-      a.add([new w.File([bytes],'preview.png',{type:'image/png'})]);await new Promise(r=>setTimeout(r,25));assert.equal(a.snapshot()[0].state,'image');
-      a.adoptConversation('messages-first-server');assert.equal(a.snapshot().length,1);
-      a.setConversation('other');a.setConversation('messages-first-server');assert.equal(a.snapshot()[0].state,'image');assert.deepEqual([...a.contextIds()],[]);
+      a.add([new w.File([bytes],'preview.png',{type:'image/png'})]);await new Promise(r=>setTimeout(r,25));assert.equal(a.snapshot()[0].state,'ready');assert.equal(calls,1);
+      assert.deepEqual([...a.contextIds()],['image-ref']);assert.equal(a.snapshot()[0].hasFile,false);
+      a.setConversation('other');a.setConversation('one');assert.equal(a.snapshot()[0].state,'ready');assert.deepEqual([...a.contextIds()],['image-ref']);
     }finally{dom.window.close();}
   });
   await run('foreign server identity and parser errors never become context',async()=>{
@@ -78,7 +78,7 @@ async function run(name,fn){await fn();console.log('PASS '+name);}
       d.querySelector('#showFilenames').checked=true;d.querySelector('#showFilenames').dispatchEvent(new w.Event('change'));assert.ok(d.querySelector('.attachment-name').textContent.includes('<img'));assert.equal(d.querySelector('#attachmentList img'),null);assert.ok(!d.querySelector('.attachment-name').textContent.includes('\u202e'));
     }finally{dom.window.close();}
   });
-  await run('oversized image is rejected before decode and images never upload',async()=>{
+  await run('oversized image is rejected before decode or upload',async()=>{
     let uploads=0,decodes=0;const {dom,w,a}=fixture(async()=>{uploads++;return Response.json(ready());});
     try{
       w.createImageBitmap=async()=>{decodes++;throw Error('unexpected decode');};const bytes=new Uint8Array(24),view=new DataView(bytes.buffer);view.setUint32(0,0x89504e47);view.setUint32(4,0x0d0a1a0a);view.setUint32(16,8193);view.setUint32(20,2);

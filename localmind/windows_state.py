@@ -48,7 +48,20 @@ def inspect_application(target: Path) -> ApplicationState:
         return ApplicationState('unavailable')
 
 
-def _inspect_windows(target: Path, on_verified=None) -> ApplicationState:
+def inspect_applications(targets):
+    """One native enumeration for a catalog; callers revalidate before mutation."""
+    targets = tuple(dict.fromkeys(targets))
+    if not targets:
+        return {}
+    if os.name != 'nt':
+        return {target: ApplicationState('unavailable') for target in targets}
+    try:
+        return _inspect_windows(targets[0], targets=targets)
+    except (OSError, ValueError, AttributeError):
+        return {target: ApplicationState('unavailable') for target in targets}
+
+
+def _inspect_windows(target: Path, on_verified=None, *, targets=None) -> ApplicationState:
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
     security = ctypes.WinDLL('advapi32', use_last_error=True)
     terminal = ctypes.WinDLL('wtsapi32', use_last_error=True)
@@ -89,15 +102,17 @@ def _inspect_windows(target: Path, on_verified=None) -> ApplicationState:
         own_sid = ctypes.cast(token_data, ctypes.POINTER(ctypes.c_void_p))[0]
         if not terminal.WTSEnumerateProcessesW(None, 0, 1, ctypes.byref(rows), ctypes.byref(count)):
             raise OSError('enumeration unavailable')
-        expected = os.path.normcase(str(target.resolve(strict=True)))
+        images = {os.path.normcase(str(item.resolve(strict=True))): item for item in (targets or (target,))}
+        names = {item.name.casefold() for item in images.values()}
         unknown = False
         identities = []
+        images_by_pid = {}
         identity_handles = {}
         for index in range(count.value):
             row = rows[index]
             if row.SessionId != session.value or not row.pProcessName:
                 continue
-            if row.pProcessName.casefold() != target.name.casefold():
+            if row.pProcessName.casefold() not in names:
                 continue
             if not row.pUserSid:
                 unknown = True
@@ -146,11 +161,14 @@ def _inspect_windows(target: Path, on_verified=None) -> ApplicationState:
             except OSError:
                 unknown = True
                 continue
-            if actual == expected:
+            if actual in images:
                 identities.append((row.ProcessId, created.dwLowDateTime | created.dwHighDateTime << 32))
                 identity_handles[row.ProcessId] = handle
+                images_by_pid[row.ProcessId] = actual
         matching_pids = {item[0] for item in identities}
         if not matching_pids:
+            if targets is not None:
+                return {item: ApplicationState('unavailable' if unknown else 'absent') for item in targets}
             return ApplicationState('unavailable' if unknown else 'absent')
         visible = set()
         windows = []
@@ -173,6 +191,8 @@ def _inspect_windows(target: Path, on_verified=None) -> ApplicationState:
             return True
 
         if not user.EnumWindows(visit, 0):
+            if targets is not None:
+                return {item: ApplicationState('unavailable') for item in targets}
             return ApplicationState('unavailable', tuple(identities))
         # Handles remain open through EnumWindows, preventing PID recycling.
         live = set()
@@ -189,6 +209,15 @@ def _inspect_windows(target: Path, on_verified=None) -> ApplicationState:
         # must additionally validate its per-window marker before any mutation.
         if on_verified is not None:
             on_verified(user, windows)
+        if targets is not None:
+            results = {}
+            for image, item in images.items():
+                processes = tuple(identity for identity in identities if images_by_pid[identity[0]] == image)
+                visible_windows = tuple(window for window in windows if images_by_pid[window.pid] == image)
+                state = ('visible_window' if visible_windows else 'background' if processes
+                         else 'unavailable' if unknown else 'absent')
+                results[item] = ApplicationState(state, processes, visible_windows)
+            return results
         if visible:
             return ApplicationState('visible_window', tuple(identities), windows)
         if identities:

@@ -34,6 +34,31 @@ _NEGATION = {'не', 'нет', 'никогда', 'нельзя', 'запреща
 _QUOTES = set('«»“”„"‘’\'`‹›')
 
 
+def action_clause(text: str) -> str:
+    """Normalize discourse, without removing action negation or arbitrary text.
+
+    Only standalone complaint clauses and trailing explanations are discourse.
+    A second imperative remains intact for the bounded plan resolver. In
+    particular `не открывай` is never rewritten into an affirmative command.
+    """
+    text = ' '.join(text.strip().split())
+    text = re.sub(r'^(?:ну[, ]+)?(?:нихуя\s+ты\s+не\s+сделал|ты\s+ничего\s+не\s+сделал)[,!. ]+', '', text, flags=re.I)
+    text = re.sub(r'^(?:ну[, ]+|блин[, ]+|ебать[, ]+|по-братски[, ]+)', '', text, flags=re.I)
+    text = re.sub(r'(?<=\s)по-братски[, ]+', '', text, flags=re.I)
+    # An explanation has no command authority. Do not discard another action.
+    parts = re.split(r',\s*(?:он|она|оно)\s+(?:у\s+меня\s+)?', text, maxsplit=1, flags=re.I)
+    if len(parts) == 2 and re.fullmatch(r'(?:(?:почему-то|никак|всё|все|ещё|еще)\s+)*(?:не\s+)?(?:открывается|запускается|работает)[.!?]*', parts[1], re.I):
+        text = parts[0]
+    return text
+
+
+def command_negated(text: str) -> bool:
+    """Negation governs the requested verb, not unrelated words in the turn."""
+    clause = action_clause(text)
+    return bool(re.search(r'\b(?:не|никогда\s+не|нельзя|запрещаю)\s+(?:(?:ты|мне|пожалуйста)\s+)*(?:откр\w*|запус\w*|закр\w*|включ\w*|выключ\w*|вывед\w*|най\w*|удал\w*|созд\w*)\b', clause, re.I)
+                or re.search(r'\bбез\s+(?:запуска|открытия|закрытия|включения|выключения)\b', clause, re.I))
+
+
 def _tokens(text: str) -> list[str]:
     return _TOKEN.findall(text.casefold().replace('ё', 'е'))
 
@@ -116,7 +141,7 @@ def parse_app_intent(text: str, aliases: Mapping[str, Sequence[str]]) -> AppInte
         return None
     if any(mark in text for mark in _QUOTES):
         return None
-    tokens = _tokens(text)
+    tokens = _tokens(action_clause(text))
     if _NEGATION.intersection(tokens):
         return None
     # Preserve interior punctuation. Only sentence-final punctuation is removed.
@@ -129,6 +154,8 @@ def parse_app_intent(text: str, aliases: Mapping[str, Sequence[str]]) -> AppInte
     proposals = []
     for action, verbs in _VERBS.items():
         target = _request_body(tokens, verbs)
+        if action == 'open_app' and tokens[:1] in (['включи'], ['включите']):
+            target = _target_tokens(tokens[1:])
         if not target:
             continue
         # Catalog names are untrusted metadata. A display alias containing a

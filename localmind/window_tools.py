@@ -7,7 +7,7 @@ HWND in the same process cannot inherit an old selection.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 import ctypes
 from ctypes import wintypes as w
 from dataclasses import dataclass
@@ -20,7 +20,7 @@ import uuid
 
 from .apps import AppError, _launch_guard, catalog
 from .results import ActionResult, refused
-from .windows_state import VerifiedWindow, _inspect_windows, inspect_application
+from .windows_state import VerifiedWindow, _inspect_windows, inspect_application, inspect_applications
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,9 @@ class WindowSelection:
 class NativeWindowBackend:
     def inspect(self, target):
         return inspect_application(target)
+
+    def inspect_many(self, targets):
+        return inspect_applications(targets)
 
     def operate(self, target, expected, property_name, marker, operation):
         if os.name != 'nt':
@@ -88,9 +91,14 @@ class NativeWindowBackend:
                 user.ShowWindowAsync.argtypes = [w.HWND, ctypes.c_int]
                 if user.IsIconic(hwnd):
                     user.ShowWindowAsync(hwnd, 9)  # SW_RESTORE, no input simulation
-                requested = bool(user.SetForegroundWindow(hwnd))
-                observed = user.GetForegroundWindow() == hwnd
-                outcome['state'] = 'focused' if requested and observed else 'foreground_denied'
+                    # ShowWindowAsync posts to another thread. Give the restore
+                    # a bounded interval before observing foreground state.
+                    until = time.monotonic() + .3
+                    while user.IsIconic(hwnd) and time.monotonic() < until:
+                        time.sleep(.02)
+                user.SetForegroundWindow(hwnd)
+                observed = user.GetForegroundWindow() == hwnd and not user.IsIconic(hwnd)
+                outcome['state'] = 'focused' if observed else 'foreground_denied'
             elif operation == 'close':
                 user.PostMessageW.argtypes = [w.HWND, w.UINT, w.WPARAM, w.LPARAM]
                 user.PostMessageW.restype = w.BOOL
@@ -133,9 +141,13 @@ class WindowTools:
                 yield AppTarget(app_id, app_id, path, str(path.stat().st_mtime_ns))
             return
         with catalog._lock:
-            entry = catalog._revalidate(app_id)
-            if catalog._permissions.get(app_id) != entry.fingerprint:
+            entry = catalog._entries.get(app_id)
+            if entry is None:
+                raise AppError('Приложение отсутствует в каталоге.')
+            if not catalog.is_allowed(app_id):
                 raise AppError('Сначала разреши приложение в настройках.')
+            if entry.launch_type == 'steam':
+                raise AppError('Окно игры Steam ещё не связано с проверенным исполняемым файлом.')
             with _launch_guard(entry.target):
                 current = catalog._revalidate(app_id)
                 yield AppTarget(current.id, current.name, current.target, current.fingerprint)
@@ -179,20 +191,31 @@ class WindowTools:
             self._prune()
             windows, unknown, background = [], [], []
             all_ids = [app_id] if app_id else self.app_ids()
-            ids = all_ids[:64]
+            ids = all_ids[:4096]
             truncated = len(all_ids) > len(ids)
             seen_paths = set()
-            for key in ids:
-                if len(windows) >= 64:
-                    truncated = True
-                    break
-                try:
-                    with self.target_provider(key) as app:
+            # Keep validated image guards through the snapshot, then stamp only
+            # observed windows. Each actual mutation still checks native identity.
+            with ExitStack() as guards:
+                candidates = []
+                for key in ids:
+                    try:
+                        app = guards.enter_context(self.target_provider(key))
                         image_key = os.path.normcase(str(app.path))
                         if image_key in seen_paths:
                             continue
                         seen_paths.add(image_key)
-                        state = self.backend.inspect(app.path)
+                        candidates.append((key, app))
+                    except (AppError, OSError, ValueError, AttributeError):
+                        unknown.append(key)
+                snapshots = (self.backend.inspect_many([item.path for _, item in candidates])
+                             if hasattr(self.backend, 'inspect_many') else None)
+                for key, app in candidates:
+                    if len(windows) >= 64:
+                        truncated = True
+                        break
+                    try:
+                        state = snapshots[app.path] if snapshots is not None else self.backend.inspect(app.path)
                         if state.state == 'unavailable':
                             unknown.append(key)
                         if state.state == 'background':
@@ -207,8 +230,8 @@ class WindowTools:
                                 windows.append(self._public(record))
                             else:
                                 unknown.append(key)
-                except (AppError, OSError, ValueError, AttributeError):
-                    unknown.append(key)
+                    except (AppError, OSError, ValueError, AttributeError):
+                        unknown.append(key)
             names = list(dict.fromkeys(item['application'] for item in windows))
             found_text = ('Проверенные окна: ' + ', '.join(names[:12]) + '.' if names else 'Проверенных окон не найдено.')
             return ActionResult(not unknown, 'apps.list_running', app_id,

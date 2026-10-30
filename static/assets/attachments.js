@@ -3,11 +3,11 @@
   'use strict';
   const get=id=>document.getElementById(id),list=get('attachmentList'),notice=get('attachmentNotice');
   const LIMITS=Object.freeze({count:8,file:10*1024*1024,total:40*1024*1024,imagePixels:16000000});
-  const types={pdf:['application/pdf'],txt:['text/plain'],md:['text/plain','text/markdown','text/x-markdown'],docx:['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],csv:['text/csv','application/csv','text/plain','application/vnd.ms-excel'],png:['image/png'],jpg:['image/jpeg'],jpeg:['image/jpeg'],webp:['image/webp']};
+  const types={pdf:['application/pdf'],txt:['text/plain'],md:['text/plain','text/markdown','text/x-markdown'],json:['application/json','text/plain'],docx:['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],csv:['text/csv','application/csv','text/plain','application/vnd.ms-excel'],png:['image/png'],jpg:['image/jpeg'],jpeg:['image/jpeg'],webp:['image/webp']};
   const images=new Set(['png','jpg','jpeg','webp']),groups=new Map();
   let entries=[],serial=0,conversation='',selection=0,previewEntry=null,requestOverride=null,sessionOverride=null;
   groups.set('',entries);
-  const labels={preparing:'Подготовка…',parsing:'Извлекаем текст локально…',ready:'Готово · будет передано со следующим сообщением',added:'Добавлено в контекст · подтверждено сервером',image:'Предпросмотр · модель не анализирует изображения',error:'Не добавлено',removing:'Удалено из будущих запросов'};
+  const labels={preparing:'Подготовка…',parsing:'Обрабатываем локально…',ready:'Загружено · будет передано со следующим сообщением',added:'Включено в запрос к локальной модели',error:'Не добавлено',removing:'Удалено из будущих запросов'};
   const cleanName=name=>String(name).replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g,'').slice(0,160);
   const live=entry=>entry.alive&&entry.group.includes(entry);
   const label=entry=>get('showFilenames')?.checked?cleanName(entry.name):'Вложение '+entry.number+' · '+entry.ext.toUpperCase();
@@ -23,7 +23,7 @@
     }
     window.dispatchEvent(new CustomEvent('localmind:attachments',{detail:{pending:hasPending(),count:entries.length}}));
   }
-  function status(entry,state,error){if(!live(entry))return;entry.state=state;entry.row.dataset.state=state;entry.row.classList.toggle('error',state==='error');entry.status.textContent=error||labels[state];if(entry.truncated)entry.status.textContent+=' · текст сокращён до '+entry.characters+' символов';entry.demo.hidden=!['ready','added','image'].includes(state);if(entry.group===entries)changed();}
+  function status(entry,state,error){if(!live(entry))return;entry.state=state;entry.row.dataset.state=state;entry.row.classList.toggle('error',state==='error');entry.status.textContent=error||labels[state];if(entry.truncated)entry.status.textContent+=' · текст сокращён до '+entry.characters+' символов';entry.demo.hidden=!['ready','added'].includes(state);if(entry.group===entries)changed();}
   function read(blob){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('Файл не удалось прочитать'));reader.readAsArrayBuffer(blob);});}
   // Inspect dimensions before decoding. Reject unrecognized/oversized raster headers.
   function dimensions(buffer,ext){
@@ -52,22 +52,24 @@
   }
   async function prepare(entry){
     try{
+      const token=selection;
       if(images.has(entry.ext)){
         const bytes=await read(entry.file.slice(0,65536));if(!live(entry))return;
         const [w,h]=dimensions(bytes,entry.ext);
         if(!w||!h||w*h>LIMITS.imagePixels||w>8192||h>8192)throw Error('Изображение: максимум 16 Мп и 8192 px по стороне');
-        if(typeof createImageBitmap!=='function')throw Error('Предпросмотр изображения недоступен в этом браузере');
-        const bitmap=await createImageBitmap(entry.file,{resizeWidth:192,resizeHeight:192,resizeQuality:'low'});
-        try{
+        if(typeof createImageBitmap==='function'){
+          const bitmap=await createImageBitmap(entry.file,{resizeWidth:192,resizeHeight:192,resizeQuality:'low'});
+          try{
           if(!live(entry))return;
           const thumbnail=document.createElement('canvas');thumbnail.width=192;thumbnail.height=192;thumbnail.setAttribute('aria-label','Предпросмотр выбранного изображения');thumbnail.setAttribute('role','img');
           thumbnail.getContext('2d').drawImage(bitmap,0,0,192,192);entry.row.prepend(thumbnail);entry.thumbnail=thumbnail;entry.dimensions=[w,h];
-        }finally{bitmap.close();}
-        status(entry,'image');return;
+          }finally{bitmap.close();}
+        }
+        entry.dimensions=[w,h];
       }
-      const token=selection;
+      if(token!==selection)throw Error('Диалог изменён до загрузки. Добавьте вложение повторно.');
       const ensure=sessionOverride||window.localmindSession?.ensure;
-      if(!ensure)throw Error('Сеанс ещё не готов. Повторите добавление документа.');
+      if(!ensure)throw Error('Сеанс ещё не готов. Повторите добавление вложения.');
       const session=await ensure();
       if(!live(entry))return;
       if(token!==selection)throw Error('Диалог изменён до загрузки. Добавьте документ повторно.');
@@ -78,8 +80,9 @@
       const form=new FormData();form.append('file',entry.file);form.append('conversation_id',session.conversation_id);form.append('server_instance',session.server_instance);
       status(entry,'parsing');
       const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),120000);
+      entry.uploadController=controller;
       let data;
-      try{data=await checked(await api('/api/attachments',{method:'POST',body:form,signal:controller.signal}));}finally{clearTimeout(timeout);}
+      try{data=await checked(await api('/api/attachments',{method:'POST',body:form,signal:controller.signal}));}finally{clearTimeout(timeout);entry.uploadController=null;}
       if(data.conversation_id!==session.conversation_id||data.server_instance!==session.server_instance||typeof data.id!=='string'||!data.id||data.state!=='ready')throw Error('Сервер вернул неподтверждённое вложение');
       entry.serverId=data.id;
       if(!live(entry)){await forgetServer(entry);return;}
@@ -95,7 +98,7 @@
     const canvas=get('previewCanvas');let text=get('previewText');
     if(!text){text=document.createElement('pre');text.id='previewText';text.className='document-preview';canvas.after(text);}
     canvas.hidden=!images.has(entry.ext);text.hidden=images.has(entry.ext);
-    get('previewNote').textContent=images.has(entry.ext)?'Изображение остаётся в памяти вкладки. Текущая модель не анализирует его содержимое.':(entry.truncated?'Текст сокращён. ':'')+'Извлечено '+entry.characters+' символов. Предпросмотр — первые 6 000 символов. '+(entry.state==='added'?'Сервер подтвердил использование в контексте.':'Документ будет использован при следующей отправке.');
+    get('previewNote').textContent=images.has(entry.ext)?'Изображение обработано на локальном сервере. '+(entry.state==='added'?'Включено в запрос к модели.':'Будет передано модели с поддержкой зрения при следующей отправке.'):(entry.truncated?'Текст сокращён. ':'')+'Извлечено '+entry.characters+' символов. Предпросмотр — первые 6 000 символов. '+(entry.state==='added'?'Сервер подтвердил использование в контексте.':'Документ будет использован при следующей отправке.');
     text.textContent=entry.preview||'Текст для предпросмотра отсутствует.';
     dialog.showModal();
     if(images.has(entry.ext)){
@@ -112,7 +115,7 @@
   get('attachmentPreview')?.addEventListener('close',()=>{previewEntry=null;});
   function remove(entry){
     if(!live(entry))return;
-    entry.alive=false;entry.file=null;entry.preview='';entry.state='removing';entry.row.remove();entry.group.splice(entry.group.indexOf(entry),1);
+    entry.alive=false;entry.uploadController?.abort();entry.file=null;entry.preview='';entry.state='removing';entry.row.remove();entry.group.splice(entry.group.indexOf(entry),1);
     if(previewEntry===entry)closePreview();
     void forgetServer(entry);
     if(entry.group===entries){if(!entries.length){notice.hidden=true;notice.textContent='';}changed();}
@@ -139,7 +142,7 @@
       info.append(title,progress,open);row.append(icon,info,close);list.append(row);entries.push(entry);
       if(error)status(entry,'error',error);else{status(entry,'preparing');void prepare(entry);}
     }
-    if(incoming.length)say('Документы обрабатываются локальным сервером. Изображения — только предпросмотр. Без облака · 8 файлов, 10 МБ каждый, 40 МБ всего.');
+    if(incoming.length)say('Документы и изображения обрабатываются локальным сервером и передаются выбранной локальной модели. Без облака · 8 файлов, 10 МБ каждый, 40 МБ всего.');
   }
   get('attach').addEventListener('click',()=>get('fileInput').click());
   get('fileInput').addEventListener('change',e=>{add(e.target.files);e.target.value='';});
@@ -164,7 +167,7 @@
   }
   function setConversation(id){
     const next=id||'';if(next===conversation)return;
-    selection++;closePreview();for(const entry of entries){entry.row.remove();if(images.has(entry.ext))entry.file=null;}
+    selection++;closePreview();for(const entry of entries)entry.row.remove();
     conversation=next;entries=groups.get(next)||[];groups.set(next,entries);for(const entry of entries)list.append(entry.row);
     if(notice){notice.hidden=!entries.length;notice.textContent=entries.length?'Вложения этого диалога · локальная обработка':'';}changed();
   }

@@ -1,7 +1,7 @@
-"""Session-only Downloads access and exact PDF grants, independent of the LLM.
+"""Bounded local file search with conversation-owned references and exact identity.
 
-Only a Windows known folder (or an injected test fixture) may be approved. No
-path input exists in the chat/tool API. Selection is non-recursive and bounded.
+Model tools select approved scope IDs; only explicit settings can approve roots.
+Personal mode broadens reads/opening, never writes, scripts or OS privileges.
 """
 from contextlib import contextmanager, ExitStack
 from dataclasses import dataclass
@@ -11,6 +11,7 @@ from ctypes import wintypes as w
 import hashlib
 import os
 from pathlib import Path
+import re
 import secrets
 import stat
 import time
@@ -45,7 +46,9 @@ def downloads_folder():
 
 def _checked(path):
     path = Path(path)
-    if not path.is_absolute() or str(path).startswith(('\\\\', '//')):
+    if (not path.is_absolute() or str(path).startswith(('\\\\', '//'))
+            or '\x00' in str(path) or ':' in str(path)[len(path.drive):]
+            or any(part.rstrip(' .') != part for part in path.parts if part != path.anchor)):
         raise FileAccessError('Сетевые и относительные пути запрещены.')
     if os.name == 'nt':
         kernel = ctypes.WinDLL('kernel32', use_last_error=True)
@@ -102,17 +105,19 @@ def _locked_path(path, directory=False):
 def _fingerprint(path):
     before = path.stat(follow_symlinks=False)
     if not stat.S_ISREG(before.st_mode) or before.st_size > 64 * 1024 * 1024:
-        raise FileAccessError('PDF должен быть обычным файлом размером до 64 МБ.')
+        raise FileAccessError('Документ должен быть обычным файлом размером до 64 МБ.')
+    if path.suffix.casefold() not in READABLE_EXTENSIONS:
+        raise FileAccessError('Тип файла не поддерживается для безопасного чтения и открытия.')
     digest = hashlib.sha256()
     total, deadline = 0, time.monotonic() + 5
     with path.open('rb') as source:
-        if source.read(5) != b'%PDF-':
+        if path.suffix.casefold() == '.pdf' and source.read(5) != b'%PDF-':
             raise FileAccessError('Файл не имеет заголовка PDF.')
         source.seek(0)
         for chunk in iter(lambda: source.read(65536), b''):
             total += len(chunk)
             if total > 64 * 1024 * 1024 or time.monotonic() > deadline:
-                raise FileAccessError('Проверка PDF превысила ограничение размера или времени.')
+                raise FileAccessError('Проверка документа превысила ограничение размера или времени.')
             digest.update(chunk)
     after = path.stat(follow_symlinks=False)
     stamp = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
@@ -128,25 +133,47 @@ class SelectedFile:
     path: Path
     stamp: tuple
     digest: str
+    created_ns: int | None = None
 
     def public(self):
         return {'file_id': self.id, 'filename': self.path.name, 'path': str(self.path),
                 'modified_at': datetime.fromtimestamp(self.stamp[3] / 1e9, timezone.utc).isoformat(),
+                'created_at': datetime.fromtimestamp(self.created_ns / 1e9, timezone.utc).isoformat() if self.created_ns else None,
+                'size_bytes': self.stamp[2],
                 'timestamp_semantics': 'last_modified_not_download_time', 'sha256': self.digest}
 
 
+READABLE_EXTENSIONS = frozenset(('.pdf', '.txt', '.md', '.markdown', '.docx', '.csv', '.json', '.tsv'))
+
+
 class FileAccess:
-    def __init__(self, folder_provider=downloads_folder, opener=None):
+    def __init__(self, folder_provider=downloads_folder, opener=None, *, persistence=None, observer=None):
+        from .personal_permissions import PersonalMode
         self.folder_provider = folder_provider
         self.opener = opener or self._open
+        self.observer = observer
         self._lock = RLock()
         self._folder_grant = None
         self._selected, self._grants = {}, set()
+        self.personal_mode = PersonalMode(persistence)
+
+    def personal_info(self):
+        return self.personal_mode.public()
+
+    def set_personal_mode(self, enabled, roots=()):
+        with self._lock:
+            self.personal_mode.set(enabled, roots)
+            # IDs issued under an old scope cannot become grants for a new scope.
+            self._selected.clear()
+            self._grants.clear()
+
+    def known_app_launch_allowed(self):
+        return self.personal_mode.enabled()
 
     @staticmethod
     def _open(path):
         if os.name != 'nt':
-            raise FileAccessError('Открытие PDF поддерживается только в Windows.')
+            raise FileAccessError('Открытие документов поддерживается только в Windows.')
         os.startfile(str(path), 'open')
 
     def folder_info(self):
@@ -157,7 +184,7 @@ class FileAccess:
             identity = _identity(folder)
             fingerprint = hashlib.sha256(repr((str(folder), identity)).encode()).hexdigest()
             return {'path': str(folder), 'fingerprint': fingerprint,
-                    'allowed': self._folder_grant == (folder, identity), 'recursive': False}
+                    'allowed': self._folder_grant == (folder, identity) or self.personal_mode.allows(folder), 'recursive': False}
 
     def set_folder_permission(self, allowed, fingerprint):
         with self._lock:
@@ -176,7 +203,7 @@ class FileAccess:
 
     def _folder(self):
         folder = _checked(self.folder_provider())
-        if self._folder_grant != (folder, _identity(folder)):
+        if self._folder_grant != (folder, _identity(folder)) and not self.personal_mode.allows(folder):
             self._folder_grant = None
             raise FileAccessError('Сначала разреши чтение системной папки Загрузки.')
         return folder
@@ -221,17 +248,21 @@ class FileAccess:
             return refused(action, None, 'Не удалось безопасно прочитать PDF. Проверь разрешение на Загрузки и состояние файла.')
 
     def _selection(self, owner, file_id):
+        from .personal_permissions import ordinary_path
         selected = self._selected.get(file_id)
         if selected is None or selected.owner != owner:
-            raise FileAccessError('Выбери PDF в этом разговоре повторно.')
-        if selected.path.parent != self._folder():
-            raise FileAccessError('Разрешение на папку изменилось.')
+            raise FileAccessError('Выбери документ в этом разговоре повторно.')
+        if not ordinary_path(selected.path):
+            raise FileAccessError('Секретные и системные файлы исключены из доступа.')
+        if not self.personal_mode.allows(selected.path):
+            if selected.path.parent != self._folder():
+                raise FileAccessError('Разрешение на папку изменилось.')
         return selected
 
     def selected_info(self, owner, file_id):
         with self._lock:
             selected = self._selection(owner, file_id)
-            return {**selected.public(), 'open_allowed': file_id in self._grants}
+            return {**selected.public(), 'open_allowed': file_id in self._grants or self.personal_mode.allows(selected.path)}
 
     def set_open_permission(self, owner, file_id, allowed):
         with self._lock:
@@ -250,19 +281,182 @@ class FileAccess:
         try:
             with self._lock:
                 selected = self._selection(owner, file_id)
-                if file_id not in self._grants:
-                    return refused(action, file_id, 'Разреши открытие именно этого PDF в настройках файлов.', status='permission_required')
+                if file_id not in self._grants and not self.personal_mode.allows(selected.path):
+                    return refused(action, file_id, 'Разреши открытие этого документа в настройках файлов или включи режим личного компьютера.', status='permission_required')
                 with _locked_path(selected.path):
                     self._selection(owner, file_id)
                     if _fingerprint(_checked(selected.path)) != (selected.stamp, selected.digest):
                         self._grants.discard(file_id)
                         raise FileAccessError('Файл изменился.')
                     self.opener(selected.path)
+                    self.personal_mode.record('open', selected.path, 'request_accepted')
+                    observed = self.observer(selected.path) if self.observer else None
+                    if observed:
+                        return ActionResult(True, action, file_id, 'observed', observed_state='visible_window',
+                            status_text=f'Окно документа {selected.path.name} обнаружено.', data=selected.public())
                     return ActionResult(True, action, file_id, 'request_accepted',
                         status_text=f'Команда открытия {selected.path.name} передана Windows; появление окна не проверено.',
                         data=selected.public())
         except (OSError, ValueError, RuntimeError):
-            return refused(action, file_id, 'Не удалось безопасно открыть выбранный PDF. Найди и разреши файл повторно.')
+            return refused(action, file_id, 'Не удалось безопасно открыть выбранный документ. Найди и разреши файл повторно.')
+
+    def _scopes(self, scope):
+        if scope == 'downloads':
+            return [self._folder()]
+        roots = self.personal_mode.roots()
+        if scope == 'all':
+            # Avoid duplicate enumeration of nested grants.
+            paths = list(roots.values())
+            return [root for root in paths if not any(other in root.parents for other in paths)]
+        if scope not in roots:
+            raise FileAccessError('Выбери папку из разрешённых областей поиска.')
+        return [roots[scope]]
+
+    def search(self, owner, query='', extensions=None, scope='downloads', sort_by='modified', order='desc',
+               recursive=False, limit=10, min_size=None, max_size=None):
+        """Only declared scope IDs and data filters are accepted; no executable paths.
+
+        A truncated or inaccessible scan never establishes a global oldest/newest.
+        Results are references to immutable identities, not model-supplied paths.
+        """
+        from .personal_permissions import ordinary_path
+        action, started = 'files.search', time.monotonic()
+        try:
+            if (not isinstance(owner, str) or not owner or not isinstance(query, str) or len(query) > 500
+                    or sort_by not in ('modified', 'created', 'size', 'name') or order not in ('asc', 'desc')
+                    or type(recursive) is not bool or type(limit) is not int or not 1 <= limit <= 20
+                    or not isinstance(scope, str)):
+                raise FileAccessError('Некорректные параметры поиска.')
+            for bound in (min_size, max_size):
+                if bound is not None and (type(bound) is not int or bound < 0 or bound > 64 * 1024 * 1024):
+                    raise FileAccessError('Предел размера должен быть от 0 до 64 МиБ.')
+            if min_size is not None and max_size is not None and min_size > max_size:
+                raise FileAccessError('Минимальный размер больше максимального.')
+            if extensions is None:
+                extensions = READABLE_EXTENSIONS
+            if not isinstance(extensions, (tuple, list, set, frozenset)) or not 1 <= len(extensions) <= len(READABLE_EXTENSIONS):
+                raise FileAccessError('Укажи поддерживаемые расширения документов.')
+            extensions = {'.' + x.lower().lstrip('.') for x in extensions if isinstance(x, str)}
+            if not extensions or not extensions <= READABLE_EXTENSIONS:
+                raise FileAccessError('Исполняемые и неподдерживаемые файлы исключены.')
+            stop = {'найди', 'найти', 'файл', 'файлы', 'документ', 'документы', 'папке', 'самый',
+                    'последний', 'старый', 'новый', 'pdf', 'downloads', 'скачал', 'который', 'пожалуйста', 'мне'}
+            terms = [x for x in re.findall(r'[\w-]+', query.casefold().replace('ё', 'е')) if x not in stop and len(x) > 1]
+            with self._lock:
+                roots = self._scopes(scope)
+                if recursive and not self.personal_mode.enabled():
+                    raise FileAccessError('Вложенные папки требуют режима личного компьютера.')
+                deadline, visited, rejected, candidates = started + 10, 0, 0, []
+                pending = [(root, 0) for root in roots]
+                while pending:
+                    folder, depth = pending.pop()
+                    if depth > 32 or time.monotonic() > deadline:
+                        raise FileAccessError('Поиск неполный: превышен предел времени или глубины. Выбери более узкую папку.')
+                    with _locked_path(folder, True):
+                        _checked(folder)
+                        with os.scandir(folder) as entries:
+                            for item in entries:
+                                visited += 1
+                                if visited > 20000 or time.monotonic() > deadline:
+                                    raise FileAccessError('Поиск неполный: больше 20000 объектов или 10 секунд. Выбери более узкую папку.')
+                                path = Path(item.path)
+                                if not ordinary_path(path):
+                                    rejected += 1
+                                    continue
+                                if item.is_dir(follow_symlinks=False):
+                                    if recursive:
+                                        try:
+                                            _checked(path)
+                                            pending.append((path, depth + 1))
+                                        except (OSError, ValueError):
+                                            rejected += 1
+                                    continue
+                                if path.suffix.casefold() not in extensions or not item.is_file(follow_symlinks=False):
+                                    continue
+                                try:
+                                    _checked(path)
+                                    info = item.stat(follow_symlinks=False)
+                                except (OSError, ValueError):
+                                    rejected += 1
+                                    continue
+                                if info.st_size > 64 * 1024 * 1024 or (min_size is not None and info.st_size < min_size) or (max_size is not None and info.st_size > max_size):
+                                    continue
+                                name = path.name.casefold().replace('ё', 'е')
+                                if terms and not all(term in name for term in terms):
+                                    continue
+                                created = getattr(info, 'st_birthtime_ns', info.st_ctime_ns if os.name == 'nt' else None)
+                                if sort_by == 'created' and created is None:
+                                    raise FileAccessError('На этом диске время создания недоступно; выбери время изменения.')
+                                value = {'modified': info.st_mtime_ns, 'created': created, 'size': info.st_size, 'name': name}[sort_by]
+                                candidates.append((path, value, created))
+                # Stable tie order independent of platform directory enumeration.
+                candidates.sort(key=lambda row: (row[0].name.casefold(), str(row[0])))
+                candidates.sort(key=lambda row: row[1], reverse=order == 'desc')
+                if not candidates:
+                    self.personal_mode.record('search', scope, 'not_found')
+                    return refused(action, None, 'Подходящие документы в выбранной области не найдены.', status='not_found')
+                if len(self._selected) + min(limit, len(candidates)) > 256:
+                    raise FileAccessError('Слишком много выбранных файлов. Начни новый сеанс доступа.')
+                files, selections = [], []
+                for path, _, created in candidates[:limit]:
+                    if time.monotonic() > started + 20:
+                        raise FileAccessError('Проверка результатов превысила 20 секунд. Сузь поиск.')
+                    with _locked_path(path):
+                        stamp, digest = _fingerprint(_checked(path))
+                    selected = SelectedFile(secrets.token_urlsafe(24), owner, path, stamp, digest, created)
+                    selections.append(selected)
+                    files.append(selected.public())
+                if time.monotonic() > started + 20:
+                    raise FileAccessError('Проверка результатов превысила 20 секунд. Сузь поиск.')
+                self._selected.update((selected.id, selected) for selected in selections)
+                self.personal_mode.record('search', scope, 'observed')
+                label = {'modified': 'времени изменения (не скачивания)', 'created': 'времени создания',
+                         'size': 'размеру', 'name': 'названию'}[sort_by]
+                first = files[0]
+                text = '\n'.join(f'{row["filename"]} — {row["modified_at"]}; {row["size_bytes"]} байт; {row["path"]}' for row in files)
+                return ActionResult(True, action, first['file_id'], 'observed', 'files_selected',
+                    duration_ms=round((time.monotonic() - started) * 1000),
+                    status_text=f'Сортировка по {label}, {"возрастание" if order == "asc" else "убывание"}.\n{text}',
+                    data={**first, 'files': files, 'sort_by': sort_by, 'order': order, 'scope': scope,
+                          'scan_complete': True, 'visited': visited, 'excluded': rejected, 'total_matches': len(candidates)})
+        except (OSError, ValueError, RuntimeError) as exc:
+            self.personal_mode.record('search', str(scope), 'denied')
+            reason = str(exc) if isinstance(exc, FileAccessError) else 'Не удалось полностью и безопасно прочитать область поиска.'
+            return refused(action, None, reason, status='permission_required' if 'разреш' in reason.casefold() or 'выключен' in reason else 'denied')
+
+    def read_selected(self, owner, file_id, query='', budget=12000):
+        from .attachments import AttachmentError, extract_document, choose_document_text
+        action = 'files.read_selected_file'
+        try:
+            if not isinstance(query, str) or len(query) > 2000 or type(budget) is not int or not 1000 <= budget <= 32000:
+                raise FileAccessError('Некорректный запрос к документу.')
+            with self._lock:
+                selected = self._selection(owner, file_id)
+                with _locked_path(selected.path):
+                    self._selection(owner, file_id)
+                    if _fingerprint(_checked(selected.path)) != (selected.stamp, selected.digest):
+                        raise FileAccessError('Файл изменился. Найди его повторно.')
+                    if selected.stamp[2] > 10 * 1024 * 1024:
+                        raise FileAccessError('Для извлечения текста выбери документ до 10 МиБ.')
+                    data = selected.path.read_bytes()
+                    name = selected.path.name
+                    if selected.path.suffix.casefold() == '.markdown':
+                        name += '.md'
+                    elif selected.path.suffix.casefold() == '.tsv':
+                        name += '.txt'
+                    document = extract_document(data, name)
+                text = choose_document_text(document.text, query, budget)
+                self.personal_mode.record('read', selected.path, 'observed')
+                return ActionResult(True, action, file_id, 'observed', 'text_extracted',
+                    status_text=f'Прочитан документ {selected.path.name}.',
+                    data={**selected.public(), 'text': text, 'untrusted_document': True,
+                          'characters': len(text), 'truncated': document.truncated or len(text) < len(document.text),
+                          'retained_characters': len(document.text)})
+        except (OSError, ValueError, RuntimeError) as exc:
+            self.personal_mode.record('read', str(file_id), 'denied')
+            reason = str(exc) if isinstance(exc, (FileAccessError, AttachmentError)) else 'Не удалось безопасно прочитать документ.'
+            return refused(action, file_id, reason)
 
 
-file_access = FileAccess()
+from .settings import ROOT
+file_access = FileAccess(persistence=ROOT / 'results' / 'private' / 'personal_mode.json')
