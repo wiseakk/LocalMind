@@ -1,5 +1,99 @@
 ﻿# DevCrew — проверяемый статус LocalMind 1.0
 
+## 2026-10-30 — Focused regression implementation; browser gate pending
+
+Provisioned Python 3.14.5 reproduced the exact file overwrite regression. The
+pathname/handle probe differed only in ctime nanoseconds. Preparation and execution
+now share bounded fstat snapshots and hashing, including birthtime where available.
+Real disposable Windows fixtures verify rapid create/overwrite/delete, preserved
+size/mtime byte changes, identical-byte replacement, parent replacement, locks,
+late move destinations and replay. Final full Python: **439 passed, 35 subtests
+passed**, plus the existing pytest-cache ACL warning. Independent review caught
+and verified restored pre-open file bounds and pathname-to-handle identity checks.
+
+Live loopback HTTP upload of the original 1x1 PNG returns **200 / ready**; malformed
+WEBP returns **409** and only the PNG ID is retained in the conversation. Exact
+responses are in `docs/evidence/redemption-regression-png-http.json`. The old
+browser fixture mixed a mocked instance with a real conversation, which the session
+code correctly rejects before upload. A new controlled DOM reproduction confirms
+one conversation request and zero uploads for this mismatch. Its browser test uses consistent
+live metadata, a realistic 900x700 PNG and asserts HTTP acknowledgement, explicit
+ready state and context exclusion of malformed WEBP. No validation was weakened.
+
+Real installed **qwen3.5:9b** inference passed all four fixture scenarios (image
+description, image-only, page-22 PDF question and follow-up), without downloads.
+The observer forwarded actual local HTTP requests and compared decoded outgoing
+image hashes with server-retained sanitized JPEGs; both image turns matched. Answer
+checks separately found the red triangle and LMV-8142 text. Evidence is in
+docs/evidence/redemption-regression-multimodal.json; this is not browser evidence.
+
+DPR sampling now uses existing frames, lifecycle events and one non-rendering
+one-second check only in visible quiet modes. Controlled DOM tests verify repeated
+1.4/2/1.25/1 transitions, approximately 1.083 at capped geometry, <=1.6M pixels,
+no idle drawing, single animation/timer chains, detached listeners and hide/restore.
+All **49 DOM checks** (34 UI, 8 attachment, 7 history), seven JS syntax checks,
+browser test syntax and 76 local asset checks pass. Final diff check passes.
+
+Both focused Playwright commands and the full 33-scenario suite were attempted,
+but worker startup fails with
+`spawn EPERM`; direct Chromium launch also fails at Mojo platform-channel creation
+with Windows `Access is denied (0x5)`. Browser acceptance and native monitor/zoom
+transitions are **not verified** in this checkout. Do not treat this milestone as
+fully accepted or merge it. Windows microphone/speaker, GPU execution/telemetry,
+GPU STT and CPU inference fallback were not tested by this repair.
+
+### Actual Windows app reconciliation (read-only)
+
+Dedicated loopback `/api/apps/refresh` then unmocked `/api/apps` returned HTTP 200.
+No launch permissions were granted and no applications were launched.
+
+| Provider | Candidates | Accepted records | Rejected |
+| --- | ---: | ---: | ---: |
+| Start Menu + Desktop shortcuts | 187 | 83 | 104 |
+| App Paths | 116 | 36 | 80 |
+| Uninstall metadata | 49 | 34 | 15 |
+| Get-StartApps/package manifests | 12 | 11 | 1 |
+| Steam | 12 | 11 | 1 |
+| Total | 376 | 175 | 201 |
+
+**175 accepted records − 80 global duplicates = 95 unique applications**. Accepted
+records are not unique applications: source aliases and repeated registrations
+can name the same validated target. The running-process adapter returned zero
+visible-process rows in this session; portable roots were not configured.
+Unavailable providers: none reported. Truncation: **true**.
+
+Contemporaneous Get-StartApps count is **168** versus the supplied **167**; current
+Start Menu `.lnk` counts are **64 user + 110 common = 174**, versus supplied **160**.
+There is no historical inventory list to attribute the +1/+14 differences to
+specific installations. Get-StartApps is intersected with executable-bearing
+package manifests: only 12 candidate rows emerge, of which one fails registration
+revalidation. Do not interpret the remaining raw entries as parser failures.
+
+Desktop inventory adds **13 user + 19 public** shortcuts. The independent bounded
+diagnostic sees all 206 shortcuts, but the production scan emits 174 Start Menu +
+13 user Desktop = 187 candidates: its shared **10,000-files** traversal budget is
+exhausted and the public Desktop's 19 candidates are not visited. Reported
+truncation is therefore material, not a complete-catalog claim.
+
+Measured shortcut exclusions: 37 with arguments, 33 without an absolute local
+target, 17 shells/scripts/system launchers, 6 service/settings components,
+5 missing targets, 4 invalid paths, 1 unreadable shortcut and 1 installer. App Paths
+rejects 8 non-GUI executables, 8 helpers, 18 shells/launchers, 6 missing targets,
+16 changed registrations and 24 unsupported registrations. Uninstall candidates
+reject 11 non-GUI executables, 2 installers and 2 shells/launchers; Steam rejects
+1 service/settings component. Provider-internal skips before candidate emission
+(for example registry entries without matching install metadata) are not fully
+classified and are not assigned invented counts.
+
+Reproduce diagnostics with `LOCALMIND_PORT` set to the dedicated service port and
+`python scripts/verify_app_discovery.py`. Counts, rejection reasons, traversal
+bound sites and limitations: `docs/evidence/redemption-regression-apps.json`.
+
+Start remains `powershell -ExecutionPolicy Bypass -File .\start_windows.ps1` after
+setup/model downloads. Offline DEMO and troubleshooting remain in `README.md`;
+the existing 40 explanatory defense answers remain in `docs/DEFENSE_QA.md`.
+No commit, push, deployment or merge: the required browser gate remains blocked.
+
 ## 2026-10-29 — Blacksite workspace implementation; browser acceptance blocked
 
 Unified fullscreen scene replaces the permanent chat/right-graph split. Added

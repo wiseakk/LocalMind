@@ -106,21 +106,44 @@ def _fingerprint(path):
     before = path.stat(follow_symlinks=False)
     if not stat.S_ISREG(before.st_mode) or before.st_size > 64 * 1024 * 1024:
         raise FileAccessError('Документ должен быть обычным файлом размером до 64 МБ.')
-    if path.suffix.casefold() not in READABLE_EXTENSIONS:
+    with path.open('rb') as source:
+        snapshot = _stream_fingerprint(source, path.suffix.casefold())
+        # Bind the checked pathname to the hashed handle. Compare only identity
+        # across these APIs: Windows ctime semantics are not interchangeable.
+        if (before.st_dev, before.st_ino) != snapshot[0][:2] or _identity(path) != snapshot[0][:2]:
+            raise FileAccessError('Файл изменился во время проверки.')
+        return snapshot
+
+
+def _stream_fingerprint(source, suffix):
+    """Comparable snapshots from the same handle used to read the bytes.
+
+    Windows Python versions can give stat and fstat different ctime semantics.
+    Never compare those APIs or reconstruct nanoseconds from floating seconds.
+    Keep birthtime separately where available, as well as the change timestamp.
+    Callers hold the checked path against replacement for the whole operation.
+    """
+    def stamp(info):
+        return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns,
+                info.st_ctime_ns, getattr(info, 'st_birthtime_ns', None))
+
+    before = os.fstat(source.fileno())
+    if not stat.S_ISREG(before.st_mode) or before.st_size > 64 * 1024 * 1024:
+        raise FileAccessError('Документ должен быть обычным файлом размером до 64 МБ.')
+    if suffix not in READABLE_EXTENSIONS:
         raise FileAccessError('Тип файла не поддерживается для безопасного чтения и открытия.')
     digest = hashlib.sha256()
     total, deadline = 0, time.monotonic() + 5
-    with path.open('rb') as source:
-        if path.suffix.casefold() == '.pdf' and source.read(5) != b'%PDF-':
-            raise FileAccessError('Файл не имеет заголовка PDF.')
-        source.seek(0)
-        for chunk in iter(lambda: source.read(65536), b''):
-            total += len(chunk)
-            if total > 64 * 1024 * 1024 or time.monotonic() > deadline:
-                raise FileAccessError('Проверка документа превысила ограничение размера или времени.')
-            digest.update(chunk)
-    after = path.stat(follow_symlinks=False)
-    stamp = lambda s: (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns, s.st_ctime_ns)
+    source.seek(0)
+    if suffix == '.pdf' and source.read(5) != b'%PDF-':
+        raise FileAccessError('Файл не имеет заголовка PDF.')
+    source.seek(0)
+    for chunk in iter(lambda: source.read(65536), b''):
+        total += len(chunk)
+        if total > 64 * 1024 * 1024 or time.monotonic() > deadline:
+            raise FileAccessError('Проверка документа превысила ограничение размера или времени.')
+        digest.update(chunk)
+    after = os.fstat(source.fileno())
     if stamp(before) != stamp(after):
         raise FileAccessError('Файл изменился во время проверки.')
     return stamp(after), digest.hexdigest()

@@ -1,5 +1,36 @@
 # Архитектурные решения DevCrew
 
+## 2026-10-30 — Focused Redemption regression repair
+
+Keep the existing interface and safety boundaries. Reproduce each regression on
+Windows before edits. Snapshot probe on provisioned Python 3.14.5 shows only
+`st_ctime_ns` differs between pathname stat and locked-handle fstat (creation vs
+change timestamp); identity, size, mtime and SHA256 agree. Use one bounded,
+handle-based fingerprint implementation at preparation and confirmation, retaining
+exact identity, nanosecond timestamps, hash, owner, expiry and one-shot checks.
+
+Raster integration must use live /api/info and conversation metadata together;
+keep deterministic UI mocks separate. Capture actual upload acknowledgement and
+exclude malformed images from context without relaxing parser validation. Verify
+a 900x700 fixture against a real installed local vision model and compare sanitized
+JPEG hashes in the actual outgoing Ollama request, separately from answer quality.
+
+Diagnose resolution events, quality state and DPR with fixed CSS geometry. Sample
+DPR in existing frames and lifecycle events; if quiet modes need a fallback, use
+one low-frequency non-rendering check while visible, suspended on hide/offscreen.
+Retain the pixel cap, quality adaptation and reduced-motion behavior. Query actual
+/api/apps and reconcile provider records/duplicates with contemporaneous Windows
+inventory, explicitly documenting provider skips and unavailable evidence.
+
+Implementation verification: Windows fixture, full Python, DOM, syntax, assets
+and real local multimodal checks pass. Independent Reviewer/Security required
+restoring pre-open regular-file bounds and pathname/handle identity comparison
+around the shared hash; that correction and regression test pass. Keep browser
+acceptance explicitly blocked by worker/Chromium IPC permission failures; no
+commit/merge until the requested browser gates can pass. No discovery permission
+was broadened: diagnose the existing 10,000-file scan truncation rather than
+change catalog scope in this focused regression repair.
+
 ## 2026-10-29 — Blacksite scene and trustworthy context
 
 Keep the existing Canvas/audio/streaming modules and override the layout as one

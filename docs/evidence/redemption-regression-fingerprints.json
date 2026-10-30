@@ -1,0 +1,36 @@
+{
+  "python": "3.14.5 (tags/v3.14.5:5607950, May 10 2026, 10:43:50) [MSC v.1944 64 bit (AMD64)]",
+  "expected": [
+    [
+      10158494061862350616,
+      1125899907649628,
+      20,
+      1793361626901788800,
+      1793361626901614200
+    ],
+    "1172b15c4df24db3f052977ca54e50dabfd0ca73d5a1f824f9e4797a15fc5d7b"
+  ],
+  "actual": [
+    [
+      10158494061862350616,
+      1125899907649628,
+      20,
+      1793361626901788800,
+      1793361626901788800
+    ],
+    "1172b15c4df24db3f052977ca54e50dabfd0ca73d5a1f824f9e4797a15fc5d7b"
+  ],
+  "differing_fields": [
+    "ctime_ns"
+  ],
+  "kind": "Before-fix Windows path stat versus locked handle fstat; disposable fixture",
+  "generated_utc": "2026-10-30T12:11:10.981711+00:00",
+  "fields": [
+    "device",
+    "inode",
+    "size",
+    "mtime_ns",
+    "ctime_ns"
+  ],
+  "current_fix_verification": "Full Python 439 passed, 35 subtests; no timestamp rounding or identity/hash removal"
+}

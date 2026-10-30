@@ -1,0 +1,125 @@
+{
+  "generated_utc": "2026-10-30T12:12:07.026277+00:00",
+  "kind": "live loopback /api/apps plus independent bounded read-only provider diagnostics",
+  "http_status": 200,
+  "statistics": {
+    "sources": {
+      "shortcuts": {
+        "candidates": 187,
+        "accepted": 83,
+        "rejected": 104
+      },
+      "app_paths": {
+        "candidates": 116,
+        "accepted": 36,
+        "rejected": 80
+      },
+      "uninstall": {
+        "candidates": 49,
+        "accepted": 34,
+        "rejected": 15
+      },
+      "start_apps": {
+        "candidates": 12,
+        "accepted": 11,
+        "rejected": 1
+      },
+      "steam": {
+        "candidates": 12,
+        "accepted": 11,
+        "rejected": 1
+      }
+    },
+    "rejected": 201,
+    "duplicates": 80,
+    "truncated": true,
+    "unavailable_providers": [],
+    "duration_ms": 3217.81,
+    "applications": 95
+  },
+  "accepted_minus_duplicates_equals_unique": true,
+  "supplied_baseline": {
+    "get_start_apps": 167,
+    "start_menu_shortcuts": 160
+  },
+  "contemporaneous": {
+    "get_start_apps": 168,
+    "shortcut_roots": [
+      {
+        "provider_root_index": 0,
+        "shortcuts": 64,
+        "inventory_complete": true,
+        "emitted_candidates": 64
+      },
+      {
+        "provider_root_index": 1,
+        "shortcuts": 110,
+        "inventory_complete": true,
+        "emitted_candidates": 110
+      },
+      {
+        "provider_root_index": 2,
+        "shortcuts": 13,
+        "inventory_complete": true,
+        "emitted_candidates": 13
+      },
+      {
+        "provider_root_index": 3,
+        "shortcuts": 19,
+        "inventory_complete": true,
+        "emitted_candidates": 0
+      }
+    ],
+    "manifest_intersection_rows": 12,
+    "visible_process_rows_before_validation": 0
+  },
+  "independent_diagnostic_candidates": {
+    "shortcuts": 187,
+    "app_paths": 116,
+    "uninstall": 49,
+    "start_apps": 12,
+    "steam": 12
+  },
+  "candidate_rejection_reasons": {
+    "shortcuts": {
+      "Ярлыки с аргументами не разрешены.": 37,
+      "Не удалось загрузить ярлык Windows.": 1,
+      "Файл приложения не найден.": 5,
+      "Нужен абсолютный локальный путь.": 33,
+      "Установщики и удаление программ не разрешены.": 1,
+      "Скрипты, оболочки и системные запускатели не разрешены.": 17,
+      "Недопустимый путь приложения.": 4,
+      "Служебный или изменяющий настройки компонент не является приложением.": 6
+    },
+    "app_paths": {
+      "Разрешены только настольные GUI приложения, не CLI.": 8,
+      "Фоновый компонент не является запускаемым приложением.": 8,
+      "Скрипты, оболочки и системные запускатели не разрешены.": 18,
+      "Файл приложения не найден.": 6,
+      "Регистрация приложения изменилась.": 16,
+      "Неподдерживаемая регистрация приложения.": 24
+    },
+    "uninstall": {
+      "Разрешены только настольные GUI приложения, не CLI.": 11,
+      "Установщики и удаление программ не разрешены.": 2,
+      "Скрипты, оболочки и системные запускатели не разрешены.": 2
+    },
+    "start_apps": {
+      "Регистрация приложения Store изменилась.": 1
+    },
+    "steam": {
+      "Служебный или изменяющий настройки компонент не является приложением.": 1
+    }
+  },
+  "diagnostic_completed_within_budget": true,
+  "bounded_scan_truncation_sites": {
+    "discover_sources:269": 1,
+    "discover_sources:261": 2
+  },
+  "diagnostic_unavailable_providers": [],
+  "limitations": [
+    "Provider-internal registry skips before candidate emission are not individually classified.",
+    "Get-StartApps is intersected with executable-bearing package manifests; its raw count is not a candidate count.",
+    "Diagnostic scan is subsequent to the HTTP snapshot; running processes or installations may change."
+  ]
+}

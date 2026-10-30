@@ -156,6 +156,79 @@ def test_move_verified_and_never_overwrites_an_existing_target(tmp_path):
     assert (tmp_path / 'destination.txt').read_text(encoding='utf-8') == 'move actual bytes'
 
 
+def test_rapid_mutations_compare_the_same_handle_metadata(tmp_path):
+    service, scope = personal(tmp_path)
+    mutations = FileMutations(service)
+    target = tmp_path / 'rapid.txt'
+    for cycle in range(5):
+        for operation, content in [('create', 'initial'), ('overwrite', 'same-size'), ('overwrite', 'final')]:
+            before = target.read_bytes() if target.exists() else None
+            pending = mutations.prepare('owner', operation, scope, target.name, content)
+            assert pending.execution_status == 'confirmation_required'
+            assert (target.read_bytes() if target.exists() else None) == before
+            assert mutations.confirm('owner', pending.resolved_target, True).success
+            assert target.read_bytes() == content.encode()
+            assert not mutations.confirm('owner', pending.resolved_target, True).success
+        pending = mutations.prepare('owner', 'delete', scope, target.name)
+        assert mutations.confirm('owner', pending.resolved_target, True).success
+        assert not target.exists()
+
+
+@pytest.mark.parametrize('replacement', [False, True])
+def test_changed_bytes_or_identical_replacement_remain_stale(tmp_path, replacement):
+    service, scope = personal(tmp_path)
+    target = tmp_path / 'target.txt'
+    target.write_bytes(b'original')
+    original = target.stat()
+    mutations = FileMutations(service)
+    pending = mutations.prepare('owner', 'overwrite', scope, target.name, 'approved')
+    if replacement:
+        other = tmp_path / 'other.txt'
+        other.write_bytes(b'original')
+        os.replace(other, target)
+        assert target.stat().st_ino != original.st_ino
+    else:
+        target.write_bytes(b'changed!')
+    os.utime(target, ns=(original.st_atime_ns, original.st_mtime_ns))
+    assert target.stat().st_size == original.st_size
+    assert target.stat().st_mtime_ns == original.st_mtime_ns
+    assert not mutations.confirm('owner', pending.resolved_target, True).success
+    assert target.read_bytes() == (b'original' if replacement else b'changed!')
+    assert not mutations.confirm('owner', pending.resolved_target, True).success
+
+
+def test_parent_replacement_and_late_move_destination_are_refused(tmp_path):
+    service, scope = personal(tmp_path)
+    parent = tmp_path / 'nested'
+    parent.mkdir()
+    mutations = FileMutations(service)
+    pending = mutations.prepare('owner', 'create', scope, 'nested/new.txt', 'approved')
+    parent.rename(tmp_path / 'old-nested')
+    parent.mkdir()
+    assert not mutations.confirm('owner', pending.resolved_target, True).success
+    assert not (parent / 'new.txt').exists()
+    (tmp_path / 'source.txt').write_bytes(b'source')
+    pending = mutations.prepare('owner', 'move', scope, 'source.txt', destination='destination.txt')
+    (tmp_path / 'destination.txt').write_bytes(b'late destination')
+    assert not mutations.confirm('owner', pending.resolved_target, True).success
+    assert (tmp_path / 'source.txt').read_bytes() == b'source'
+    assert (tmp_path / 'destination.txt').read_bytes() == b'late destination'
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows sharing locks')
+def test_locked_file_refusal_consumes_confirmation_without_writing(tmp_path):
+    from localmind.file_mutations import _exact_handle, _parents_held
+    service, scope = personal(tmp_path)
+    target = tmp_path / 'locked.txt'
+    target.write_bytes(b'original')
+    mutations = FileMutations(service)
+    pending = mutations.prepare('owner', 'overwrite', scope, target.name, 'approved')
+    with _parents_held(target), _exact_handle(target):
+        assert not mutations.confirm('owner', pending.resolved_target, True).success
+    assert not mutations.confirm('owner', pending.resolved_target, True).success
+    assert target.read_bytes() == b'original'
+
+
 @pytest.mark.parametrize('target', ['../outside.txt', 'script.ps1', '.ssh/key.txt', 'credentials.json', 'item.txt:stream'])
 def test_mutations_cannot_escape_roots_or_write_sensitive_and_executable_targets(tmp_path, target):
     service, scope = personal(tmp_path)

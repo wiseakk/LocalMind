@@ -1,0 +1,27 @@
+{
+  "kind": "Direct live loopback HTTP upload; original PNG and malformed WEBP, no browser simulation",
+  "conversation_status": 200,
+  "instance_matches_mock": false,
+  "png_status": 200,
+  "png_body": {
+    "id": "RoEln4WKDWWBWe-ARWYjtbsdTLc1Cu9s",
+    "name": "dot.png",
+    "size": 70,
+    "kind": "image",
+    "mime": "image/jpeg",
+    "width": 1,
+    "height": 1,
+    "characters": 0,
+    "truncated": false,
+    "state": "ready",
+    "conversation_id": "vke6miuHmbWujVvS5IggO60CgYvtk5Dx",
+    "server_instance": "7df47328821245cebf2f5533c74be6a7"
+  },
+  "malformed_webp_status": 409,
+  "malformed_webp_body": {
+    "detail": "Изображение повреждено или превышает безопасные ограничения."
+  },
+  "retained_attachment_ids": [
+    "RoEln4WKDWWBWe-ARWYjtbsdTLc1Cu9s"
+  ]
+}

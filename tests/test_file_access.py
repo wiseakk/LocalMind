@@ -77,6 +77,28 @@ def test_disguised_pdf_is_never_openable(tmp_path):
     assert not result.success
 
 
+def test_fingerprint_keeps_path_bound_to_hashed_handle(tmp_path, monkeypatch):
+    import localmind.file_access as module
+    target = tmp_path / 'target.txt'
+    replacement = tmp_path / 'replacement.txt'
+    target.write_bytes(b'identical')
+    replacement.write_bytes(b'identical')
+    fingerprint = module._stream_fingerprint
+
+    def replace_after_hash(stream, suffix):
+        result = fingerprint(stream, suffix)
+        # On Windows normal file.open allows reads but denies delete. Replace
+        # after closing this diagnostic stream; the production caller holds its
+        # separate deny-delete lock throughout the operation.
+        stream.close()
+        os.replace(replacement, target)
+        return result
+
+    monkeypatch.setattr(module, '_stream_fingerprint', replace_after_hash)
+    with pytest.raises(FileAccessError, match='изменился'):
+        module._fingerprint(target)
+
+
 def test_bounded_scan_does_not_claim_newest_on_partial_enumeration(tmp_path, monkeypatch):
     import localmind.file_access as module
     class Rows:

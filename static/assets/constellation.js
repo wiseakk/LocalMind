@@ -12,6 +12,7 @@
   let panelVisible=true;
   let width=1,height=1,timer=null,last=0,frameCount=0,dirty=true,drag=null,parallaxX=0,parallaxY=0,toolUntil=0,toolTimer=null;
   let factor=1,quality=1.5,background=null,starfield=null,cacheDirty=true,announced=null;
+  let sampledDpr=window.devicePixelRatio||1,resolutionTimer=null;
   let settling=true,settleTime=0,stableSteps=0,accumulator=0,geometryScale=36;
   let drawMean=0,qualityFrames=0,diagnostics=null,overlayLast=0,sampleIndex=0,sampleCount=0;
   const intervals=new Float32Array(180),costs=new Float32Array(180),glows=new Map();
@@ -208,7 +209,15 @@
   }
   function isVisible(){return visible&&panelVisible&&!document.hidden&&!closing;}
   function continuous(){return !reduced&&!low;}
-  function stopFrames(){if(timer!==null)cancelAnimationFrame(timer);timer=null;last=0;accumulator=0;sampleCount=sampleIndex=0;if(diagnostics)diagnostics.textContent='Canvas · приостановлено';}
+  function stopFrames(){if(timer!==null)cancelAnimationFrame(timer);timer=null;clearTimeout(resolutionTimer);resolutionTimer=null;last=0;accumulator=0;sampleCount=sampleIndex=0;if(diagnostics)diagnostics.textContent='Canvas · приостановлено';}
+  function sampleResolution(){if(sampledDpr!==(window.devicePixelRatio||1))resolutionChanged();}
+  function watchQuietResolution(){
+    // DPR changes (including emulation) may deliver neither resize nor a
+    // media-query event. Quiet modes have no frames: check one scalar per second,
+    // without drawing or reading layout unless resolution actually changed.
+    if(resolutionTimer!==null||!ctx||!isVisible()||continuous())return;
+    resolutionTimer=setTimeout(()=>{resolutionTimer=null;if(!isVisible())return;sampleResolution();watchQuietResolution();},1000);
+  }
   function timing(){
     const count=sampleCount,sorted=Array.from(intervals.subarray(0,count)).sort((a,b)=>a-b);
     let total=0,drawTotal=0;for(let i=0;i<count;i++){total+=intervals[i];drawTotal+=costs[i];}
@@ -217,6 +226,7 @@
   function schedule(){
     if(timer!==null||!ctx||!isVisible())return;
     timer=requestAnimationFrame(now=>{timer=null;if(!isVisible())return;
+      sampleResolution();
       const dt=last?Math.min(50,now-last):1000/60;
       // Explicit economy mode throttles live audio only; normal mode follows
       // the display, including high-refresh displays. Quiet modes draw on demand.
@@ -234,7 +244,7 @@
       else{last=0;sampleCount=sampleIndex=0;if(diagnostics)diagnostics.textContent='Canvas · по запросу';}
     });
   }
-  function redraw(){dirty=true;schedule();}
+  function redraw(){dirty=true;watchQuietResolution();schedule();}
   function resize(){
     const rect=canvas.getBoundingClientRect();
     const w=Math.max(1,canvas.clientWidth||rect.width),h=Math.max(1,canvas.clientHeight||rect.height);
@@ -262,7 +272,7 @@
   get('nodeSelect').addEventListener('keydown',e=>{const d=e.altKey&&{ArrowUp:[0,-.08],ArrowDown:[0,.08],ArrowLeft:[-.08,0],ArrowRight:[.08,0]}[e.key];if(d){e.preventDefault();move(...d);}});
   get('moveNode').addEventListener('click',()=>move(.12,0));
   get('centerGraph').addEventListener('click',()=>{nodes=[];parallaxX=parallaxY=0;rebuild();});
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopFrames();else redraw();});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopFrames();else resolutionChanged();});
   if(window.ResizeObserver)new ResizeObserver(resize).observe(canvas);
   window.addEventListener('resize',resize);
   // ResizeObserver observes CSS geometry, not backing resolution. A monitor/DPR
@@ -270,11 +280,12 @@
   let resolutionQuery=null;
   function watchResolution(){
     resolutionQuery?.removeEventListener('change',resolutionChanged);
-    resolutionQuery=window.matchMedia?.(`(resolution: ${window.devicePixelRatio||1}dppx)`);
+    sampledDpr=window.devicePixelRatio||1;
+    resolutionQuery=window.matchMedia?.(`(resolution: ${sampledDpr}dppx)`);
     resolutionQuery?.addEventListener('change',resolutionChanged);
   }
   function resolutionChanged(){watchResolution();resize();}
-  if(window.IntersectionObserver)new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;if(!visible)stopFrames();else redraw();}).observe(canvas);
+  if(window.IntersectionObserver)new IntersectionObserver(entries=>{visible=entries[0].isIntersecting;if(!visible)stopFrames();else resolutionChanged();}).observe(canvas);
   window.addEventListener('pagehide',()=>{closing=true;stopFrames();resolutionQuery?.removeEventListener('change',resolutionChanged);clearTimeout(toolTimer);amplitude.stop();amplitude.context?.close().catch(()=>{});amplitude.context=null;});
   window.addEventListener('pageshow',()=>{closing=false;watchResolution();resize();});
   // Audio samples come exclusively from the active capture/playback source.
@@ -308,7 +319,7 @@
   };
   window.LocalMindAudio=amplitude;
   window.localmindScene={setActivity,redraw,
-    setVisible(value){if(panelVisible===Boolean(value))return;panelVisible=Boolean(value);if(panelVisible)redraw();else stopFrames();},
+    setVisible(value){if(panelVisible===Boolean(value))return;panelVisible=Boolean(value);if(panelVisible)resolutionChanged();else stopFrames();},
     configure(options){if(reduced===options.reduced&&low===options.low)return;reduced=options.reduced;low=options.low;stopFrames();for(const n of nodes)n.vx=n.vy=0;wakePhysics();resize();},
     setDiagnostics(enabled){
       if(enabled&&!diagnostics){diagnostics=document.createElement('output');diagnostics.className='canvas-diagnostics';diagnostics.setAttribute('aria-hidden','true');canvas.parentElement.append(diagnostics);}

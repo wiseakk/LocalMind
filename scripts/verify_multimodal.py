@@ -1,4 +1,4 @@
-"""Exercise production upload -> context -> real local Ollama, with fixture data.
+r"""Exercise production upload -> context -> real local Ollama, with fixture data.
 
 Run: .venv\Scripts\python.exe scripts/verify_multimodal.py
 No model download, browser simulation, personal file read or desktop action.
@@ -70,7 +70,8 @@ def main():
     parser.add_argument('--model', default='qwen3.5:9b')
     parser.add_argument('--output', type=Path, default=ROOT / 'docs/evidence/redemption-multimodal.json')
     args = parser.parse_args()
-    observed, rows = [], []
+    observed, rows, uploads = [], [], []
+    image_hashes = {}
     original_send = httpx.Client.send
 
     def observe(client, request, *send_args, **send_kwargs):
@@ -97,8 +98,20 @@ def main():
     def upload(key, name, data):
         response = client.post('/api/attachments', headers=headers,
             data={'conversation_id': key, 'server_instance': server.SERVER_INSTANCE}, files={'file': (name, data)})
+        body = response.json()
+        record = {'name': name, 'http_status': response.status_code, 'body': body,
+                  'original_sha256': hashlib.sha256(data).hexdigest()}
+        uploads.append(record)
         response.raise_for_status()
-        return response.json()
+        if body.get('kind') == 'image':
+            conversation = server.conversations.acquire(key)
+            try:
+                sanitized = base64.b64decode(conversation.attachments[body['id']].encoded, validate=True)
+                image_hashes[body['id']] = hashlib.sha256(sanitized).hexdigest()
+                record['sanitized_jpeg_sha256'] = image_hashes[body['id']]
+            finally:
+                server.conversations.release(conversation)
+        return body
 
     def turn(key, text, ids, scenario, expected):
         start, before = time.monotonic(), len(observed)
@@ -115,10 +128,16 @@ def main():
             'actual_request': sent, 'final_response': answer, 'latency_ms': elapsed,
             'model_answer_checks': {name: bool(check(answer)) for name, check in expected.items()},
             'failure_reason': None}
+        expected_images = [image_hashes[id] for id in ids if id in image_hashes]
+        if expected_images:
+            row['image_transport_verified'] = bool(sent) and all(
+                request['image_sha256'] == expected_images for request in sent)
         if response.status_code != 200 or result.get('engine') in ('offline-error', 'vision-unavailable'):
             row['failure_reason'] = result.get('answer', result.get('detail', 'API failed'))
         elif not sent:
             row['failure_reason'] = 'No outgoing real Ollama chat request observed'
+        elif expected_images and not row['image_transport_verified']:
+            row['failure_reason'] = 'Outgoing image bytes differ from the sanitized attachment'
         elif not all(row['model_answer_checks'].values()):
             row['failure_reason'] = 'Model answer did not identify all fixture facts'
         rows.append(row)
@@ -147,7 +166,7 @@ def main():
         server.store.close()
     report = {'generated_utc': datetime.now(timezone.utc).isoformat(), 'model': args.model,
         'kind': 'real production API and real Ollama; fixture uploads; not browser visual or microphone evidence',
-        'model_downloaded': False, 'rows': rows,
+        'model_downloaded': False, 'uploads': uploads, 'rows': rows,
         'all_passed': len(rows) == 4 and all(row.get('failure_reason') is None for row in rows)}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')

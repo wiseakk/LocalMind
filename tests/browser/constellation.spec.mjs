@@ -91,12 +91,28 @@ test('documents use local upload, extracted preview, acknowledgement and safe re
   expect(mutations.every(path=>['/api/conversations','/api/attachments','/api/attachments/remove','/api/chat/stream','/api/tts/cancel'].includes(path))).toBe(true);
 });
 
-test('valid raster decodes to Canvas and malformed raster never becomes ready',async({page})=>{
-  await page.goto('/');
+test('valid raster decodes to Canvas and malformed raster never becomes ready',async({page},testInfo)=>{
+  // This is live upload integration: /api/info and /api/conversations must
+  // describe the same server. Deterministic mocked lifecycle coverage is above.
+  await page.unroute('**/api/info');
+  await page.goto('/');await expect(page.locator('#status')).toHaveText('Сервер подключён');
+  const png=await page.evaluate(()=>{
+    const c=document.createElement('canvas');c.width=900;c.height=700;const x=c.getContext('2d');
+    x.fillStyle='white';x.fillRect(0,0,900,700);x.fillStyle='red';x.beginPath();x.moveTo(450,80);x.lineTo(160,500);x.lineTo(740,500);x.fill();
+    x.fillStyle='black';x.font='64px sans-serif';x.fillText('LMV-8142',260,620);return c.toDataURL('image/png').split(',')[1];
+  });
+  const conversation=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/conversations'&&r.request().method()==='POST');
+  const upload=page.waitForResponse(r=>new URL(r.url()).pathname==='/api/attachments'&&r.request().method()==='POST');
   await page.locator('#fileInput').setInputFiles([
-    {name:'dot.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGPojjn/HwAF4gK2//l6AAAAAABJRU5ErkJggg==','base64')},
+    {name:'triangle.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')},
     {name:'bad.webp',mimeType:'image/webp',buffer:Buffer.from('not a webp')}
   ]);
+  const created=await conversation,response=await upload,body=await response.json();
+  await testInfo.attach('live-raster-http',{body:JSON.stringify({conversation_status:created.status(),conversation:await created.json(),upload_status:response.status(),upload:body}),contentType:'application/json'});
+  expect(response.status()).toBe(200);expect(body).toMatchObject({kind:'image',width:900,height:700,state:'ready'});
+  await expect(page.locator('.attachment').first()).toHaveAttribute('data-state','ready');
+  await expect(page.locator('.attachment').nth(1)).toHaveAttribute('data-state','error');
+  expect(await page.evaluate(()=>localmindAttachments.contextIds())).toEqual([body.id]);
   await expect(page.locator('.attachment canvas')).toHaveCount(1);await expect(page.locator('.attachment.error')).toHaveCount(1);
   expect(await page.locator('.attachment img').count()).toBe(0);
 });

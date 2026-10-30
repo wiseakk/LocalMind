@@ -14,7 +14,7 @@ from pathlib import Path
 import secrets
 import time
 
-from .file_access import FileAccessError, _checked, _fingerprint, _hold, _identity, file_access
+from .file_access import FileAccessError, _checked, _fingerprint, _hold, _identity, _stream_fingerprint, file_access
 from .personal_permissions import ordinary_path
 from .results import ActionResult, refused
 
@@ -209,10 +209,7 @@ class FileMutations:
                     with _exact_handle(path, pending.operation == 'create') as (stream, handle):
                         if pending.expected is not None:
                             # Hash the locked handle, not a pathname reopened after validation.
-                            info = os.fstat(stream.fileno())
-                            stamp = info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
-                            digest = hashlib.sha256(stream.read(64 * 1024 * 1024 + 1)).hexdigest()
-                            if (stamp, digest) != pending.expected:
+                            if _stream_fingerprint(stream, path.suffix.casefold()) != pending.expected:
                                 raise FileAccessError('Файл изменился после запроса подтверждения.')
                         if pending.operation in ('create', 'overwrite'):
                             stream.seek(0)

@@ -23,6 +23,11 @@ function makeCanvasDom(){
   return makeDom(null,w=>{
     const frames=new Map(),contexts=new WeakMap();let id=0;
     const probe=w.canvasProbe={text:0,measure:0,blur:0,layers:0,queries:[],arcs:[]};
+    const quietTimers=new Map(),nativeTimeout=w.setTimeout.bind(w),nativeClear=w.clearTimeout.bind(w);let quietId=0;
+    w.setTimeout=(callback,delay,...args)=>{if(delay!==1000)return nativeTimeout(callback,delay,...args);const key=--quietId;quietTimers.set(key,()=>callback(...args));return key;};
+    w.clearTimeout=key=>{if(!quietTimers.delete(key))nativeClear(key);};
+    probe.quietPending=()=>quietTimers.size;
+    probe.checkResolution=()=>{const callbacks=[...quietTimers.values()];quietTimers.clear();callbacks.forEach(fn=>fn());assert.ok(quietTimers.size<=1,'one quiet resolution check');};
     Object.defineProperty(w.document.querySelector('.stage'),'clientWidth',{value:1200});
     w.requestAnimationFrame=callback=>{frames.set(++id,callback);return id};
     w.cancelAnimationFrame=id=>frames.delete(id);
@@ -44,6 +49,25 @@ function makeCanvasDom(){
   });
 }
 (async()=>{
+  await run('mismatched info and conversation instances reject valid PNG before any upload',async()=>{
+    const calls=[];
+    const dom=makeDom(async(url,options)=>{
+      calls.push(url);
+      if(url==='/api/conversations')return Response.json({conversation_id:'c'.repeat(32),server_instance:'live-instance'});
+      return Response.json({server_instance:'constellation-test',demo:true,model:'test',devices:[],voice:{voices:[]}});
+    });
+    try{
+      const w=dom.window;await pause(20);
+      const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGPojjn/HwAF4gK2//l6AAAAAABJRU5ErkJggg==','base64');
+      w.localmindAttachments.add([new w.File([png],'dot.png',{type:'image/png'})]);
+      for(let i=0;i<100&&w.localmindAttachments.hasPending();i++)await pause(10);
+      assert.equal(w.localmindAttachments.snapshot()[0].state,'error');
+      assert.equal(calls.filter(url=>url==='/api/conversations').length,1);
+      assert.equal(calls.filter(url=>url==='/api/attachments').length,0);
+      assert.deepEqual([...w.localmindAttachments.contextIds()],[]);
+      assert.ok(w.document.querySelector('.attachment-state').textContent.includes('Сервер перезапущен'));
+    }finally{dom.window.close()}
+  });
   await run('repeated graph observations preserve options, cached text, drag targets and settled physics',async()=>{
     const dom=makeCanvasDom(),w=dom.window,d=w.document,probe=w.canvasProbe,scene=w.localmindScene;
     try{
@@ -135,6 +159,42 @@ function makeCanvasDom(){
       const economical=probe.layers;w.dispatchEvent(new w.Event('resize'));probe.step(60);assert.equal(probe.layers,economical);
       scene.configure({reduced:false,low:true});assert.equal(probe.pending(),0);
       d.fonts.dispatchEvent(new w.Event('loadingdone'));probe.step(70);assert.ok(probe.layers>economical);
+    }finally{dom.window.close()}
+  });
+  await run('DPR changes without browser events use existing frames or one quiet check and suspend on hide',async()=>{
+    const dom=makeCanvasDom(),w=dom.window,d=w.document,probe=w.canvasProbe,scene=w.localmindScene;
+    try{
+      await pause(10);
+      const canvas=d.querySelector('#constellation');
+      Object.defineProperty(canvas,'clientWidth',{value:1440});Object.defineProperty(canvas,'clientHeight',{value:948});
+      w.dispatchEvent(new w.Event('resize'));probe.step(10);
+      const expected=dpr=>Math.min(1.5,dpr,Math.sqrt(1600000/(1440*948)));
+      let now=20;
+      for(const dpr of [1.4,2,1.25,1,2,1]){
+        Object.defineProperty(w,'devicePixelRatio',{configurable:true,value:dpr});probe.step(now++);
+        assert.equal(scene.stats().dpr,expected(dpr));assert.ok(scene.stats().pixels<=1600000);
+        assert.equal(probe.quietPending(),0);assert.equal(probe.pending(),1);
+      }
+      scene.configure({reduced:true,low:false});probe.step(now++);
+      assert.equal(probe.pending(),0);assert.equal(probe.quietPending(),1);
+      const frames=scene.stats().frames,layers=probe.layers;
+      for(let i=0;i<5;i++)probe.checkResolution();
+      assert.equal(scene.stats().frames,frames);assert.equal(probe.layers,layers);assert.equal(probe.pending(),0);
+      Object.defineProperty(w,'devicePixelRatio',{configurable:true,value:1.4});probe.checkResolution();probe.step(now++);
+      assert.equal(scene.stats().dpr,expected(1.4));assert.equal(probe.pending(),0);
+      for(let i=0;i<3;i++){
+        w.dispatchEvent(new w.Event('pagehide'));assert.equal(probe.quietPending(),0);
+        const queries=probe.queries.length;probe.queries.at(-1).dispatchEvent(new w.Event('change'));
+        assert.equal(probe.queries.length,queries,'pagehide detached resolution listener');
+        w.dispatchEvent(new w.Event('pageshow'));probe.step(now++);assert.equal(probe.quietPending(),1);
+      }
+      scene.setVisible(false);assert.equal(probe.quietPending(),0);scene.setVisible(true);probe.step(now++);
+      Object.defineProperty(d,'hidden',{configurable:true,value:true});d.dispatchEvent(new w.Event('visibilitychange'));
+      assert.equal(probe.quietPending(),0);assert.equal(probe.pending(),0);
+      Object.defineProperty(w,'devicePixelRatio',{configurable:true,value:1});
+      Object.defineProperty(d,'hidden',{configurable:true,value:false});d.dispatchEvent(new w.Event('visibilitychange'));probe.step(now++);
+      assert.equal(scene.stats().dpr,1);assert.equal(probe.quietPending(),1);
+      scene.configure({reduced:false,low:false});assert.equal(probe.quietPending(),0);
     }finally{dom.window.close()}
   });
   await run('Canvas hide/resume resets time, keeps one rAF chain and refreshes DPR on restore',async()=>{
