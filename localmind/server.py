@@ -32,7 +32,7 @@ from .voice import VoiceError, voice_status, transcribe_audio, synthesize_speech
 
 @asynccontextmanager
 async def lifespan(app):
-    from .voice import warm_tts, shutdown_tts
+    from .voice import warm_tts, shutdown_tts, shutdown_stt
     from .window_tools import window_tools
     catalog.set_personal_mode(file_access.known_app_launch_allowed())
     warm_task = asyncio.create_task(asyncio.to_thread(warm_tts))
@@ -40,6 +40,7 @@ async def lifespan(app):
         yield
     finally:
         await asyncio.to_thread(shutdown_tts)
+        await asyncio.to_thread(shutdown_stt)
         warm_task.cancel()
         window_tools.close()
 

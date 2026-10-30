@@ -351,6 +351,33 @@ function makeCanvasDom(){
       d.querySelector('#stopAudio').click();assert.equal(audios[1].pauses,1);
     }finally{dom.window.close()}
   });
+  await run('compound document status defers speech so the extracted summary reaches TTS',async()=>{
+    const tts=[];
+    const actions=[{success:true,action:'files.read_selected_file',status_text:'Текст извлечён.'}];
+    const dom=makeDom(async(url,options)=>{
+      if(url==='/api/info')return Response.json({server_instance:'test',devices:[],voice:{}});
+      if(url==='/api/tts'){tts.push(JSON.parse(options.body).text);return new Response(new Blob(['RIFFmock']));}
+      if(url==='/api/tts/cancel')return Response.json({ok:true});
+      if(url==='/api/chat/stream')return new Response(new ReadableStream({start(c){
+        const events=[
+          {type:'status',data:{answer:'Выбран Spisok_rabot.pdf',speech_text:'Найден PDF-файл: Список работ.',speech_deferred:true,action_results:actions}},
+          {type:'delta',sequence:1,text:'Извлечённый бюджет составляет семьсот тридцать девять рублей.'},
+          {type:'final',data:{answer:'Извлечённый бюджет составляет семьсот тридцать девять рублей.',engine:'ollama',action_results:actions}}
+        ];
+        for(const event of events)c.enqueue(new TextEncoder().encode(JSON.stringify(event)+'\n'));
+        c.close();
+      }}));
+      throw Error('unexpected '+url);
+    });
+    const w=dom.window,d=w.document;w.URL.createObjectURL=()=> 'blob:compound';w.URL.revokeObjectURL=()=>{};
+    w.Audio=class {async play(){}pause(){}};
+    try{
+      await pause(10);d.querySelector('#speak').checked=true;
+      await w.sendText('Найди последний PDF, затем прочитай его');await pause(30);
+      assert.equal(tts.length,1);assert.ok(tts[0].includes('Извлечённый бюджет'));
+      assert.ok(!tts[0].includes('Spisok')&&!tts[0].includes('Найден'));
+    }finally{w.stopSpeech();dom.window.close()}
+  });
   await run('interruption rejects late old audio and aborts its synthesis fetch',async()=>{
     const requests=[],audios=[];
     const dom=makeDom(async(url,options)=>{

@@ -127,6 +127,8 @@ class WarmSpeechWorker:
                 if not raw or len(raw) > MAX_FRAME or not raw.endswith(b'\n'):
                     raise ValueError('Invalid worker frame')
                 replies.put_nowait(json.loads(raw))
+                # Idle warm workers retain engines, not the last audio/text frame.
+                raw = None
         except (OSError, ValueError, Full):
             try:
                 replies.put_nowait({'error': 'Worker disconnected'})

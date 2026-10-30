@@ -351,3 +351,120 @@ def test_native_operation_requires_marker_before_focus_or_close(monkeypatch):
         assert backend.operate(Path('test.exe'), VerifiedWindow(99, 55, 123, 7), 'property', 42, operation) == 'stale'
     user.SetForegroundWindow.assert_not_called()
     user.PostMessageW.assert_not_called()
+
+
+@pytest.fixture
+def native_focus(monkeypatch):
+    """Exercise the production callback with a fake Win32 ABI, not an OS claim."""
+    native = VerifiedWindow(0x100000063, 55, 123, 7)
+    user = Mock()
+    user.GetPropW.return_value = 42
+    user.IsWindow.return_value = True
+    user.IsIconic.return_value = False
+    user.GetForegroundWindow.return_value = native.hwnd
+
+    def ownership(hwnd, pid):
+        pid._obj.value = native.pid
+        return native.thread_id
+
+    user.GetWindowThreadProcessId.side_effect = ownership
+    monkeypatch.setattr(module, '_inspect_windows', lambda target, on_verified:
+                        on_verified(user, (native,)))
+    # A fake clock makes denial/restore timeouts deterministic and fast.
+    now = [0.0]
+    monkeypatch.setattr(module.time, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(module.time, 'sleep', lambda seconds: now.__setitem__(0, now[0] + seconds))
+    return user, native, lambda: NativeWindowBackend().operate(
+        Path('test.exe'), native, 'property', 42, 'focus')
+
+
+@pytest.mark.skipif(module.os.name != 'nt', reason='Windows ABI')
+def test_native_focus_success_requires_observed_exact_64bit_hwnd(native_focus):
+    user, native, focus = native_focus
+    user.SetForegroundWindow.return_value = False
+    assert focus() == 'focused'  # Already foreground is observed success.
+    user.SetForegroundWindow.assert_called_once_with(native.hwnd)
+    assert user.GetForegroundWindow.restype is module.w.HWND
+
+
+@pytest.mark.skipif(module.os.name != 'nt', reason='Windows ABI')
+def test_native_success_return_without_foreground_equality_is_denied(native_focus):
+    user, native, focus = native_focus
+    user.SetForegroundWindow.return_value = True
+    user.GetForegroundWindow.return_value = native.hwnd + 1
+    assert focus() == 'foreground_denied'
+
+
+@pytest.mark.skipif(module.os.name != 'nt', reason='Windows ABI')
+def test_native_focus_restores_before_activation(native_focus):
+    user, native, focus = native_focus
+    minimized = [True]
+    user.IsIconic.side_effect = lambda hwnd: minimized[0]
+    user.ShowWindowAsync.side_effect = lambda hwnd, state: minimized.__setitem__(0, False) or True
+    assert focus() == 'focused'
+    user.ShowWindowAsync.assert_called_once_with(native.hwnd, 9)
+    assert user.mock_calls.index(('ShowWindowAsync', (native.hwnd, 9), {})) < user.mock_calls.index(
+        ('SetForegroundWindow', (native.hwnd,), {}))
+
+
+@pytest.mark.skipif(module.os.name != 'nt', reason='Windows ABI')
+def test_native_restore_timeout_does_not_report_focus(native_focus):
+    user, native, focus = native_focus
+    user.IsIconic.return_value = True
+    assert focus() == 'restore_pending'
+    user.SetForegroundWindow.assert_not_called()
+
+
+@pytest.mark.skipif(module.os.name != 'nt', reason='Windows ABI')
+def test_native_recycled_hwnd_after_restore_never_activated(native_focus):
+    user, native, focus = native_focus
+    user.IsIconic.return_value = True
+
+    def recycled(hwnd, state):
+        user.GetPropW.return_value = None
+        user.IsIconic.return_value = False
+        return True
+
+    user.ShowWindowAsync.side_effect = recycled
+    assert focus() == 'stale'
+    user.SetForegroundWindow.assert_not_called()
+
+
+@pytest.mark.skipif(module.os.name != 'nt', reason='Windows ABI')
+def test_native_destroyed_hwnd_cannot_be_observed_success(native_focus):
+    user, native, focus = native_focus
+
+    def destroyed(hwnd):
+        user.GetPropW.return_value = None
+        return True
+
+    user.SetForegroundWindow.side_effect = destroyed
+    assert focus() == 'stale'
+
+
+@pytest.mark.skipif(module.os.name != 'nt', reason='Windows ABI')
+def test_native_cancelled_restore_does_not_activate(native_focus):
+    from threading import Event
+    from localmind.generation import cancellation
+    user, native, focus = native_focus
+    event = Event()
+    user.IsIconic.return_value = True
+    user.ShowWindowAsync.side_effect = lambda hwnd, state: event.set() or True
+    token = cancellation.set(event)
+    try:
+        with pytest.raises(ValueError):
+            focus()
+    finally:
+        cancellation.reset(token)
+    user.SetForegroundWindow.assert_not_called()
+
+
+def test_restore_pending_has_honest_manual_fallback(tools):
+    service, backend, _ = tools
+    key = selected(service)
+    original = backend.operate
+    backend.operate = lambda path, native, key, marker, operation: (
+        'restore_pending' if operation == 'focus' else original(path, native, key, marker, operation))
+    result = service.focus_window(key)
+    assert not result.success and result.observed_state is None
+    assert result.execution_status == 'restore_pending' and 'панель задач' in str(result)

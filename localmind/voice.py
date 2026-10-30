@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import inspect
+import gc
+import io
 import json
 import math
 import os
@@ -18,6 +21,7 @@ import threading
 import time
 import wave
 
+from .asr_worker import worker as _asr_worker
 from .settings import ROOT
 from .speech_text import normalize_speech
 from .speech_worker import worker as _speech_worker, SpeechWorkerError, CANDIDATES, candidate_ready
@@ -34,15 +38,23 @@ PROFILES = {
     'balanced': {'model': 'small', 'device': 'cpu', 'compute_type': 'int8', 'label': 'CPU · баланс'},
     'gpu-quality': {'model': 'medium', 'device': 'cuda', 'compute_type': 'float16', 'label': 'GPU · точность'},
 }
+# CLI evaluation only; preserve the three public profile IDs and their defaults.
+EVALUATION_PROFILES = {
+    **PROFILES,
+    'gpu-turbo': {'model': 'large-v3-turbo', 'device': 'cuda', 'compute_type': 'float16', 'label': 'GPU turbo · evaluation'},
+    'gpu-large': {'model': 'large-v3', 'device': 'cuda', 'compute_type': 'float16', 'label': 'GPU large · evaluation'},
+}
 # Compare on identical consented recordings before promoting any experiment.
 # HTTP capture continues to use baseline; these are finite evaluation choices.
 DECODINGS = {
     'baseline': {'language': 'ru', 'initial_prompt': 'Русская речь. Пельмени, Codex, Кодекс, Obsidian, Discord, Visual Studio Code, блокнот, калькулятор.'},
     'technical-ru': {'language': 'ru', 'initial_prompt': 'Русская и английская речь. Downloads, Obsidian, PDF, Windows, Steam, Python, Warcraft, RSA. Имена файлов и обычный разговор.',
                      'hotwords': 'Downloads, Obsidian, PDF, Windows, Steam, Python, Warcraft, RSA'},
-    'technical-auto': {'language': None, 'initial_prompt': 'Russian and English conversation. Downloads, Obsidian, PDF, Windows, Steam, Python, Warcraft, RSA.',
+    'technical-auto': {'language': None, 'initial_prompt': 'Русская и английская речь. Downloads, Obsidian, PDF, Windows, Steam, Python, Warcraft, RSA. Имена файлов и обычный разговор.',
                        'hotwords': 'Downloads, Obsidian, PDF, Windows, Steam, Python, Warcraft, RSA'},
 }
+DECODINGS['baseline-auto'] = {**DECODINGS['baseline'], 'language': None}
+DECODINGS['multilingual'] = {**DECODINGS['technical-auto'], 'multilingual': True}
 DEFAULT_VOICE = 'ru_RU-denis-medium'
 VOICES = {
     DEFAULT_VOICE: {'label': 'Денис · Piper · CPU', 'dataset_license': 'CC0', 'engine': 'piper'},
@@ -69,7 +81,7 @@ def _installed(module: str) -> bool:
 
 
 def _stt_ready(profile: str) -> bool:
-    directory = MODELS / 'whisper' / PROFILES[profile]['model']
+    directory = MODELS / 'whisper' / EVALUATION_PROFILES[profile]['model']
     try:
         return all((directory / name).is_file() and (directory / name).stat().st_size > 0
                    for name in ('model.bin', 'config.json', 'tokenizer.json'))
@@ -153,8 +165,8 @@ def _run_worker(kind: str, selection: str, data: bytes, suffix: str) -> tuple[di
         _operation.release()
 
 
-def transcribe_audio(data: bytes, suffix: str, profile: str = 'balanced', decoding: str = 'baseline') -> dict:
-    if profile not in PROFILES:
+def transcribe_audio(data: bytes, suffix: str, profile: str = 'balanced', decoding: str = 'baseline', *, evaluation: bool = False) -> dict:
+    if profile not in (EVALUATION_PROFILES if evaluation else PROFILES):
         raise VoiceError(422, 'Неизвестный профиль распознавания.')
     if decoding not in DECODINGS:
         raise VoiceError(422, 'Неизвестная настройка декодирования.')
@@ -168,8 +180,11 @@ def transcribe_audio(data: bytes, suffix: str, profile: str = 'balanced', decodi
         raise VoiceError(503, 'Для локального распознавания установите requirements-voice.txt. См. docs/VOICE.md.')
     if not _stt_ready(profile):
         raise VoiceError(503, f'Модель не загружена. Выполните: python -m localmind.voice setup-stt --profile {profile}')
-    selection = profile if decoding == 'baseline' else profile + ':' + decoding
-    return _run_worker('stt', selection, data, suffix.lower())[0]
+    try:
+        return _asr_worker.transcribe(data, suffix.lower(), profile, decoding)
+    except SpeechWorkerError as exc:
+        code = 429 if str(exc) == 'busy' else 504 if str(exc) == 'timeout' else 503
+        raise VoiceError(code, 'Распознавание занято.' if code == 429 else 'Локальное распознавание недоступно или превысило время. Проверьте docs/VOICE.md.') from exc
 
 
 def synthesize_speech(text: str, voice: str = DEFAULT_VOICE, generation_id: str | None = None) -> bytes:
@@ -203,6 +218,10 @@ def warm_tts():
             pass
 
 
+def shutdown_stt():
+    _asr_worker.close()
+
+
 def shutdown_tts():
     _speech_worker.close()
 
@@ -211,7 +230,7 @@ def cancel_tts(generation_id: str):
     return _speech_worker.cancel(generation_id)
 
 
-def _decode_bounded(source: Path):
+def _decode_bounded(source: Path, audio_data: bytes | None = None):
     """Decode incrementally; never allocate an unbounded complete recording."""
     import av
     import numpy as np
@@ -223,7 +242,7 @@ def _decode_bounded(source: Path):
         raise VoiceError(415, 'Неподдерживаемый формат записи.')
     # A media upload is not a playlist. Forcing the declared container prevents
     # format sniffing from opening HLS/concat files containing network/file URLs.
-    with av.open(str(source), mode='r', format=demuxers[source.suffix.lower()],
+    with av.open(io.BytesIO(audio_data) if audio_data is not None else str(source), mode='r', format=demuxers[source.suffix.lower()],
                  options={'protocol_whitelist': 'file', 'enable_drefs': '0', 'use_absolute_path': '0'}) as container:
         if not container.streams.audio:
             raise VoiceError(422, 'В файле нет звуковой дорожки.')
@@ -267,27 +286,62 @@ def signal_levels(signal):
     return {'rms_dbfs': dbfs, 'peak': round(peak, 4), 'clipped_fraction': round(clipped, 4), 'warnings': warnings}
 
 
-def _recognize(source: Path, profile: str, decoding: str = 'baseline') -> dict:
-    from faster_whisper import WhisperModel
+class Recognizer:
+    """One worker owns one resident model, including a remembered CPU fallback."""
+    def __init__(self):
+        self.model = None
+        self.identity = None
+        self.device = None
+        self.compute_type = None
+        self.fallback = False
 
-    signal = _decode_bounded(source)
-    config = PROFILES[profile]
+    def clear(self):
+        self.model = None
+        self.identity = None
+        gc.collect()
+
+    def load(self, directory, device, compute_type):
+        from faster_whisper import WhisperModel
+        identity = (str(directory), device, compute_type)
+        if self.model is not None and self.identity == identity:
+            return self.model, 0, True
+        self.clear()
+        loading = time.monotonic()
+        self.model = WhisperModel(str(directory), device=device, compute_type=compute_type,
+                                  cpu_threads=4, num_workers=1, local_files_only=True)
+        self.identity = identity
+        self.device, self.compute_type = device, compute_type
+        return self.model, round((time.monotonic() - loading) * 1000), False
+
+
+def _recognize(source: Path, profile: str, decoding: str = 'baseline', recognizer=None, *, audio_data=None) -> dict:
+    recognizer = recognizer or Recognizer()
+
+    signal = _decode_bounded(source, audio_data) if audio_data is not None else _decode_bounded(source)
+    config = EVALUATION_PROFILES[profile]
     model_directory = MODELS / 'whisper' / config['model']
     device, compute_type = config['device'], config['compute_type']
-    fallback = False
+    fallback = bool(recognizer.fallback and recognizer.identity and recognizer.identity[0] == str(model_directory))
+    if fallback:
+        device, compute_type = 'cpu', 'int8'
     model_load_ms = 0
+    model_reused = False
+    inference_ms = 0
     levels = signal_levels(signal)
 
     def run(selected_device, selected_compute):
-        nonlocal model_load_ms
+        nonlocal model_load_ms, model_reused, inference_ms
         loading = time.monotonic()
         try:
-            model = WhisperModel(str(model_directory), device=selected_device, compute_type=selected_compute,
-                                 cpu_threads=4, num_workers=1, local_files_only=True)
+            model, _, model_reused = recognizer.load(model_directory, selected_device, selected_compute)
         finally:
             model_load_ms += round((time.monotonic() - loading) * 1000)
+        options = DECODINGS[decoding]
+        if options.get('multilingual') and 'multilingual' not in inspect.signature(model.transcribe).parameters:
+            raise VoiceError(422, 'Установленная версия faster-whisper не поддерживает multilingual; эксперимент не выполнен.')
+        inference_started = time.monotonic()
         segments, info = model.transcribe(signal, vad_filter=True, beam_size=5,
-                                         condition_on_previous_text=False, **DECODINGS[decoding])
+                                         condition_on_previous_text=False, **options)
         words, logprobs, no_speech = [], [], []
         for segment in segments:
             words.append(segment.text.strip())
@@ -300,6 +354,7 @@ def _recognize(source: Path, profile: str, decoding: str = 'baseline') -> dict:
         quality = {'calibrated_confidence': None, 'mean_segment_logprob': sum(logprobs) / len(logprobs) if logprobs else None,
                    'max_no_speech_probability': max(no_speech) if no_speech else None,
                    'review_recommended': bool(levels['warnings'] or any(x < -1 for x in logprobs) or any(x > .6 for x in no_speech))}
+        inference_ms += round((time.monotonic() - inference_started) * 1000)
         return ' '.join(words).strip(), quality, getattr(info, 'language', None)
 
     try:
@@ -307,17 +362,24 @@ def _recognize(source: Path, profile: str, decoding: str = 'baseline') -> dict:
     except (RuntimeError, ValueError, OSError):
         if device != 'cuda':
             raise
+        recognizer.clear()
         device, compute_type, fallback = 'cpu', 'int8', True
-    if fallback:
+        recognizer.fallback = True
+    if fallback and recognizer.model is None:
         # Leave the exception handler first so its traceback no longer retains
         # the failed GPU model while loading the CPU fallback.
         text, quality, language = run(device, compute_type)
     if not text:
         raise VoiceError(422, 'Речь не обнаружена. Говорите ближе к микрофону.')
-    return {'text': text, 'profile': profile, 'device': device, 'fallback': fallback,
-            'model': config['model'], 'compute_type': compute_type, 'decoding': decoding,
+    recognizer.fallback = fallback
+    native_model = getattr(recognizer.model, 'model', None)
+    actual_device = getattr(native_model, 'device', device)
+    actual_compute = getattr(native_model, 'compute_type', compute_type)
+    return {'text': text, 'profile': profile, 'device': actual_device, 'fallback': fallback,
+            'model': config['model'], 'compute_type': actual_compute, 'decoding': decoding,
+            'requested_device': config['device'], 'requested_compute_type': config['compute_type'],
             'language': language, 'levels': levels, 'quality': quality, 'final': True,
-            'model_load_ms': model_load_ms, 'decoding_settings': {**DECODINGS[decoding], 'beam_size': 5, 'vad_filter': True},
+            'model_load_ms': model_load_ms, 'model_reused': model_reused, 'inference_ms': inference_ms, 'decoding_settings': {**DECODINGS[decoding], 'beam_size': 5, 'vad_filter': True},
             'recording_seconds': round(len(signal) / SAMPLE_RATE, 3)}
 
 
@@ -358,7 +420,7 @@ def main():
     parser = argparse.ArgumentParser(description='LocalMind: explicit voice setup and isolated inference')
     commands = parser.add_subparsers(dest='command', required=True)
     stt = commands.add_parser('setup-stt', help='Download an STT model (network only during setup)')
-    stt.add_argument('--profile', choices=PROFILES, default='balanced')
+    stt.add_argument('--profile', choices=EVALUATION_PROFILES, default='balanced')
     commands.add_parser('setup-tts', help='Download the declared Russian Piper voice')
     commands.add_parser('status')
     worker = commands.add_parser('_worker')
@@ -378,9 +440,9 @@ def main():
         os.environ['HF_XET_CACHE'] = str(MODELS / '.download-cache' / 'xet')
         os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
         from faster_whisper.utils import download_model
-        directory = MODELS / 'whisper' / PROFILES[args.profile]['model']
+        directory = MODELS / 'whisper' / EVALUATION_PROFILES[args.profile]['model']
         directory.mkdir(parents=True, exist_ok=True)
-        download_model(PROFILES[args.profile]['model'], output_dir=str(directory),
+        download_model(EVALUATION_PROFILES[args.profile]['model'], output_dir=str(directory),
                        cache_dir=str(MODELS / '.download-cache' / 'hub'))
         print('STT model downloaded. Inference will use local files only.')
     elif args.command == 'setup-tts':

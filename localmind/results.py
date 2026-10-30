@@ -47,14 +47,14 @@ def file_output(result):
     name = result.data.get('filename')
     if not isinstance(name, str):
         return None
-    from .speech_text import pronounce_filename
+    from .speech_text import filename_description
     if result.action in ('files.search', 'files.find_latest_pdf_in_downloads'):
         return ('Выбран файл: ' + name + '. Подробности и другие совпадения — ниже.',
-                'Найден файл: ' + pronounce_filename(name) + '.')
+                'Найден ' + filename_description(name) + '.')
     if result.action == 'files.describe_selected_file':
-        return name, pronounce_filename(name)
+        return name, filename_description(name)
     if result.action == 'files.open_selected_file':
         # Keep the adapter's distinction between accepted and observed opening.
         prefix = 'Окно документа обнаружено: ' if result.observed_state == 'visible_window' else 'Запрос открытия передан Windows: '
-        return str(result), prefix + pronounce_filename(name) + '.'
+        return str(result), prefix + filename_description(name) + '.'
     return None

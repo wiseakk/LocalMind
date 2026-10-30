@@ -75,9 +75,14 @@ class NativeWindowBackend:
             if user.GetPropW(hwnd, property_name) != marker:
                 return
             # Check window ownership again at the last point before dispatch.
-            pid = w.DWORD()
-            if (user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid)) != expected.thread_id
-                    or pid.value != expected.pid or not user.IsWindow(hwnd)):
+            def same_window():
+                pid = w.DWORD()
+                return (bool(user.IsWindow(hwnd))
+                        and user.GetPropW(hwnd, property_name) == marker
+                        and user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid)) == expected.thread_id
+                        and pid.value == expected.pid)
+
+            if not same_window():
                 return
             if operation == 'release':
                 user.RemovePropW(hwnd, property_name)
@@ -89,18 +94,37 @@ class NativeWindowBackend:
                 user.SetForegroundWindow.restype = w.BOOL
                 user.GetForegroundWindow.restype = w.HWND
                 user.IsIconic.argtypes = [w.HWND]
+                user.IsIconic.restype = w.BOOL
                 user.ShowWindowAsync.argtypes = [w.HWND, ctypes.c_int]
+                user.ShowWindowAsync.restype = w.BOOL
+                check_cancelled()
                 if user.IsIconic(hwnd):
                     user.ShowWindowAsync(hwnd, 9)  # SW_RESTORE, no input simulation
                     # ShowWindowAsync posts to another thread. Give the restore
                     # a bounded interval before observing foreground state.
                     until = time.monotonic() + .3
                     while user.IsIconic(hwnd) and time.monotonic() < until:
+                        check_cancelled()
+                        if not same_window():
+                            return
                         time.sleep(.02)
+                # Restore is asynchronous. The original HWND may have been
+                # destroyed/reused while waiting; its marker cannot survive.
+                check_cancelled()
+                if not same_window():
+                    return
+                if user.IsIconic(hwnd):
+                    outcome['state'] = 'restore_pending'
+                    return
                 user.SetForegroundWindow(hwnd)
                 until = time.monotonic() + .3
                 while user.GetForegroundWindow() != hwnd and time.monotonic() < until:
+                    check_cancelled()
+                    if not same_window():
+                        return
                     time.sleep(.02)
+                if not same_window():
+                    return
                 observed = user.GetForegroundWindow() == hwnd and not user.IsIconic(hwnd)
                 outcome['state'] = 'focused' if observed else 'foreground_denied'
             elif operation == 'close':
@@ -334,8 +358,12 @@ class WindowTools:
                         return ActionResult(True, action, app.id, 'request_accepted', None,
                             status_text=f'{app.name}: запрос закрытия отправлен; исчезновение окна пока не подтверждено.', data=facts)
                     message = ('Windows не разрешила вывести окно на передний план. Выбери его через панель задач.'
-                               if state == 'foreground_denied' else 'Windows отклонила запрос к выбранному окну.')
-                    return refused(action, app.id, message, status='activation_denied' if state == 'foreground_denied' else 'inspection_unavailable')
+                               if state == 'foreground_denied' else
+                               'Окно осталось свёрнутым после запроса восстановления. Открой его через панель задач.'
+                               if state == 'restore_pending' else 'Windows отклонила запрос к выбранному окну.')
+                    return refused(action, app.id, message,
+                                   status='activation_denied' if state == 'foreground_denied' else
+                                   'restore_pending' if state == 'restore_pending' else 'inspection_unavailable')
             except (AppError, OSError, ValueError, AttributeError):
                 return refused(action, selection.app.id, 'Не удалось повторно проверить окно и разрешение. Действие отменено.', status='unavailable')
 

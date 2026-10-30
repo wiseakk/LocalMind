@@ -20,7 +20,7 @@ def test_file_channels_speak_only_selected_filename_and_keep_exact_metadata():
     result = ActionResult(True, 'files.search', 'opaque', 'observed', data=metadata)
     display, speech = file_output(result)
     assert metadata['filename'] in display
-    assert 'Варкрафт' in speech and 'эр эс эй' in speech and 'пи ди эф' in speech
+    assert 'Варкрафт' in speech and 'эр эс эй' in speech and 'PDF-файл' in speech
     assert all(value not in speech for value in ('C:', 'private', metadata['sha256'], 'T12:', 'other-secret'))
     assert metadata['filename'] == 'Warcraft_RSA_2026.pdf'
 
@@ -28,7 +28,7 @@ def test_file_channels_speak_only_selected_filename_and_keep_exact_metadata():
 @pytest.mark.parametrize('written,spoken', [('Downloads', 'Даунлоудс'), ('Obsidian', 'Обсидиан'), ('Warcraft', 'Варкрафт'), ('PDF', 'пи ди эф'), ('RSA', 'эр эс эй')])
 def test_requested_pronunciation(written, spoken):
     assert spoken in normalize_speech(written)
-    assert spoken in pronounce_filename(written + '_notes.pdf')
+    assert spoken.casefold() in pronounce_filename(written + '_notes.pdf').casefold()
     english = written if written not in ('PDF', 'RSA') else ' '.join(written)
     assert english in pronounce_filename(written, 'en')
 

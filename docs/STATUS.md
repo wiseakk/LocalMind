@@ -539,3 +539,39 @@ setup and troubleshooting remain in README.md/docs/VOICE.md. The existing 40 def
 answers remain in docs/DEFENSE_QA.md. No push, publishing or deployment occurred.
 This mission is not certified complete: real Windows/browser/microphone gates and
 the two repository commits remain outstanding.
+
+## 2026-10-30 — speech/agent implementation milestone
+
+Checkout began clean at cdfd1d3 on devcrew/20261030-180745-0ad300a7.
+Added deterministic filename titles/years, one supervised warm ASR process,
+paired language experiments, sequence preflight/stop-on-failure, nonempty selected
+document extraction gating and HWND identity checks across asynchronous activation.
+Blacksite assets, public voice profile IDs, default decoding and permission policy
+are preserved. Shared speech/ASR pipe buffers are cleared while idle.
+
+The complete Python suite passed: 540 tests and 35 subtests. Native action and
+generation doubles in tests remain doubles. Real selected-PDF extraction and local
+qwen3.5:9b source inclusion/answer passed separately; access revocation prevented
+further reading. Actual Piper generated five WAVs and Windows playback APIs returned
+success, but listener feedback is absent. A synthetic waveform exercised real small
+CPU reuse and medium CUDA→CPU fallback/reuse; it is not a microphone benchmark.
+
+Rollback branch creation was attempted and denied at the external shared Git metadata
+directory. No branch or checkpoint commit was created. An untouched HEAD archive is
+retained locally in .test-artifacts/baseline-cdfd1d3.zip. This is a recovery artifact,
+not a substitute for the required orchestrator rollback branch.
+
+Product completion remains pending. See SPEECH_AGENT_RELIABILITY.md for the separate
+verification categories, exact reproduction commands and physical-device blockers.
+
+Verification milestone: seven JS syntax checks and 52 DOM checks passed. Real
+loopback DEMO/Ollama smoke passed. Browser runner creation failed with spawn EPERM;
+automatic approval review rejected Zen inspection. Physical foreground success,
+30+ microphone phrases, listener feedback and GPU execution/coexistence remain
+unverified. The final tests include sequence speech separation, malformed/incomplete
+recording manifests, and suppression of model generation on content clarifications.
+The original checkout's installed environment was reused read-only; local Python
+3.11 lacked dependencies. No new model downloads, cloud inference or UI redesign.
+Final fresh start.py startup returned HTTP 200 in DEMO mode; real local Ollama smoke
+passed again and the owned test server was stopped. Compound document speech now
+defers initial action audio so summary deltas reach TTS; the DOM regression passed.

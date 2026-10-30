@@ -310,3 +310,49 @@ universal anti-hallucination claim. Models, audio and personal document text sta
 The environment denies Git metadata writes, browser workers and desktop observation.
 Record these as outstanding gates. Do not replace required real evidence with automated
 test counts or describe the blocked checkpoint commits as created.
+
+## 2026-10-30 — bounded speech and sequential execution
+
+Render filename speech with a finite reviewed romanized vocabulary and known
+technical pronunciations. Separate title/type from exact display metadata. Render
+1900–2099 title years as «за … год»; dotted versions and other numbers keep their
+conservative pronunciation. IB→ИБ is letter transliteration, not a guessed expansion.
+Opaque identifiers become a short type description. Do not infer document contents.
+
+ASR reuses the existing supervised pipe transport with one profile-bound child and
+one resident model. Changing a profile reaps the prior process first; changing only
+language/decoder retains its model. Decode uploaded containers in memory with the
+same duration/size/protocol restrictions; clear idle audio/transcript references.
+Remember actual CPU fallback, expose requested and actual compute type, and preserve
+killable deadlines and shutdown. No benchmark evidence justifies a default change.
+The installed faster-whisper signature and its primary source support multilingual;
+unsupported installations receive an explicit experiment error.
+
+Preflight every sequence clause before executing any. Resolve provisional typed
+references only inside validation; execute each real step through the existing exact
+grant boundary. Stop after failure, clarification, cancellation or confirmation.
+Launch→focus resolves the same authorized app, with at most six steps and the shared
+deadline. Compound safe-close remains an explicit separate-window request; preflight
+must not stamp or close native windows. Preserve display/speech separation in plans.
+
+Read selected documents via files.read_selected_file and require nonempty extracted
+text before generation. Reviewed content requests route to extraction; unsupported
+content wording asks for clarification. Pass extracted passages as untrusted data;
+keep truncation disclosure. Use a random source-only fact in real Ollama verification.
+
+Recheck HWND marker/PID/thread after asynchronous restore, before foreground dispatch,
+and after observation. Windows denial remains failure with a manual fallback. No
+input spoofing, elevation, AttachThreadInput or foreground-lock changes were added.
+Primary Windows references: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow
+and https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-showwindowasync.
+ASR reference: https://github.com/SYSTRAN/faster-whisper/blob/master/faster_whisper/transcribe.py.
+
+Verification decision: do not promote models or decoding based on four synthetic
+recognitions. They establish real CPU reuse/fallback only, and contained acronym
+errors. Matrix eligibility requires every evaluated phrase's three recording
+conditions, not a union of conditions across different phrases. Content clarification
+responses skip the action composer so no LLM can turn a missing-source clarification
+into a guessed summary. Report playback API completion separately from human hearing.
+Compound replies containing document generation propagate speech_deferred, matching
+the single-document path. Otherwise the browser's existing actionSpoken latch would
+silence summary deltas. This is covered without changing Blacksite UI or styling.

@@ -108,8 +108,10 @@ ACL Python3.14; приложение возвращает понятный 503 �
 ## Повторяемый микрофонный протокол (30.10.2026)
 
 Поставщик остаётся faster-whisper: base/small/medium, PyAV → mono 16 kHz,
-VAD, beam_size=5, condition_on_previous_text=False. Модель загружается на каждый
-запрос в ограниченном worker. Production использует прежний baseline с language=ru.
+VAD, beam_size=5, condition_on_previous_text=False. Один ограниченный warm worker
+сохраняет загруженную модель между запросами; при смене профиля прежний процесс
+завершается до запуска нового. Декодирование в памяти, без сохранения аудио.
+Production использует прежний baseline с language=ru.
 API не скачивает модели и не заменяет слова команды после распознавания.
 
 С согласия говорящего запишите как минимум 30 фраз из `STT_TEST_SET.csv`, обязательно
@@ -130,16 +132,27 @@ API не скачивает модели и не заменяет слова к�
 python scripts/eval_stt.py recordings.csv --consent --profile balanced --compare --include-transcripts --hardware-note "микрофон; CPU; GPU; расстояние; уровни" > private-balanced.jsonl
 python scripts/eval_stt.py recordings.csv --consent --profile cpu-fast --compare --include-transcripts > private-fast.jsonl
 python scripts/eval_stt.py recordings.csv --consent --profile gpu-quality --compare --include-transcripts > private-quality.jsonl
+python scripts/eval_stt.py recordings.csv --consent --profile gpu-turbo --compare > private-turbo.jsonl
+python scripts/eval_stt.py recordings.csv --consent --profile gpu-large --compare > private-large.jsonl
+python scripts/eval_stt.py recordings.csv --consent --matrix --include-transcripts > private-matrix.jsonl
 ```
 
-Запускайте только заранее установленные профили. `--compare` сравнивает baseline,
-technical-ru (расширенный словарь/hotwords) и technical-auto (автоопределение языка).
+Запускайте только заранее установленные профили. Кандидаты gpu-turbo (large-v3-turbo)
+и gpu-large (large-v3) доступны для явной загрузки через setup-stt, но не меняют UI.
+`--compare` сравнивает baseline/baseline-auto и technical-ru/technical-auto:
+в каждой паре отличается только language, prompt/hotwords совпадают.
+multilingual включает отдельный эксперимент с поддержкой установленного API;
+при отсутствии поддержки возвращается явная ошибка. `--matrix` требует минимум
+30 фраз, каждую в quiet/noisy/low-volume, и все шесть фраз из текущего задания.
 Эти варианты доступны в оценочном CLI и не меняют HTTP defaults. Их API проверены по
 [исходникам faster-whisper](https://github.com/SYSTRAN/faster-whisper/blob/master/faster_whisper/transcribe.py).
 Сначала сравните ошибки на трёх reported примерах, обычной речи и отрицаниях, затем
 общие WER/CER, technical-name accuracy, ошибки, p50/p95 и фактический CUDA→CPU fallback.
-Полная latency включает запуск worker/загрузку; model_load_ms отдельно включает
-попытку загрузки GPU и fallback. Автоязык на коротких фразах может ухудшать результат.
+Полная latency включает запуск worker/загрузку при холодном запросе; model_load_ms
+отдельно включает попытку загрузки GPU и fallback, model_reused показывает повторное
+использование. Отчёт разделяет cold/warm, inference, p50/p95 и включает ошибки как
+пустые расшифровки в WER/CER. Сохраняйте ошибочные/отрицательные фразы при сравнении.
+Автоязык на коротких фразах может ухудшать результат.
 Доказательств улучшения на микрофоне в этом запуске нет; defaults не продвигались.
 
 Браузер сохраняет прежний audio:true; echo cancellation/noise suppression/auto gain

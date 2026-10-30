@@ -611,13 +611,21 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
     prepared.generation = generation or defaults()
     base['generation'] = prepared.generation.to_dict()
     if conversation:
-        from .orchestration import compound_parts
+        from .orchestration import compound_parts, validate_sequence
         parts = compound_parts(text)
         if len(parts) > 6:
             base.update(answer='За один запрос можно выполнить не более шести шагов. Раздели просьбу.', engine='validation')
             return prepared
         if len(parts) > 1:
-            results, steps, answers = [], [], []
+            reason = validate_sequence(parts, conversation, assess_action)
+            if reason:
+                base.update(answer=reason, engine='validation')
+                return prepared
+            if not actions_authorized:
+                base.update(answer='Проверь все шаги и подтверди действие.', engine='action-review',
+                            confirmation_required=True)
+                return prepared
+            results, steps, answers, speeches = [], [], [], []
             for index, part in enumerate(parts):
                 try:
                     check_cancelled()
@@ -642,12 +650,24 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
                     prepared.history = list(conversation.history)
                 else:
                     answers.append(child.initial['answer'])
+                    speeches.append(child.initial.get('speech_text', child.initial['answer']))
                 if child.initial.get('confirmation_required'):
                     base.update(confirmation_required=True, pending_operation=child.initial.get('pending_operation'))
+                    answers.append('Оставшиеся шаги не выполнены: требуется подтверждение.')
+                    break
+                if (child.initial.get('cancelled') or child.initial.get('engine') in ('validation', 'cancelled')
+                        or any(not outcome.get('success') for outcome in child.initial.get('action_results', []))):
+                    answers.append('Оставшиеся шаги не выполнены: предыдущий шаг не подтверждён.')
+                    break
                 # An unverified failed action is never silently retried by a plan.
             prepared.compose_actions = False
             base.update(answer='\n'.join(answers), status='\n'.join(answers), actions=[r['status_text'] for r in results],
                         action_results=results, steps=steps, latency_ms=round((time.monotonic() - started) * 1000))
+            base.update(output_channels(base['answer'], results, '\n'.join(speeches)))
+            if prepared.dialogue:
+                # The browser otherwise treats the initial action speech as a
+                # complete response and suppresses the subsequent summary audio.
+                base['speech_deferred'] = True
             prepared.capability_facts = {'completed_steps': results}
             return prepared
     if not text and document_facts:
@@ -665,6 +685,7 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
         intent, clarification, reference = pc_intent(text, conversation, assessment)
         if clarification:
             result = refused('policy', None, clarification, status='clarification_required')
+            prepared.compose_actions = False
         elif intent:
             if not actions_authorized:
                 base.update(answer='Проверь текст и подтверди действие.', engine='action-review',
@@ -697,11 +718,18 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
             # selected path, timestamp or window observation.
             prepared.compose_actions = False
             base['actions'] = [str(result)]
-            if intent.name == 'files.read_selected_file' and result.success and result.data:
-                prepared.document_facts = [{'id': intent.arguments['file_id'], 'name': result.data.get('filename', 'Файл'),
-                    'text': result.data.get('text', ''), 'characters': len(result.data.get('text', '')),
-                    'truncated': result.data.get('truncated', False), 'kind': 'document'}]
-                prepared.dialogue = True
+            if intent.name == 'files.read_selected_file' and result.success:
+                extracted = result.data.get('text') if isinstance(result.data, dict) else None
+                if (result.observed_state != 'text_extracted' or not isinstance(extracted, str)
+                        or not extracted.strip()):
+                    result = refused(intent.name, intent.arguments['file_id'],
+                                     'Не удалось извлечь текст документа. Содержание не установлено.', status='extraction_failed')
+                    base['actions'] = [str(result)]
+                else:
+                    prepared.document_facts = [{'id': intent.arguments['file_id'], 'name': result.data.get('filename', 'Файл'),
+                        'text': extracted, 'characters': len(extracted),
+                        'truncated': result.data.get('truncated', False), 'kind': 'document'}]
+                    prepared.dialogue = True
         elif (re.fullmatch(r'(?:а\s+)?(?:ты\s+)?(?:можешь|умеешь|можешь ли ты)\s+(?:управлять\s+(?:ПК|компьютером|приложениями)|открывать\s+приложения)[?!.]?', text, re.I)
               or re.fullmatch(r'(?:а\s+)?(?:у тебя (?:есть|нет)|имеешь ли ты|есть ли у тебя) доступ к (?:моему )?(?:ПК|компьютеру)[?!.]?', text, re.I)):
             base.update(answer='Я могу открывать разрешённые приложения, выбирать проверенные окна и искать PDF в Загрузках после твоего разрешения. Произвольные команды и файлы недоступны.', engine='capabilities')
@@ -1021,6 +1049,7 @@ def _dialogue_answer(prepared: PreparedReply) -> str:
 def _complete_reply(prepared: PreparedReply) -> dict:
     """Generate only text. This function has no path back into dispatch."""
     response = dict(prepared.initial)
+    generated_speech = None
     started = time.monotonic()
     if prepared.result is not None and prepared.compose_actions:
         try:
@@ -1033,8 +1062,10 @@ def _complete_reply(prepared: PreparedReply) -> dict:
     elif prepared.dialogue:
         try:
             response.update(answer=_dialogue_answer(prepared), engine='ollama')
+            generated_speech = response['answer']
             if prepared.capability_facts and prepared.capability_facts.get('completed_steps'):
                 response['answer'] = prepared.initial['answer'] + '\n' + response['answer']
+                generated_speech = (prepared.initial.get('speech_text', '') + '\n' + generated_speech).strip()
             if prepared.document_facts:
                 from .attachments import attachment_sources
                 response['context_sources'] = attachment_sources(prepared.document_facts)
@@ -1052,7 +1083,7 @@ def _complete_reply(prepared: PreparedReply) -> dict:
         response['context_budget'] = prepared.context_budget
     speech = response.get('speech_text')
     if prepared.dialogue or prepared.compose_actions and prepared.result:
-        speech = response['answer']
+        speech = generated_speech if generated_speech is not None else response['answer']
     response.update(output_channels(response['answer'], response.get('action_results', []), speech))
     return response
 

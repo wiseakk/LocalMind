@@ -22,7 +22,44 @@ def compound_parts(text):
     if re.search(r'[«»"`]|\b(?:если|когда|или|либо)\b', text, re.I):
         return [text]
     start = r'(?=(?:не\s+)?(?:открой|запусти|включи|выключи|закрой|выведи|найди|прочитай|расскажи|объясни|создай|удали)\b)'
-    return [part.strip() for part in re.split(r'(?:\s+(?:и|затем|потом)\s+|[,;.!]\s*(?:(?:а\s+)?(?:потом|затем)\s+)?)' + start, text, flags=re.I) if part.strip()]
+    return [part.strip() for part in re.split(r'(?:\s+(?:и|затем|потом)\s+|[,;.!]\s*(?:(?:а\s+)?(?:потом|затем|после\s+запуска)\s+)?)' + start, text, flags=re.I) if part.strip()]
+
+
+def validate_sequence(parts, conversation, assess):
+    """Check every clause before execution, using only provisional typed refs.
+
+    Provisional file IDs never leave this function. Real selections and grants
+    must still be revalidated by each adapter during execution. Window closing
+    is excluded here because resolving it would stamp native windows in preflight.
+    """
+    from .conversations import Conversation
+    preview = Conversation(conversation.id, conversation.touched,
+                           references=dict(conversation.references), focus=conversation.focus)
+    for part in parts:
+        assessment = assess(part)
+        if assessment.blocked_reason or command_negated(part):
+            return assessment.blocked_reason or 'В последовательности есть отрицание. Уточни шаги.'
+        if (assessment.grant and assessment.grant.name == 'close_app') or re.search(r'\bзакрой\b', part, re.I):
+            return 'Для безопасного закрытия отправь отдельный запрос и выбери окно.'
+        intent, clarification, reference = pc_intent(part, preview, assessment)
+        if clarification:
+            return clarification
+        if intent:
+            if not registry.validate(intent):
+                return 'Один из шагов не прошёл проверку параметров.'
+            if intent.name == 'apps.open':
+                reference = Reference('application', intent.arguments['app_id'])
+            elif intent.name in ('files.search', 'files.find_latest_pdf_in_downloads'):
+                reference = Reference('file', 'provisional-selected-file')
+            if reference:
+                preview.references[reference.kind] = reference
+                preview.focus = reference.kind
+        elif assessment.grant:
+            if assessment.grant.name != 'set_light':
+                return 'Не удалось проверить один из шагов.'
+        elif not assessment.informational or re.search(r'\b(?:открой|запусти|включи|выключи|выведи|найди|создай|удали|прочитай)\b', part, re.I):
+            return 'Не удалось проверить все шаги. Уточни действия и цели.'
+    return None
 
 
 def pc_intent(text, conversation, assessment):
@@ -35,12 +72,23 @@ def pc_intent(text, conversation, assessment):
     if command_negated(normalized) or re.search(r'[«»"`]|\b(?:если|когда)\b', normalized, re.I):
         return None, None, None
     file_ref = conversation.references.get('file') if conversation.focus == 'file' else None
-    document = r'(?:его|этот (?:файл|документ)|последний PDF(?:-файл)?|содержимое (?:файла|документа))'
-    read = re.fullmatch(polite + r'(?:а\s+)?(?:что\s+(?:(?:этот|этот самый)\s+(?:файл|документ)\s+)?(?:внутри|содержит)|что\s+(?:находится\s+)?(?:внутри\s+(?:этого\s+(?:документа|файла)|него)|в\s+(?:нём|нем|этом (?:файле|документе)))|(?:прочитай|объясни|перескажи|суммируй)\s+' + document + r')[?!.]*', normalized, re.I)
+    document = r'(?:его|этот (?:файл|документ|PDF(?:-файл)?)|последний PDF(?:-файл)?|содержимое (?:файла|документа))'
+    read = re.fullmatch(polite + r'(?:а\s+)?(?:что\s+(?:(?:этот|этот самый)\s+(?:файл|документ)\s+)?(?:внутри|содержит)|что\s+(?:находится\s+)?(?:внутри\s+(?:этого\s+(?:документа|файла)|него)|в\s+(?:нём|нем|этом (?:файле|документе)))|(?:прочитай|объясни|перескажи|суммируй|кратко\s+перескажи|расскажи(?:\s+кратко)?\s+про)\s+' + document + r'|(?:сделай|дай)\s+(?:краткое\s+)?(?:резюме|содержание|описание)\s+(?:этого\s+(?:PDF(?:-файла)?|документа|файла)|последнего\s+PDF(?:-файла)?)' + r')[?!.]*', normalized, re.I)
+    read = read or re.fullmatch(polite + r'(?:о\s+ч[её]м\s+(?:этот\s+(?:документ|файл|PDF(?:-файл)?)|он)|'
+        r'(?:расскажи\s+(?:о|про)\s+(?:содержимое|содержимом|содержание)|(?:кратко\s+)?опиши|(?:кратко\s+)?перескажи)\s+'
+        r'(?:этот\s+(?:документ|файл|PDF(?:-файл)?)|этого\s+(?:документа|файла|PDF(?:-файла)?)|его)|'
+        r'(?:расскажи|объясни)\s+(?:о|про)\s+(?:этот|этом)\s+(?:документ|документе|файл|файле|PDF(?:-файл)?))[?!.]*', normalized, re.I)
+    read = read or re.fullmatch(polite + r'(?:(?:сделай|дай)\s+(?:краткое\s+)?резюме|суммируй|перескажи)[?!.]*', normalized, re.I)
     if read:
         if not file_ref:
             return None, 'Сначала выбери файл через поиск.', None
         return ToolIntent('files.read_selected_file', {'file_id': file_ref.id}), None, file_ref
+    # Content-like requests which exceed the reviewed grammar must not fall
+    # through to a model that has only the selected filename in its history.
+    if (file_ref
+            and re.search(r'\b(?:содержим\w*|содержан\w*|резюме|перескаж\w*|суммир\w*|прочит\w*|опиши|расскажи|объясни|итог\w*|вывод\w*)\b|о\s+ч[её]м', normalized, re.I)
+            and re.search(r'\b(?:PDF|файл\w*|документ\w*|его|он|н[её]м|него)\b', normalized, re.I)):
+        return None, 'Для чтения выбранного файла скажи «Прочитай этот документ» или уточни запрос.', None
     if re.fullmatch(r'(?:ну[, ]+)?(?:ебать[, ]+)?(?:название\s+скажи|скажи\s+название(?:\s+(?:последнего PDF(?:-файла)?|этого (?:документа|файла)))?|как\s+он\s+называется)[?!.]*', normalized, re.I):
         if file_ref:
             return ToolIntent('files.describe_selected_file', {'file_id': file_ref.id}), None, file_ref

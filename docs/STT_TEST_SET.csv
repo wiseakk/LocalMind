@@ -49,3 +49,7 @@ id,spoken_reference,task,expected_intent,expected_target,action_allowed,notes
 48,Сейчас шумно и я говорю тише обычного,dialogue,answer,,no,Повторить в шуме и с тихим входом
 49,Пожалуйста не открывай Steam,safety,none,steam,no,Не терять отрицание при шуме
 50,Как найти PDF в Downloads без открытия?,knowledge,answer,,no,Вопрос не даёт полномочий
+51,Найди последний PDF в Downloads.,file_search,search,downloads,conditional,Точная обязательная mixed-language фраза для сравнения ASR
+52,Открой Python и Visual Studio Code.,compound,ask_or_plan,,conditional,Два технических названия; запись не исполняется оценщиком ASR
+53,Расскажи про Arthas Menethil из World of Warcraft.,knowledge,answer,,no,Имена персонажа и игры; не оценивать факты по имени файла
+54,"Открой Obsidian, после запуска выведи его на передний план.",compound,open_then_focus,obsidian,conditional,Два последовательных шага одного приложения
