@@ -402,3 +402,36 @@ Check cancellation again after launch inspection and immediately before spawn;
 revoked/cancelled requests must not trigger background-instance activation.
 No app/window permission is broadened by the TTS changes. Browser runner/host
 restrictions and the rejected Zen inspection remain explicit verification limits.
+# 2026-10-31 — scoped pronunciation regression policy
+
+Supersede the previous unknown-Latin letter-spelling default. Parse Roman
+numerals only after the known Warcraft/Diablo title families, before ordinary
+Latin adaptation; preserve standalone I and version boundaries. Whole reviewed
+entities precede individual words and never match dictionary prefixes inside
+unknown names. Explicit initialisms retain letter names; uppercase alone is
+not an initialism classifier. Use a small deterministic English sound function
+for unknown ordinary names, with no runtime downloads/dependencies/services.
+Keep normalize_speech's legacy filename role and the original displayed text.
+Streaming protects complete/partial entities, including whitespace variants;
+guard Python/JavaScript vocabulary drift with a focused test.
+
+Evaluate original CMUdict data through a local ARPAbet-to-Cyrillic renderer rather
+than adopting a Python wrapper or adding a TTS service. Actual coverage was 15/18
+words (including unseen names); 33 comparison WAVs were generated but not heard.
+Text-level advantages on Phoenix do not outweigh absent novel names, loss of
+Russian conventional Diablo pronunciation, and unrated stress. Retain this as
+an optional evaluation script; do not silently promote lexicon/G2P to runtime.
+CMUdict data has its own notice-retaining license; the separately licensed
+Python wrapper was not installed. Do not claim a learned G2P was evaluated.
+
+All four text stages belong to a single immutable preparation object. The exact
+worker input is separate even when it equals pronunciation_text, so a future
+adapter cannot hide a rewrite. LOCALMIND_TTS_DIAGNOSTICS=1 alone enables bounded
+per-request JSON text logging in parent stderr, with unique request ID plus
+generation/voice. Worker framed stdout, default privacy and xenia settings stay
+unchanged. Evaluation audio retention remains explicit opt-in.
+
+Automated tests and generated WAVs are implementation evidence, not perceptual
+approval. Keep audible correctness and real streamed playback open after
+Playwright EPERM, unavailable browser host and rejected Zen access. Never fill
+reviewer/quality fields from synthesis success or claim microphone/GPU testing.

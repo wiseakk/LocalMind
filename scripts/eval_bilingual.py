@@ -4,6 +4,7 @@ Run in .voice-envs/silero with --retain-audio to create a listening worksheet.
 Package loading and synthesis are measured separately; no acoustic claims.
 """
 import argparse
+from dataclasses import asdict
 import hashlib
 import html
 import json
@@ -17,9 +18,18 @@ import wave
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from localmind.speech_text import clean_speech, language_spans, normalize_speech, prepare_speech
+from localmind.speech_text import clean_speech, language_spans, normalize_speech, prepare_speech, speech_preparation
 
-PHRASES = (
+REVIEW_ENTITIES = (
+    ('warcraft-ii', 'Warcraft II'), ('warcraft-iii', 'Warcraft III'),
+    ('diablo-immortal', 'Diablo Immortal'), ('diablo-iv', 'Diablo IV'),
+    ('blizzard-entertainment', 'Blizzard Entertainment'), ('hearthstone', 'Hearthstone'),
+    ('heroes-of-the-storm', 'Heroes of the Storm'),
+    ('ai', 'AI'), ('api', 'API'), ('pdf', 'PDF'), ('rsa', 'RSA'), ('cpp', 'C++'),
+)
+PHRASES = tuple((key + '-standalone', text) for key, text in REVIEW_ENTITIES) + tuple(
+    (key + '-sentence', f'Сегодня мы обсуждаем {text}. Расскажи об этом подробнее.')
+    for key, text in REVIEW_ENTITIES) + (
     ('arthas', 'Расскажи про Arthas Menethil из World of Warcraft'),
     ('warcraft-iii', 'Warcraft III: Reign of Chaos'),
     ('frozen-throne', 'The Frozen Throne'),
@@ -47,6 +57,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--retain-audio', action='store_true')
     parser.add_argument('--output', type=Path, default=ROOT / '.test-artifacts/bilingual')
+    parser.add_argument('--current-only', action='store_true', help='Only current Russian xenia samples')
+    parser.add_argument('--iterations', type=int, choices=range(1, 7), default=6)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     os.environ.update(HF_HUB_OFFLINE='1', HF_HUB_DISABLE_TELEMETRY='1', DO_NOT_TRACK='1')
@@ -59,7 +71,8 @@ def main():
               'listening': {'intelligibility': None, 'names': None, 'voice_consistency': None,
                             'pauses': None, 'joins': None, 'reviewer': None},
               'routing_decision': 'No English routing enabled: listening and voice-consistency review pending'}
-    for model_id, speaker in (('v5_6_ru', 'xenia'), ('v3_en', 'en_0')):
+    selections = (('v5_6_ru', 'xenia'),) if args.current_only else (('v5_6_ru', 'xenia'), ('v3_en', 'en_0'))
+    for model_id, speaker in selections:
         path = ROOT / 'models/silero' / (model_id + '.pt')
         if not path.is_file():
             report['models'][model_id] = {'unavailable': 'Local model missing; no download attempted'}
@@ -78,16 +91,21 @@ def main():
                 spans = [span.text for span in language_spans(clean_speech(phrase)) if span.language == 'en']
                 variants = [('english-excerpt-' + str(index + 1), text) for index, text in enumerate(spans)]
             else:
-                variants = [('literal', clean_speech(phrase)), ('legacy', normalize_speech(phrase)),
-                            ('current', prepare_speech(phrase, 'silero-v5_6-ru'))]
+                variants = [('current', prepare_speech(phrase, 'silero-v5_6-ru'))]
+                if not args.current_only:
+                    variants = [('literal', clean_speech(phrase)), ('legacy', normalize_speech(phrase))] + variants
             for mode, text in variants:
                 row = {'phrase_id': phrase_id, 'original': phrase, 'mode': mode, 'model': model_id,
-                       'input': text, 'synthesis_ms': [], 'audio_duration_s': None}
+                       'speaker': speaker, 'input': text, 'synthesis_ms': [], 'audio_duration_s': None,
+                       'listening': {'reviewer': None, 'observations': None, 'recognizable_names': None,
+                                     'numerals': None, 'stress': None, 'pauses': None, 'joins': None}}
+                if mode == 'current':
+                    row.update(asdict(speech_preparation(phrase, 'silero-v5_6-ru')))
                 if model_id == 'v3_en':
                     row['original_excerpt'] = text
                     text = english_input(text)
                     row['input'] = text
-                for iteration in range(6):
+                for iteration in range(args.iterations):
                     started = time.perf_counter()
                     try:
                         samples = model.apply_tts(text=text, speaker=speaker, sample_rate=24000,
@@ -101,6 +119,7 @@ def main():
                                 output.setnchannels(1); output.setsampwidth(2); output.setframerate(24000)
                                 output.writeframes((np.clip(samples, -1, 1) * 32767).astype('<i2').tobytes())
                             row['audio'] = filename
+                            row['audio_sha256'] = identity(args.output / filename)
                     except Exception as exc:
                         # Failed inputs remain failures, never silent WAV placeholders.
                         row['error'] = type(exc).__name__
@@ -113,15 +132,23 @@ def main():
         for row in report['rows']:
             audio = ('<audio controls preload="none" src="' + html.escape(row['audio'], quote=True) + '"></audio>'
                      if row.get('audio') else 'Unsupported input: ' + html.escape(row.get('error', 'unavailable')))
-            rows.append('<tr><td>' + html.escape(row['original']) + '</td><td>' + row['model'] + ' / ' + row['mode']
-                        + '</td><td>' + html.escape(row['input']) + '</td><td>' + audio + '</td></tr>')
+            stages = '<br>'.join(html.escape(key + ': ' + row[key]) for key in
+                ('original_text', 'cleaned_text', 'pronunciation_text', 'tts_input') if key in row)
+            rows.append('<tr><td>' + html.escape(row['phrase_id'] + ': ' + row['original']) + '</td><td>'
+                        + row['model'] + ' / ' + row['speaker'] + ' / ' + row['mode']
+                        + '</td><td>' + (stages or html.escape(row['input'])) + '</td><td>' + audio
+                        + '</td><td>Reviewer: pending<br>Names / numerals / stress / pauses / joins: unrated</td></tr>')
         (args.output / 'listen.html').write_text('<!doctype html><meta charset="utf-8"><title>Silero comparison</title>'
             '<h1>Listening review pending</h1><p>Compare intelligibility, recognizable names, voice consistency, pauses and joins. '
             'English files are excerpts with en_0, not xenia. WAV generation does not prove quality.</p>'
-            '<table border="1"><thead><tr><th>Original</th><th>Variant</th><th>Spoken copy</th><th>Audio</th></tr></thead><tbody>'
+            '<p>Record reviewer and observations in each evaluation.json row. Match phrase ID and WAV SHA256.</p>'
+            '<table border="1"><thead><tr><th>Original</th><th>Variant</th><th>Stages</th><th>Audio</th><th>Listening</th></tr></thead><tbody>'
             + ''.join(rows) + '</tbody></table>', encoding='utf-8')
     print(json.dumps({'rows': len(report['rows']), 'errors': sum('error' in row for row in report['rows']),
                       'output': str(args.output)}, ensure_ascii=False))
+    current = [row for row in report['rows'] if row['mode'] == 'current']
+    if len(current) != len(PHRASES) or any('error' in row for row in current):
+        raise SystemExit(1)
 
 
 if __name__ == '__main__':

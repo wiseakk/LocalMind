@@ -634,3 +634,51 @@ Completion remains blocked on listening feedback, interactive Obsidian cases and
 browser playback-start verification. Browser host access was unavailable and
 automatic approval review rejected Zen inspection as not approved for Computer
 Use. Microphone and GPU remain unverified. English routing remains disabled.
+# 2026-10-31 — pronunciation regression repair, listening still required
+
+Scoped repair implemented: contextual Warcraft/Diablo Roman numerals before Latin
+processing, whole multiword names, explicit initialisms, sound-based unknown-word
+fallback, and version-prefix spacing. Silero v5_6_ru / xenia and synthesis settings
+are unchanged. Speech stages are inspectable; only explicit
+LOCALMIND_TTS_DIAGNOSTICS=1 logs original/cleaned/pronunciation/exact worker input
+with per-request correlation through parent stderr. Default mode retains no
+diagnostic text/audio. Display, file/action data and unrelated agent/UI behavior
+were not changed. Stream cuts retain complete and partial entities; exhaustive
+delta-split tests cover required names around the 240-character boundary.
+
+Final verification: 607 Python tests and 35 subtests passed (Python 3.14.5;
+cache provider disabled after a worktree cache-write warning). JavaScript syntax
+checks, 76 local asset references, 38 main DOM checks, ten attachment-context
+checks and seven history checks passed. git diff --check passed. package.json
+declares no separate typecheck/build step. Source environments were reused
+read-only via ignored local .pth links with matching interpreter versions;
+initial attempts using mismatched binary-package versions failed collection
+and were corrected before the final full run.
+
+Actual Windows CPU synthesis: 32 current Russian xenia WAVs, including all 24
+required standalone/sentence cases, zero synthesis errors. Python 3.12.10,
+PyTorch 2.6.0+cpu, four threads, 24 kHz; model SHA256 unchanged. Existing local
+model copied into this worktree; no model download. A real isolated current
+server on 8879 returned HTTP 200 and mono PCM16/24 kHz (5.45 s) for the combined
+Warcraft II / Diablo Immortal / Blizzard Entertainment sentence. Its opt-in
+stderr diagnostic record showed all four stages. No default-mode text logging
+was added. Offline environment flags used; physical disconnection not tested.
+
+CMUdict versus compact fallback evaluation: 18 supplied/unseen words, 15 lexicon
+hits, 33 optional xenia WAVs. Text inspection shows benefits for Phoenix but
+undesired English Diablo/Warcraft forms and missing novel names; lexicon/phoneme
+approach stays evaluation-only. No runtime dependency/service added. License,
+Windows setup, limitations, commands and results are in BILINGUAL_SILERO.md;
+WAV identities and unrated review fields are in
+docs/evidence/silero-pronunciation-20261031.json and ignored listening worksheets.
+
+Required actual listening remains UNVERIFIED: no reviewer/observations were
+available. Browser streamed playback/pause/stop/mute was not verified on real
+audio: Playwright worker spawn failed with EPERM, browser host was unavailable,
+and automatic approval review rejected Zen access because Computer Use was not
+approved to use Zen. DOM playback/cancellation checks use doubles and do not
+establish hearing. Windows microphone and GPU remain untested. Do not declare
+speech quality or this task fully signed off until all required WAVs and the
+same streamed sentences receive listening review. Other historical open issues
+remain unchanged. The owned isolated test server was stopped after verification;
+the pre-existing LocalMind server was not changed or stopped.

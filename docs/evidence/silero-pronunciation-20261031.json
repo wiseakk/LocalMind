@@ -1,0 +1,1336 @@
+{
+  "date": "2026-10-31",
+  "scope": "Silero pronunciation regression repair only",
+  "verification": {
+    "python_tests": 607,
+    "python_subtests": 35,
+    "main_dom_checks": 38,
+    "attachment_dom_checks": 10,
+    "history_dom_checks": 7,
+    "local_assets": 76,
+    "javascript_syntax": "passed",
+    "diff_whitespace": "passed",
+    "required_wavs": 24,
+    "current_wavs": 32,
+    "g2p_comparison_wavs": 33,
+    "wav_hashes_headers_and_current_stage_identity": "passed",
+    "http_smoke": {
+      "status": 200,
+      "rate": 24000,
+      "channels": 1,
+      "sample_bytes": 2,
+      "duration_s": 5.45,
+      "diagnostic_stages": "observed in parent stderr"
+    },
+    "browser": "Unverified: Playwright spawn EPERM; browser access host unavailable; Zen access rejected because Computer Use was not approved to use Zen",
+    "listening": "Unverified; no reviewer or perceptual observations received",
+    "microphone": "not tested",
+    "gpu": "not tested",
+    "physical_offline_disconnection": "not tested"
+  },
+  "current_synthesis": {
+    "python": "3.12.10",
+    "torch": "2.6.0+cpu",
+    "platform": "Windows-10-10.0.19045-SP0",
+    "device": "cpu",
+    "threads": 4,
+    "sample_rate": 24000,
+    "models": {
+      "v5_6_ru": {
+        "sha256": "04cc9b1d08ce38bcaa9d02c488d80d3e6806d17f7eaa7c95982f36a3cbf50b2e",
+        "speaker": "xenia",
+        "cold_package_load_ms": 1856.187,
+        "symbols": "_~|!+,-.:;?абвгдежзийклмнопрстуфхцчшщъыьэюяё–… ",
+        "phons": null
+      }
+    },
+    "rows": [
+      {
+        "phrase_id": "warcraft-ii-standalone",
+        "original": "Warcraft II",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Варкрафт два",
+        "synthesis_ms": [
+          719.662
+        ],
+        "audio_duration_s": 0.9125,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Warcraft II",
+        "cleaned_text": "Warcraft II",
+        "pronunciation_text": "Варкрафт два",
+        "tts_input": "Варкрафт два",
+        "audio": "eval-v5_6_ru-current-warcraft-ii-standalone.wav",
+        "audio_sha256": "b5be90e1652093dd704db25a7ffa62384e713c78d5de801604beb8b7db39a06d"
+      },
+      {
+        "phrase_id": "warcraft-iii-standalone",
+        "original": "Warcraft III",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Варкрафт три",
+        "synthesis_ms": [
+          40.304
+        ],
+        "audio_duration_s": 0.95,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Warcraft III",
+        "cleaned_text": "Warcraft III",
+        "pronunciation_text": "Варкрафт три",
+        "tts_input": "Варкрафт три",
+        "audio": "eval-v5_6_ru-current-warcraft-iii-standalone.wav",
+        "audio_sha256": "4a8ed7187a069f344051ecbb4c8ad0bc15b6cce6fd777e63d9ce43b90a3967d3"
+      },
+      {
+        "phrase_id": "diablo-immortal-standalone",
+        "original": "Diablo Immortal",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Диабло Иммортал",
+        "synthesis_ms": [
+          52.817
+        ],
+        "audio_duration_s": 1.0625,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Diablo Immortal",
+        "cleaned_text": "Diablo Immortal",
+        "pronunciation_text": "Диабло Иммортал",
+        "tts_input": "Диабло Иммортал",
+        "audio": "eval-v5_6_ru-current-diablo-immortal-standalone.wav",
+        "audio_sha256": "40640a857504ea3199283866808c3b2c70b8cad0fcaea37211fc104f4d5204df"
+      },
+      {
+        "phrase_id": "diablo-iv-standalone",
+        "original": "Diablo IV",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Диабло четыре",
+        "synthesis_ms": [
+          40.443
+        ],
+        "audio_duration_s": 0.95,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Diablo IV",
+        "cleaned_text": "Diablo IV",
+        "pronunciation_text": "Диабло четыре",
+        "tts_input": "Диабло четыре",
+        "audio": "eval-v5_6_ru-current-diablo-iv-standalone.wav",
+        "audio_sha256": "d500561fe132ce99b98749e49227a5d4a526a8627ce2b96f037b6d37312876f4"
+      },
+      {
+        "phrase_id": "blizzard-entertainment-standalone",
+        "original": "Blizzard Entertainment",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Близзард Энтертейнмент",
+        "synthesis_ms": [
+          60.682
+        ],
+        "audio_duration_s": 1.475,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Blizzard Entertainment",
+        "cleaned_text": "Blizzard Entertainment",
+        "pronunciation_text": "Близзард Энтертейнмент",
+        "tts_input": "Близзард Энтертейнмент",
+        "audio": "eval-v5_6_ru-current-blizzard-entertainment-standalone.wav",
+        "audio_sha256": "0d64ad8e1f6a57fbfae4a8006acb832ae9fd8df7482fd9e2abe14b988c29c866"
+      },
+      {
+        "phrase_id": "hearthstone-standalone",
+        "original": "Hearthstone",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Хартстоун",
+        "synthesis_ms": [
+          35.856
+        ],
+        "audio_duration_s": 0.7625,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Hearthstone",
+        "cleaned_text": "Hearthstone",
+        "pronunciation_text": "Хартстоун",
+        "tts_input": "Хартстоун",
+        "audio": "eval-v5_6_ru-current-hearthstone-standalone.wav",
+        "audio_sha256": "dca877ab2e956ae1d370f1b261ad0672274cc96a1e258fc4b0cf2a94054a78ec"
+      },
+      {
+        "phrase_id": "heroes-of-the-storm-standalone",
+        "original": "Heroes of the Storm",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Хироуз оф зэ Сторм",
+        "synthesis_ms": [
+          48.163
+        ],
+        "audio_duration_s": 1.2,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Heroes of the Storm",
+        "cleaned_text": "Heroes of the Storm",
+        "pronunciation_text": "Хироуз оф зэ Сторм",
+        "tts_input": "Хироуз оф зэ Сторм",
+        "audio": "eval-v5_6_ru-current-heroes-of-the-storm-standalone.wav",
+        "audio_sha256": "38d871dd2cd810cbff46444b38c94df72fc3e43c406028e1a30298cd876624d7"
+      },
+      {
+        "phrase_id": "ai-standalone",
+        "original": "AI",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "эй ай",
+        "synthesis_ms": [
+          29.792
+        ],
+        "audio_duration_s": 0.5625,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "AI",
+        "cleaned_text": "AI",
+        "pronunciation_text": "эй ай",
+        "tts_input": "эй ай",
+        "audio": "eval-v5_6_ru-current-ai-standalone.wav",
+        "audio_sha256": "6b5ebdc6dc7457e58736a38797b6cb9e1d3d6fac6e5cc935f66f20ecb5921e9e"
+      },
+      {
+        "phrase_id": "api-standalone",
+        "original": "API",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "эй пи ай",
+        "synthesis_ms": [
+          34.134
+        ],
+        "audio_duration_s": 0.725,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "API",
+        "cleaned_text": "API",
+        "pronunciation_text": "эй пи ай",
+        "tts_input": "эй пи ай",
+        "audio": "eval-v5_6_ru-current-api-standalone.wav",
+        "audio_sha256": "5a34d350bdc34210b12b063576f33a8ef10af32beb274692c784576560512a6a"
+      },
+      {
+        "phrase_id": "pdf-standalone",
+        "original": "PDF",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "пи ди эф",
+        "synthesis_ms": [
+          33.601
+        ],
+        "audio_duration_s": 0.7125,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "PDF",
+        "cleaned_text": "PDF",
+        "pronunciation_text": "пи ди эф",
+        "tts_input": "пи ди эф",
+        "audio": "eval-v5_6_ru-current-pdf-standalone.wav",
+        "audio_sha256": "65154680903b785e244672cb94aa4f409f013039a5aa32e06322c040b0f507a6"
+      },
+      {
+        "phrase_id": "rsa-standalone",
+        "original": "RSA",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "эр эс эй",
+        "synthesis_ms": [
+          34.763
+        ],
+        "audio_duration_s": 0.7375,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "RSA",
+        "cleaned_text": "RSA",
+        "pronunciation_text": "эр эс эй",
+        "tts_input": "эр эс эй",
+        "audio": "eval-v5_6_ru-current-rsa-standalone.wav",
+        "audio_sha256": "e222fbc3ef3767a0ce639fa44051d7496c572e85e57854c057c5998ede936e6c"
+      },
+      {
+        "phrase_id": "cpp-standalone",
+        "original": "C++",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "си плюс плюс",
+        "synthesis_ms": [
+          41.747
+        ],
+        "audio_duration_s": 0.975,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "C++",
+        "cleaned_text": "C++",
+        "pronunciation_text": "си плюс плюс",
+        "tts_input": "си плюс плюс",
+        "audio": "eval-v5_6_ru-current-cpp-standalone.wav",
+        "audio_sha256": "54f78c50e3990887fac6fddee75f290cb8140ccc3d690d7140fef55bd8e717ca"
+      },
+      {
+        "phrase_id": "warcraft-ii-sentence",
+        "original": "Сегодня мы обсуждаем Warcraft II. Расскажи об этом подробнее.",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Сегодня мы обсуждаем Варкрафт два. Расскажи об этом подробнее.",
+        "synthesis_ms": [
+          146.746
+        ],
+        "audio_duration_s": 3.9375,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Сегодня мы обсуждаем Warcraft II. Расскажи об этом подробнее.",
+        "cleaned_text": "Сегодня мы обсуждаем Warcraft II. Расскажи об этом подробнее.",
+        "pronunciation_text": "Сегодня мы обсуждаем Варкрафт два. Расскажи об этом подробнее.",
+        "tts_input": "Сегодня мы обсуждаем Варкрафт два. Расскажи об этом подробнее.",
+        "audio": "eval-v5_6_ru-current-warcraft-ii-sentence.wav",
+        "audio_sha256": "f5164faed951921870ea123007cc5b959a9a914c5c6187798830e5377527843d"
+      },
+      {
+        "phrase_id": "warcraft-iii-sentence",
+        "original": "Сегодня мы обсуждаем Warcraft III. Расскажи об этом подробнее.",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Сегодня мы обсуждаем Варкрафт три. Расскажи об этом подробнее.",
+        "synthesis_ms": [
+          141.972
+        ],
+        "audio_duration_s": 3.9375,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Сегодня мы обсуждаем Warcraft III. Расскажи об этом подробнее.",
+        "cleaned_text": "Сегодня мы обсуждаем Warcraft III. Расскажи об этом подробнее.",
+        "pronunciation_text": "Сегодня мы обсуждаем Варкрафт три. Расскажи об этом подробнее.",
+        "tts_input": "Сегодня мы обсуждаем Варкрафт три. Расскажи об этом подробнее.",
+        "audio": "eval-v5_6_ru-current-warcraft-iii-sentence.wav",
+        "audio_sha256": "ec78aa1e5293e5cc8fc72aba5fdafffd45e5222c3d3eafece2c7248340f15c30"
+      },
+      {
+        "phrase_id": "diablo-immortal-sentence",
+        "original": "Сегодня мы обсуждаем Diablo Immortal. Расскажи об этом подробнее.",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Сегодня мы обсуждаем Диабло Иммортал. Расскажи об этом подробнее.",
+        "synthesis_ms": [
+          148.089
+        ],
+        "audio_duration_s": 4.0625,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Сегодня мы обсуждаем Diablo Immortal. Расскажи об этом подробнее.",
+        "cleaned_text": "Сегодня мы обсуждаем Diablo Immortal. Расскажи об этом подробнее.",
+        "pronunciation_text": "Сегодня мы обсуждаем Диабло Иммортал. Расскажи об этом подробнее.",
+        "tts_input": "Сегодня мы обсуждаем Диабло Иммортал. Расскажи об этом подробнее.",
+        "audio": "eval-v5_6_ru-current-diablo-immortal-sentence.wav",
+        "audio_sha256": "92adc1b42858eea23fe5c3493285c4c84f29588e86e7021f3ab478637449196a"
+      },
+      {
+        "phrase_id": "diablo-iv-sentence",
+        "original": "Сегодня мы обсуждаем Diablo IV. Расскажи об этом подробнее.",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Сегодня мы обсуждаем Диабло четыре. Расскажи об этом подробнее.",
+        "synthesis_ms": [
+          144.987
+        ],
+        "audio_duration_s": 4.025,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Сегодня мы обсуждаем Diablo IV. Расскажи об этом подробнее.",
+        "cleaned_text": "Сегодня мы обсуждаем Diablo IV. Расскажи об этом подробнее.",
+        "pronunciation_text": "Сегодня мы обсуждаем Диабло четыре. Расскажи об этом подробнее.",
+        "tts_input": "Сегодня мы обсуждаем Диабло четыре. Расскажи об этом подробнее.",
+        "audio": "eval-v5_6_ru-current-diablo-iv-sentence.wav",
+        "audio_sha256": "d4674ffc1419b8244a17e4fe4c72fb64ba952f2212ff7a3843616c4daa4d5f18"
+      },
+      {
+        "phrase_id": "blizzard-entertainment-sentence",
+        "original": "Сегодня мы обсуждаем Blizzard Entertainment. Расскажи об этом подробнее.",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Сегодня мы обсуждаем Близзард Энтертейнмент. Расскажи об этом подробнее.",
+        "synthesis_ms": [
+          157.741
+        ],
+        "audio_duration_s": 4.25,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Сегодня мы обсуждаем Blizzard Entertainment. Расскажи об этом подробнее.",
+        "cleaned_text": "Сегодня мы обсуждаем Blizzard Entertainment. Расскажи об этом подробнее.",
+        "pronunciation_text": "Сегодня мы обсуждаем Близзард Энтертейнмент. Расскажи об этом подробнее.",
+        "tts_input": "Сегодня мы обсуждаем Близзард Энтертейнмент. Расскажи об этом подробнее.",
+        "audio": "eval-v5_6_ru-current-blizzard-entertainment-sentence.wav",
+        "audio_sha256": "fc23293c6d9d76eecbb2bbfae3d42727378385a3fa1c51e9ed60799790e68a96"
+      },
+      {
+        "phrase_id": "hearthstone-sentence",
+        "original": "Сегодня мы обсуждаем Hearthstone. Расскажи об этом подробнее.",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Сегодня мы обсуждаем Хартстоун. Расскажи об этом подробнее.",
+        "synthesis_ms": [
+          139.384
+        ],
+        "audio_duration_s": 3.7625,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Сегодня мы обсуждаем Hearthstone. Расскажи об этом подробнее.",
+        "cleaned_text": "Сегодня мы обсуждаем Hearthstone. Расскажи об этом подробнее.",
+        "pronunciation_text": "Сегодня мы обсуждаем Хартстоун. Расскажи об этом подробнее.",
+        "tts_input": "Сегодня мы обсуждаем Хартстоун. Расскажи об этом подробнее.",
+        "audio": "eval-v5_6_ru-current-hearthstone-sentence.wav",
+        "audio_sha256": "e43beb9bad7f7710c23f0e57a71c0c6c31aeca42552610fc8bbac08fcb1dc6bc"
+      },
+      {
+        "phrase_id": "heroes-of-the-storm-sentence",
+        "original": "Сегодня мы обсуждаем Heroes of the Storm. Расскажи об этом подробнее.",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Сегодня мы обсуждаем Хироуз оф зэ Сторм. Расскажи об этом подробнее.",
+        "synthesis_ms": [
+          155.095
+        ],
+        "audio_duration_s": 4.2125,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Сегодня мы обсуждаем Heroes of the Storm. Расскажи об этом подробнее.",
+        "cleaned_text": "Сегодня мы обсуждаем Heroes of the Storm. Расскажи об этом подробнее.",
+        "pronunciation_text": "Сегодня мы обсуждаем Хироуз оф зэ Сторм. Расскажи об этом подробнее.",
+        "tts_input": "Сегодня мы обсуждаем Хироуз оф зэ Сторм. Расскажи об этом подробнее.",
+        "audio": "eval-v5_6_ru-current-heroes-of-the-storm-sentence.wav",
+        "audio_sha256": "a894a989a83e6d8039ff7b762f5261158b085206b83bab6c9d54d5ea6224ce56"
+      },
+      {
+        "phrase_id": "ai-sentence",
+        "original": "Сегодня мы обсуждаем AI. Расскажи об этом подробнее.",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Сегодня мы обсуждаем эй ай. Расскажи об этом подробнее.",
+        "synthesis_ms": [
+          134.887
+        ],
+        "audio_duration_s": 3.6,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Сегодня мы обсуждаем AI. Расскажи об этом подробнее.",
+        "cleaned_text": "Сегодня мы обсуждаем AI. Расскажи об этом подробнее.",
+        "pronunciation_text": "Сегодня мы обсуждаем эй ай. Расскажи об этом подробнее.",
+        "tts_input": "Сегодня мы обсуждаем эй ай. Расскажи об этом подробнее.",
+        "audio": "eval-v5_6_ru-current-ai-sentence.wav",
+        "audio_sha256": "3fb557df3edf1a9cba5189522342c8190d587045ca3066ffe68273680a8d1675"
+      },
+      {
+        "phrase_id": "api-sentence",
+        "original": "Сегодня мы обсуждаем API. Расскажи об этом подробнее.",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Сегодня мы обсуждаем эй пи ай. Расскажи об этом подробнее.",
+        "synthesis_ms": [
+          143.239
+        ],
+        "audio_duration_s": 3.7125,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Сегодня мы обсуждаем API. Расскажи об этом подробнее.",
+        "cleaned_text": "Сегодня мы обсуждаем API. Расскажи об этом подробнее.",
+        "pronunciation_text": "Сегодня мы обсуждаем эй пи ай. Расскажи об этом подробнее.",
+        "tts_input": "Сегодня мы обсуждаем эй пи ай. Расскажи об этом подробнее.",
+        "audio": "eval-v5_6_ru-current-api-sentence.wav",
+        "audio_sha256": "4cb95e1449c5ef39f582ca38f120061963279c57908ba51c6063b3e51e45f676"
+      },
+      {
+        "phrase_id": "pdf-sentence",
+        "original": "Сегодня мы обсуждаем PDF. Расскажи об этом подробнее.",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Сегодня мы обсуждаем пи ди эф. Расскажи об этом подробнее.",
+        "synthesis_ms": [
+          140.214
+        ],
+        "audio_duration_s": 3.675,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Сегодня мы обсуждаем PDF. Расскажи об этом подробнее.",
+        "cleaned_text": "Сегодня мы обсуждаем PDF. Расскажи об этом подробнее.",
+        "pronunciation_text": "Сегодня мы обсуждаем пи ди эф. Расскажи об этом подробнее.",
+        "tts_input": "Сегодня мы обсуждаем пи ди эф. Расскажи об этом подробнее.",
+        "audio": "eval-v5_6_ru-current-pdf-sentence.wav",
+        "audio_sha256": "89848e75ed0863ba5a629c0c21c032d6441f1bf84b8153b5cea6911ba98450cd"
+      },
+      {
+        "phrase_id": "rsa-sentence",
+        "original": "Сегодня мы обсуждаем RSA. Расскажи об этом подробнее.",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Сегодня мы обсуждаем эр эс эй. Расскажи об этом подробнее.",
+        "synthesis_ms": [
+          141.804
+        ],
+        "audio_duration_s": 3.75,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Сегодня мы обсуждаем RSA. Расскажи об этом подробнее.",
+        "cleaned_text": "Сегодня мы обсуждаем RSA. Расскажи об этом подробнее.",
+        "pronunciation_text": "Сегодня мы обсуждаем эр эс эй. Расскажи об этом подробнее.",
+        "tts_input": "Сегодня мы обсуждаем эр эс эй. Расскажи об этом подробнее.",
+        "audio": "eval-v5_6_ru-current-rsa-sentence.wav",
+        "audio_sha256": "cf718c14ff884bf59b0a96d7f5e5b9a9175f39131558543966ca6ab2681b0eb8"
+      },
+      {
+        "phrase_id": "cpp-sentence",
+        "original": "Сегодня мы обсуждаем C++. Расскажи об этом подробнее.",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Сегодня мы обсуждаем си плюс плюс. Расскажи об этом подробнее.",
+        "synthesis_ms": [
+          146.312
+        ],
+        "audio_duration_s": 3.95,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Сегодня мы обсуждаем C++. Расскажи об этом подробнее.",
+        "cleaned_text": "Сегодня мы обсуждаем C++. Расскажи об этом подробнее.",
+        "pronunciation_text": "Сегодня мы обсуждаем си плюс плюс. Расскажи об этом подробнее.",
+        "tts_input": "Сегодня мы обсуждаем си плюс плюс. Расскажи об этом подробнее.",
+        "audio": "eval-v5_6_ru-current-cpp-sentence.wav",
+        "audio_sha256": "7beabf0f03f8229709e8b1db860a93647627fc3ac4d055f5cc4cfcc9aa9a81dd"
+      },
+      {
+        "phrase_id": "arthas",
+        "original": "Расскажи про Arthas Menethil из World of Warcraft",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Расскажи про Артас Менетил из Ворлд оф Варкрафт",
+        "synthesis_ms": [
+          99.725
+        ],
+        "audio_duration_s": 2.575,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Расскажи про Arthas Menethil из World of Warcraft",
+        "cleaned_text": "Расскажи про Arthas Menethil из World of Warcraft",
+        "pronunciation_text": "Расскажи про Артас Менетил из Ворлд оф Варкрафт",
+        "tts_input": "Расскажи про Артас Менетил из Ворлд оф Варкрафт",
+        "audio": "eval-v5_6_ru-current-arthas.wav",
+        "audio_sha256": "98120d5a8798af32adb34622e4227c8f119983fc7644c28d6dc518f3c7dcdc31"
+      },
+      {
+        "phrase_id": "warcraft-iii",
+        "original": "Warcraft III: Reign of Chaos",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Варкрафт три: Рэйн оф Кэйос",
+        "synthesis_ms": [
+          87.342
+        ],
+        "audio_duration_s": 2.2875,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Warcraft III: Reign of Chaos",
+        "cleaned_text": "Warcraft III: Reign of Chaos",
+        "pronunciation_text": "Варкрафт три: Рэйн оф Кэйос",
+        "tts_input": "Варкрафт три: Рэйн оф Кэйос",
+        "audio": "eval-v5_6_ru-current-warcraft-iii.wav",
+        "audio_sha256": "b7b82c9c411cdf14194c53c521da74c2e5baf6a4362910f8786af18020a0ec18"
+      },
+      {
+        "phrase_id": "frozen-throne",
+        "original": "The Frozen Throne",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Зэ Фроузен Троун",
+        "synthesis_ms": [
+          49.827
+        ],
+        "audio_duration_s": 1.175,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "The Frozen Throne",
+        "cleaned_text": "The Frozen Throne",
+        "pronunciation_text": "Зэ Фроузен Троун",
+        "tts_input": "Зэ Фроузен Троун",
+        "audio": "eval-v5_6_ru-current-frozen-throne.wav",
+        "audio_sha256": "fdf610a24de1743f376ef28fb0a12a6ae53add7de412533073cfb31f3e61f615"
+      },
+      {
+        "phrase_id": "heroes",
+        "original": "Heroes of the Storm",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Хироуз оф зэ Сторм",
+        "synthesis_ms": [
+          48.844
+        ],
+        "audio_duration_s": 1.2,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Heroes of the Storm",
+        "cleaned_text": "Heroes of the Storm",
+        "pronunciation_text": "Хироуз оф зэ Сторм",
+        "tts_input": "Хироуз оф зэ Сторм",
+        "audio": "eval-v5_6_ru-current-heroes.wav",
+        "audio_sha256": "38d871dd2cd810cbff46444b38c94df72fc3e43c406028e1a30298cd876624d7"
+      },
+      {
+        "phrase_id": "hearthstone",
+        "original": "Hearthstone",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Хартстоун",
+        "synthesis_ms": [
+          36.067
+        ],
+        "audio_duration_s": 0.7625,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Hearthstone",
+        "cleaned_text": "Hearthstone",
+        "pronunciation_text": "Хартстоун",
+        "tts_input": "Хартстоун",
+        "audio": "eval-v5_6_ru-current-hearthstone.wav",
+        "audio_sha256": "dca877ab2e956ae1d370f1b261ad0672274cc96a1e258fc4b0cf2a94054a78ec"
+      },
+      {
+        "phrase_id": "obsidian",
+        "original": "Открой Obsidian",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Открой Обсидиан",
+        "synthesis_ms": [
+          48.054
+        ],
+        "audio_duration_s": 1.0375,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Открой Obsidian",
+        "cleaned_text": "Открой Obsidian",
+        "pronunciation_text": "Открой Обсидиан",
+        "tts_input": "Открой Обсидиан",
+        "audio": "eval-v5_6_ru-current-obsidian.wav",
+        "audio_sha256": "75c9dbac930211c7f41c36ede41493465f1496b4dbbc680d6706c7e8e3213d6f"
+      },
+      {
+        "phrase_id": "pdf-downloads",
+        "original": "Найди PDF в Downloads",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Найди пи ди эф в Даунлоудс",
+        "synthesis_ms": [
+          64.465
+        ],
+        "audio_duration_s": 1.5375,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Найди PDF в Downloads",
+        "cleaned_text": "Найди PDF в Downloads",
+        "pronunciation_text": "Найди пи ди эф в Даунлоудс",
+        "tts_input": "Найди пи ди эф в Даунлоудс",
+        "audio": "eval-v5_6_ru-current-pdf-downloads.wav",
+        "audio_sha256": "0d4a82935a0b0f7c46bb73945aa45507c34fe183f8b0144a24d3fe797151de06"
+      },
+      {
+        "phrase_id": "python-cpp",
+        "original": "Я программирую на Python и C++",
+        "mode": "current",
+        "model": "v5_6_ru",
+        "speaker": "xenia",
+        "input": "Я программирую на Пайтон и си плюс плюс",
+        "synthesis_ms": [
+          92.926
+        ],
+        "audio_duration_s": 2.3375,
+        "listening": {
+          "reviewer": null,
+          "observations": null,
+          "recognizable_names": null,
+          "numerals": null,
+          "stress": null,
+          "pauses": null,
+          "joins": null
+        },
+        "original_text": "Я программирую на Python и C++",
+        "cleaned_text": "Я программирую на Python и C++",
+        "pronunciation_text": "Я программирую на Пайтон и си плюс плюс",
+        "tts_input": "Я программирую на Пайтон и си плюс плюс",
+        "audio": "eval-v5_6_ru-current-python-cpp.wav",
+        "audio_sha256": "c7e2fd37f6b6351d796ad8584bd7863b759ce8dce275ac0ce93090d340d48ec7"
+      }
+    ],
+    "browser_playback_start_ms": null,
+    "acoustic_latency_ms": null,
+    "listening": {
+      "intelligibility": null,
+      "names": null,
+      "voice_consistency": null,
+      "pauses": null,
+      "joins": null,
+      "reviewer": null
+    },
+    "routing_decision": "No English routing enabled: listening and voice-consistency review pending"
+  },
+  "lexicon_comparison": {
+    "lexicon_sha256": "81917843c7f44ce2b094ac63873c2c7a4cf802040792c455ba3ca406891c3d22",
+    "lexicon_bytes": 3618488,
+    "lexicon_words": 126052,
+    "model": "v5_6_ru",
+    "speaker": "xenia",
+    "listening_reviewer": null,
+    "rows": [
+      {
+        "word": "Warcraft",
+        "compact": "варкрафт",
+        "phonemes": [
+          "W",
+          "AO1",
+          "R",
+          "K",
+          "R",
+          "AE2",
+          "F",
+          "T"
+        ],
+        "lexicon": "воркрэфт",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "warcraft-compact.wav",
+            "sha256": "01c32c3041ea0f7a87b6e34e2490201bab1a4e7f916e01bb05e7db7f87b84161"
+          },
+          "lexicon": {
+            "filename": "warcraft-lexicon.wav",
+            "sha256": "8cd0bb45a8853c18733d47ccdc784e76691cd480ba60867be2f841ec69876dc9"
+          }
+        }
+      },
+      {
+        "word": "Diablo",
+        "compact": "диабло",
+        "phonemes": [
+          "D",
+          "AY2",
+          "AE1",
+          "B",
+          "L",
+          "OW0"
+        ],
+        "lexicon": "дайэблоу",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "diablo-compact.wav",
+            "sha256": "f4cb7b7f9267975736bb6879a4634b010d0ea0d596d9c7b1a86914827c04c796"
+          },
+          "lexicon": {
+            "filename": "diablo-lexicon.wav",
+            "sha256": "01c40706f55756e57475a59fe10295388ad3c8e5e652b7ace04ec84e2c5f235c"
+          }
+        }
+      },
+      {
+        "word": "Immortal",
+        "compact": "иммортал",
+        "phonemes": [
+          "IH2",
+          "M",
+          "AO1",
+          "R",
+          "T",
+          "AH0",
+          "L"
+        ],
+        "lexicon": "имортал",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "immortal-compact.wav",
+            "sha256": "cc047fe2d47a5479364e6ee2ce6d4e78d20574e31cfc2463d510b33fe10cb7ad"
+          },
+          "lexicon": {
+            "filename": "immortal-lexicon.wav",
+            "sha256": "bdf1a00637068df3aa26266e11a9383ac30382d74dfd548373d8f63a926eccd9"
+          }
+        }
+      },
+      {
+        "word": "Blizzard",
+        "compact": "близзард",
+        "phonemes": [
+          "B",
+          "L",
+          "IH1",
+          "Z",
+          "ER0",
+          "D"
+        ],
+        "lexicon": "близерд",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "blizzard-compact.wav",
+            "sha256": "ec4e496f5a711fcd80e402e727294968c01a558cd0e78ea57eddc926c092fe85"
+          },
+          "lexicon": {
+            "filename": "blizzard-lexicon.wav",
+            "sha256": "68cbe914e83d619804e615f4d44c2ff2a01957c7921694463cefef02534eb7e9"
+          }
+        }
+      },
+      {
+        "word": "Entertainment",
+        "compact": "ентертэйнмент",
+        "phonemes": [
+          "EH2",
+          "N",
+          "T",
+          "ER0",
+          "T",
+          "EY1",
+          "N",
+          "M",
+          "AH0",
+          "N",
+          "T"
+        ],
+        "lexicon": "энтертэйнмант",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "entertainment-compact.wav",
+            "sha256": "14f3b88ac26b3eccbf84fb2a3459547a4c291eef318deba55f7ef98bd4f6d5bd"
+          },
+          "lexicon": {
+            "filename": "entertainment-lexicon.wav",
+            "sha256": "3c8fc4a918e61763cac839736b6f07b94febf2444077d037c3ad3d9fe74d21e1"
+          }
+        }
+      },
+      {
+        "word": "Hearthstone",
+        "compact": "хиртстоун",
+        "phonemes": null,
+        "lexicon": null,
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "hearthstone-compact.wav",
+            "sha256": "32ddd2464771bd4330f492b508ec9acbdaac6860cd79d14e6f5de7c2bac3a682"
+          }
+        }
+      },
+      {
+        "word": "Heroes",
+        "compact": "хероес",
+        "phonemes": [
+          "HH",
+          "IH1",
+          "R",
+          "OW0",
+          "Z"
+        ],
+        "lexicon": "хироуз",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "heroes-compact.wav",
+            "sha256": "c8df394bd79ebe6c52e43a9ce55944d6a736bd90f8a2b60e438ef43fd2c4ffdf"
+          },
+          "lexicon": {
+            "filename": "heroes-lexicon.wav",
+            "sha256": "8bc109557aad5058e2ce32ebc79cf6e0ee8b4c001d33fd754609920f241d3a9a"
+          }
+        }
+      },
+      {
+        "word": "Storm",
+        "compact": "сторм",
+        "phonemes": [
+          "S",
+          "T",
+          "AO1",
+          "R",
+          "M"
+        ],
+        "lexicon": "сторм",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "storm-compact.wav",
+            "sha256": "883952a4d4c7bcafffedded03c8f7c589657e3ff270d40dae7bcfa880ee72757"
+          },
+          "lexicon": {
+            "filename": "storm-lexicon.wav",
+            "sha256": "883952a4d4c7bcafffedded03c8f7c589657e3ff270d40dae7bcfa880ee72757"
+          }
+        }
+      },
+      {
+        "word": "Crystal",
+        "compact": "кристал",
+        "phonemes": [
+          "K",
+          "R",
+          "IH1",
+          "S",
+          "T",
+          "AH0",
+          "L"
+        ],
+        "lexicon": "кристал",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "crystal-compact.wav",
+            "sha256": "ac42fa5a289cdc224aca82810737f351691376fbd51e917c0ec9bab297e6b80b"
+          },
+          "lexicon": {
+            "filename": "crystal-lexicon.wav",
+            "sha256": "ac42fa5a289cdc224aca82810737f351691376fbd51e917c0ec9bab297e6b80b"
+          }
+        }
+      },
+      {
+        "word": "Phoenix",
+        "compact": "фоеникс",
+        "phonemes": [
+          "F",
+          "IY1",
+          "N",
+          "IH0",
+          "K",
+          "S"
+        ],
+        "lexicon": "финикс",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "phoenix-compact.wav",
+            "sha256": "16618c621db55b8d53b37fa8f1d46e9b1d8982d4713baf7f6e38364b5c662ad1"
+          },
+          "lexicon": {
+            "filename": "phoenix-lexicon.wav",
+            "sha256": "c071d04ce40592472a4d0a2063dab62424cecac76a4cc87ef822b60b6a388d79"
+          }
+        }
+      },
+      {
+        "word": "Zephyr",
+        "compact": "зефир",
+        "phonemes": [
+          "Z",
+          "EH1",
+          "F",
+          "ER0"
+        ],
+        "lexicon": "зэфер",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "zephyr-compact.wav",
+            "sha256": "2345131f9db88ab1d8bc1ffb80ddf2af05df0b8b8ac429d3adb7a18c6893ac15"
+          },
+          "lexicon": {
+            "filename": "zephyr-lexicon.wav",
+            "sha256": "932cb749f1367a9d5f53d78a8c073dc81601a536f0ea55e7a3be2e3c3265627c"
+          }
+        }
+      },
+      {
+        "word": "Aurora",
+        "compact": "орора",
+        "phonemes": [
+          "ER0",
+          "AO1",
+          "R",
+          "AH0"
+        ],
+        "lexicon": "ерора",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "aurora-compact.wav",
+            "sha256": "f3d21d8b8b901097b4bfef0a98076b10c26bcc881166ae51d1b9192bf9420c6c"
+          },
+          "lexicon": {
+            "filename": "aurora-lexicon.wav",
+            "sha256": "8eb25c10d4d8c18c6d499662bdd2a243ef632e6e69e5136dd4ffd8d578c70ae2"
+          }
+        }
+      },
+      {
+        "word": "Silver",
+        "compact": "силвер",
+        "phonemes": [
+          "S",
+          "IH1",
+          "L",
+          "V",
+          "ER0"
+        ],
+        "lexicon": "силвер",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "silver-compact.wav",
+            "sha256": "b5434265c58c18414bc92229862d7b6763115b760d23fccfc89b9ac0a7719c5b"
+          },
+          "lexicon": {
+            "filename": "silver-lexicon.wav",
+            "sha256": "b5434265c58c18414bc92229862d7b6763115b760d23fccfc89b9ac0a7719c5b"
+          }
+        }
+      },
+      {
+        "word": "Riven",
+        "compact": "ривен",
+        "phonemes": [
+          "R",
+          "IH1",
+          "V",
+          "AH0",
+          "N"
+        ],
+        "lexicon": "риван",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "riven-compact.wav",
+            "sha256": "13b5a14b20473d54c8f61edd87c98bbbd1653ce6a1d9a616beff784913ce2f9d"
+          },
+          "lexicon": {
+            "filename": "riven-lexicon.wav",
+            "sha256": "3687fea63fd098a35636cc769735612a8df0852bd4f1fd4122e0275330709e3e"
+          }
+        }
+      },
+      {
+        "word": "Nebula",
+        "compact": "небула",
+        "phonemes": [
+          "N",
+          "EH1",
+          "B",
+          "Y",
+          "AH0",
+          "L",
+          "AH0"
+        ],
+        "lexicon": "нэбйала",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "nebula-compact.wav",
+            "sha256": "17114cd7e9b3df9c96f2e81299cb2fec15e90b047bf3914d4df2c8b157f134f3"
+          },
+          "lexicon": {
+            "filename": "nebula-lexicon.wav",
+            "sha256": "203ae93e23fc987ccca547586b740168f67a8785aeee1b02c92e71cfb65041e9"
+          }
+        }
+      },
+      {
+        "word": "Notion",
+        "compact": "ношен",
+        "phonemes": [
+          "N",
+          "OW1",
+          "SH",
+          "AH0",
+          "N"
+        ],
+        "lexicon": "ноушан",
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "notion-compact.wav",
+            "sha256": "c26aa5a4c6022ba06fbc1ca97a2925c7e0bb3b55c34fa289261a3f91c67fe631"
+          },
+          "lexicon": {
+            "filename": "notion-lexicon.wav",
+            "sha256": "4545c953948f3df0a79c2f153bf5700cf216f7802cdd19d80fab57b76068b28d"
+          }
+        }
+      },
+      {
+        "word": "Qzora",
+        "compact": "кзора",
+        "phonemes": null,
+        "lexicon": null,
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "qzora-compact.wav",
+            "sha256": "fae2afaf85c9accbbe2619ba2813a099953fe05c91aca3fe8b39951c569f8ecf"
+          }
+        }
+      },
+      {
+        "word": "Kubernetes",
+        "compact": "кубернетес",
+        "phonemes": null,
+        "lexicon": null,
+        "observations": null,
+        "audio": {
+          "compact": {
+            "filename": "kubernetes-compact.wav",
+            "sha256": "b503a2ab9166b4669f8ccf14325668809b2b50eab751f24df6026cb5135a8d45"
+          }
+        }
+      }
+    ],
+    "lexicon_hits": 15
+  }
+}

@@ -2,14 +2,20 @@
 'use strict';
 // Match speech_text.SILERO_NAMES phrases. Keep names together at the length
 // boundary, including a partially received name at the end of a text delta.
-const speechNames=['World of Warcraft','Arthas Menethil','Warcraft III','Reign of Chaos','The Frozen Throne','Heroes of the Storm'];
+const speechNames=['World of Warcraft','Arthas Menethil','Reign of Chaos','The Frozen Throne','Heroes of the Storm',
+  'Diablo Immortal','Blizzard Entertainment','Visual Studio Code','C++','C#',
+  ...['Warcraft','Diablo'].flatMap(title=>['II','III','IV','V','VI','VII','VIII','IX','X'].map(number=>`${title} ${number}`))];
+const speechNamePatterns=speechNames.map(name=>new RegExp('^'+name.split(/\s+/).map(word=>word.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s+')+'(?![\\p{L}\\p{N}_])','iu'));
 function nameSafeCut(buffer,cut) {
-  const lower=buffer.toLowerCase();
-  for(let start=Math.max(0,cut-24);start<cut;start++) {
+  // Scan token starts rather than a fixed character window: repeated whitespace
+  // can make an entity longer than its canonical spelling. Buffer is bounded.
+  for(let start=0;start<cut;start++) {
     if(start && /[\p{L}\p{N}_]/u.test(buffer[start-1]))continue;
-    for(const name of speechNames) {
-      const candidate=lower.slice(start,start+name.length);
-      if(candidate.length && name.toLowerCase().startsWith(candidate) && start+name.length>cut)cut=start;
+    const tail=buffer.slice(start),candidate=tail.toLowerCase().replace(/\s+/g,' ');
+    for(let index=0;index<speechNames.length;index++) {
+      const match=speechNamePatterns[index].exec(tail);
+      if((match && start+match[0].length>cut) ||
+          (candidate.length && speechNames[index].toLowerCase().startsWith(candidate)))cut=start;
     }
   }
   return cut;
@@ -52,7 +58,8 @@ class LocalMindSpeech {
       let match;
       while((match=end.exec(s.buffer))){if(match.index>=12){cut=match.index+1;break;}}
       if(!cut && s.buffer.length>=110){const comma=s.buffer.indexOf(', ',60);if(comma>=0)cut=comma+1;}
-      if(!cut && s.buffer.length>240){cut=s.buffer.lastIndexOf(' ',240);if(cut<40)cut=240;cut=nameSafeCut(s.buffer,cut);}
+      if(!cut && s.buffer.length>240){cut=s.buffer.lastIndexOf(' ',240);if(cut<40)cut=240;}
+      if(cut)cut=nameSafeCut(s.buffer,cut);
       if(!cut && final)cut=s.buffer.length;
       if(!cut)break;
       const text=s.buffer.slice(0,cut).trim();s.buffer=s.buffer.slice(cut);

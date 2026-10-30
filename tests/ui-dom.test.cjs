@@ -74,6 +74,36 @@ function makeCanvasDom(){
       }finally{dom.window.close()}
     }
   });
+  await run('every title delta split near the length boundary preserves entities and final flushing',async()=>{
+    const dom=makeDom();
+    try{
+      const w=dom.window;
+      const names=['Warcraft II','Warcraft III','Diablo Immortal','Diablo IV','Blizzard Entertainment',
+        'warcraft iii','DIABLO IMMORTAL','Blizzard   Entertainment'];
+      for(const name of names)for(let start=216;start<=244;start++)for(let split=0;split<=name.length;split++){
+        const prefix='слово '.repeat(Math.floor(start/6))+'а'.repeat(start%6)+' ';
+        const original=prefix+name+'. Затем продолжаем разговор.';
+        const speech=new w.LocalMindSpeech({request:()=>{throw Error('queue-only test')},enabled:()=>true,
+          voice:()=> 'silero-v5_6-ru',report:message=>{throw Error(message)}});
+        speech.pump=()=>{};speech.start();
+        speech.feed(prefix+name.slice(0,split));
+        speech.feed(name.slice(split)+'. Затем продолжаем разговор.',true);
+        const chunks=speech.session.texts.map(item=>item.text);
+        assert.ok(chunks.some(text=>text.includes(name)),`${name}: start=${start}, delta split=${split}`);
+        assert.equal(chunks.join(' ').replace(/\s+/g,' ').trim(),original.replace(/\s+/g,' ').trim());
+        assert.equal(speech.session.buffer.trim(),'');assert.equal(speech.session.done,true);
+        const count=chunks.length;speech.feed('duplicate',true);assert.equal(speech.session.texts.length,count);
+        speech.cancel();
+      }
+      // A final incomplete prefix must be flushed instead of waiting forever.
+      for(const name of names){
+        const speech=new w.LocalMindSpeech({enabled:()=>true,report:message=>{throw Error(message)}});
+        speech.pump=()=>{};speech.start();speech.feed('слово '.repeat(39)+name.slice(0,5),true);
+        assert.equal(speech.session.texts.map(item=>item.text).join(' '),'слово '.repeat(39).trim()+' '+name.slice(0,5));
+        assert.equal(speech.session.buffer.trim(),'');speech.cancel();
+      }
+    }finally{dom.window.close()}
+  });
   await run('mismatched info and conversation instances reject valid PNG before any upload',async()=>{
     const calls=[];
     const dom=makeDom(async(url,options)=>{

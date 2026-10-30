@@ -1,5 +1,133 @@
 # Silero bilingual repair — 31 October 2026
 
+## Pronunciation regression repair (current checkout, 31 October)
+
+The implementation below supersedes the earlier letter-spelling fallback. The
+older benchmark and Obsidian notes further down are historical evidence, not
+verification of this repair. **Listening sign-off is still pending.**
+
+`speech_text.speech_preparation` now processes contextual Warcraft/Diablo Roman
+numerals before Latin words: II → два, III → три, IV → четыре (also V–X).
+Standalone I, unrelated initialisms and version suffixes are excluded from this
+rule. Reviewed whole entities precede component words, with case-insensitive
+matching, whitespace normalization and word boundaries. Written pronunciations
+include «Диабло Иммортал», «Близзард Энтертейнмент», the existing game names and
+common software/technology names. These spellings have not been audibly rated.
+
+Ordinary unknown words use a compact deterministic English sound approximation
+with digraphs, silent-e and positional vowel/consonant rules. Genuine initialisms
+use an explicit table: AI «эй ай», API «эй пи ай», PDF «пи ди эф», RSA «эр эс эй»;
+C++ remains «си плюс плюс». Uppercase alone never enables letter spelling;
+NASA/NATO are speakable acronyms. Unknown names remain approximate, especially
+irregular vowels and stress. This is not general English TTS or translation.
+Display/history/action arguments and filename rendering retain their contracts.
+The engine remains silero-v5_6-ru, xenia, CPU/four threads/24 kHz, accent and ё on.
+
+`speech.js` protects complete and partial entities across deltas and cuts, with
+case-insensitive matching and repeated whitespace. Tests feed every character
+split of the required multiword titles at starts 216–244, verify final flushing
+and exact text preservation, and check Python/JavaScript phrase-list agreement.
+
+### Diagnostics and privacy
+
+Default mode writes no pronunciation text/audio files. Explicit diagnostic mode:
+
+```powershell
+$env:LOCALMIND_TTS_DIAGNOSTICS='1'; .\.venv\Scripts\python.exe start.py
+```
+
+Each synthesis call emits one JSON record through the parent process's stderr
+logger `localmind.pronunciation`: unique `request_id`, `generation_id`, `voice`,
+`original_text` (incoming speech chunk), `cleaned_text`, `pronunciation_text`, and
+the exact `tts_input`. The last two currently match because the worker performs
+no additional text rewrite. No diagnostics enter the worker's stdout protocol.
+Explicitly captured console logs contain text; disable with
+`Remove-Item Env:LOCALMIND_TTS_DIAGNOSTICS` when review ends. Diagnostic mode does
+not record audio. CLI evaluation retains synthetic WAVs only with `--retain-audio`.
+
+### Local English lexicon/G2P evaluation
+
+The experiment in `scripts/eval_pronunciation.py` loads the original
+[CMUdict data](https://github.com/cmusphinx/cmudict) locally and renders ARPAbet
+phonemes to Cyrillic. It compares 18 words, including ten names unseen by the
+reviewed dictionary, against the compact rules. The downloaded data has 126,052
+word keys, takes 3,618,488 bytes, and covers 15 of the 18 words. Hearthstone,
+Qzora and Kubernetes are absent. Both variants produced 33 xenia WAVs in
+`.test-artifacts/g2p/listen.html`; reviewer and sound-quality ratings remain null.
+
+Text inspection: CMUdict produces «финикс» for Phoenix where compact rules give
+«фоеникс», but «дайэблоу» for Diablo and «воркрэфт» for Warcraft conflict with the
+requested Russian forms. Crystal and Silver agree. Coverage alone is not a
+quality score. Lexicon lookup does not infer novel words, resolve title numerals
+or select Russian conventional brand pronunciations. ARPAbet stress is omitted
+by this experimental renderer; Silero still selects stress. Therefore this
+lexicon is evaluation-only; runtime keeps the small pronunciation function and
+has no new dependencies, service, subprocess or inference-time downloads.
+
+Windows setup cost for the experiment: one explicitly downloaded UTF-8 data
+file, stdlib parser/phone renderer, and the existing Silero environment only for
+optional audio. It runs offline after setup. CMUdict's original
+[license](https://github.com/cmusphinx/cmudict/blob/master/LICENSE) permits use and
+redistribution with its notice/disclaimer. Keep that license alongside downloaded
+data. The optional [Python wrapper](https://github.com/prosegrinder/python-cmudict)
+has a separate GPL-3.0-or-later license and importlib dependencies; it was neither
+installed nor added to the application. A learned G2P could cover novel names,
+but would still need Russian brand overrides, local model assets and listening
+evidence before promotion. No claim of learned-G2P evaluation is made here.
+
+### Current evidence and reproduction
+
+Start after the existing documented setup with one command:
+
+```powershell
+.\.venv\Scripts\python.exe start.py
+```
+
+Offline demo without Ollama, after downloading the assets:
+
+```powershell
+.\.voice-envs\silero\Scripts\python.exe scripts/eval_bilingual.py --retain-audio --current-only --iterations 1
+```
+
+Open `.test-artifacts/bilingual/listen.html`. The 24 required rows cover every
+requested standalone expression and a complete Russian sentence containing each;
+eight prior regression samples are included too. Each row records all four text
+stages, model/speaker, WAV identity/SHA256 and empty reviewer/observation fields.
+Record names, numerals, stress, pauses and joins for every required row, then
+exercise streamed playback, pause, stop and mute with the same sentences.
+
+For the optional lexicon comparison after explicitly obtaining CMUdict:
+
+```powershell
+.\.voice-envs\silero\Scripts\python.exe scripts/eval_pronunciation.py --lexicon .test-artifacts/g2p/cmudict.dict --retain-audio
+```
+
+Current run: Windows 10, Python 3.12.10/PyTorch 2.6.0+cpu for Silero;
+Python 3.14.5 for the app/tests. Reused installed packages read-only through
+ignored local environment links and copied the existing model into this worktree;
+no model download occurred. All 32 current WAVs synthesized without errors. One
+actual current-checkout HTTP request returned mono PCM16/24 kHz (5.45 seconds),
+and its stderr log showed the expected four stages. This establishes synthesis
+and diagnostics, not listening quality. See
+[current aggregate evidence](evidence/silero-pronunciation-20261031.json).
+
+Playwright could not start its worker (`spawn EPERM`). Browser access host was
+unavailable; automatic approval review rejected Zen inspection because Computer
+Use was not approved to use Zen. No streamed browser playback or actual listening
+is claimed. Windows microphone and GPU remain untested. For at least twenty
+defense questions with explanatory answers, see [DEFENSE_QA.md](DEFENSE_QA.md).
+
+Troubleshooting: missing environment/model produces 503; follow [VOICE.md](VOICE.md)
+for Silero setup rather than installing another engine. Do not point a Python
+3.12 environment at Python 3.14 binary packages. Missing Russian assets or failed
+current synthesis makes the evaluator exit nonzero. Missing English comparison
+assets do not change xenia. A 422 expansion limit means use shorter clauses.
+Use `LOCALMIND_PORT=8879` in an isolated test shell if 8765 is occupied; never
+terminate an unrelated server. Offline flags were used; physical network
+disconnection was not tested. Audible correctness remains the release blocker.
+
+---
+
 Implementation and automated checks are available; product sign-off is pending
 listening, browser playback and the interactive Obsidian foreground test.
 

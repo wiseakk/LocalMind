@@ -22,10 +22,83 @@ TERMS = {
 SILERO_NAMES = {
     **TERMS,
     'Arthas Menethil': 'Артас Менетил', 'Arthas': 'Артас', 'Menethil': 'Менетил',
-    'Warcraft III': 'Варкрафт три', 'Reign of Chaos': 'Рэйн оф Кэйос',
+    'Reign of Chaos': 'Рэйн оф Кэйос',
     'The Frozen Throne': 'Зэ Фроузен Троун',
     'Heroes of the Storm': 'Хироуз оф зэ Сторм', 'Hearthstone': 'Хартстоун',
+    'Diablo Immortal': 'Диабло Иммортал', 'Diablo': 'Диабло',
+    'Blizzard Entertainment': 'Близзард Энтертейнмент', 'Blizzard': 'Близзард',
+    'Visual Studio Code': 'Вижуал Студио Код', 'Microsoft': 'Майкрософт',
+    'Discord': 'Дискорд', 'Chrome': 'Хром', 'Firefox': 'Файрфокс',
+    'Linux': 'Линукс', 'Docker': 'Докер', 'ChatGPT': 'Чат джи пи ти',
+    'OpenAI': 'Оупен эй ай', 'NVIDIA': 'Энвидиа', 'Wi-Fi': 'вай фай',
+    'NASA': 'НАСА', 'NATO': 'НАТО',
 }
+# Explicit initialisms, never inferred just from uppercase spelling.
+INITIALISMS = {
+    'AI': 'эй ай', 'API': 'эй пи ай', 'PDF': 'пи ди эф', 'RSA': 'эр эс эй',
+    'CPU': 'си пи ю', 'GPU': 'джи пи ю', 'USB': 'ю эс би', 'SSD': 'эс эс ди',
+    'HTTP': 'эйч ти ти пи', 'HTTPS': 'эйч ти ти пи эс', 'HTML': 'эйч ти эм эл',
+    'DNS': 'ди эн эс', 'IP': 'ай пи', 'IPV': 'ай пи ви', 'V': 'ви',
+    'LLM': 'эл эл эм', 'TTS': 'ти ти эс', 'STT': 'эс ти ти',
+    'SDK': 'эс ди кей', 'CLI': 'си эл ай', 'URL': 'ю ар эл',
+}
+TITLE_NUMERALS = {'II': 'два', 'III': 'три', 'IV': 'четыре', 'V': 'пять',
+                  'VI': 'шесть', 'VII': 'семь', 'VIII': 'восемь', 'IX': 'девять', 'X': 'десять'}
+# Only known title families opt into Roman numerals; standalone I is a pronoun.
+_TITLE_NUMBER = re.compile(
+    r"(?<!\w)(Warcraft|Diablo)\s+(VIII|VII|III|VI|IV|II|IX|V|X)(?!\w|[+#]|\.[^\s.,!?;:)])", re.I)
+
+# Compact English sound approximation, independent of optional lexicons/services.
+# Ordered clusters and positional rules beat letter spelling for unseen names;
+# English stress and irregular vowels still require listening review.
+_SOUNDS = dict(zip('abcdefghijklmnopqrstuvwxyz', (
+    'а', 'б', 'к', 'д', 'е', 'ф', 'г', 'х', 'и', 'дж', 'к', 'л', 'м',
+    'н', 'о', 'п', 'к', 'р', 'с', 'т', 'у', 'в', 'в', 'кс', 'и', 'з')))
+_CLUSTERS = {
+    'tion': 'шен', 'sion': 'жен', 'tch': 'ч', 'dge': 'дж', 'igh': 'ай',
+    'sch': 'ш', 'sh': 'ш', 'ch': 'ч', 'th': 'т', 'ph': 'ф', 'ck': 'к',
+    'qu': 'кв', 'ee': 'и', 'ea': 'и', 'oo': 'у', 'ou': 'ау', 'ow': 'оу',
+    'ai': 'эй', 'ay': 'эй', 'oi': 'ой', 'oy': 'ой', 'au': 'о', 'aw': 'о',
+    'er': 'ер', 'wh': 'в', 'wr': 'р', 'kn': 'н', 'ng': 'нг',
+}
+
+
+def transliterate_english(word: str) -> str:
+    """Bounded, deterministic fallback for words, not an English translator.
+
+    No filesystem, downloads, subprocess or optional dependency in this path.
+    Possessives keep their spoken suffix; camel-case components use the same
+    sound rules without matching dictionary substrings.
+    """
+    word = re.sub(r"['’]s$", 'z', word, flags=re.I)
+    components = re.split(r'(?<=[a-z])(?=[A-Z])', word)
+    rendered = []
+    for component in components:
+        value = component.lower()
+        if value == 'i':
+            rendered.append('ай')
+            continue
+        result, index = [], 0
+        while index < len(value):
+            rest = value[index:]
+            cluster = next((key for key in _CLUSTERS if rest.startswith(key)), None)
+            if cluster:
+                result.append(_CLUSTERS[cluster])
+                index += len(cluster)
+                continue
+            char = value[index]
+            if char == 'e' and index == len(value) - 1 and len(value) > 3 and not value.endswith('le'):
+                index += 1
+                continue
+            if char in 'cg' and value[index + 1:index + 2] in ('e', 'i', 'y'):
+                result.append('с' if char == 'c' else 'дж')
+            elif index + 2 == len(value) - 1 and value[-1] == 'e' and char in 'aiou' and value[index + 1] not in 'aeiouy':
+                result.append({'a': 'эй', 'i': 'ай', 'o': 'оу', 'u': 'ю'}[char])
+            else:
+                result.append(_SOUNDS.get(char, char))
+            index += 1
+        rendered.append(''.join(result))
+    return ' '.join(rendered)
 
 
 @dataclass(frozen=True)
@@ -56,23 +129,43 @@ def language_spans(text: str) -> tuple[LanguageSpan, ...]:
 
 def _pronounce_terms(text, terms):
     for term, spoken in sorted(terms.items(), key=lambda pair: len(pair[0]), reverse=True):
-        text = re.sub(r'(?<!\w)' + re.escape(term) + r'(?!\w|[+#])', spoken, text, flags=re.I)
+        pattern = r'(?<!\w)' + r'\s+'.join(map(re.escape, term.split())) + r"(['’]s)?(?!\w|[+#])"
+        text = re.sub(pattern, lambda m: spoken + ('з' if m[1] else ''), text, flags=re.I)
     return text
+
+
+@dataclass(frozen=True)
+class SpeechPreparation:
+    original_text: str
+    cleaned_text: str
+    pronunciation_text: str
+    tts_input: str
+
+
+def speech_preparation(text: str, voice: str) -> SpeechPreparation:
+    """Distinct, inspectable stages; original_text is the incoming speech chunk."""
+    cleaned = clean_speech(text)
+    if voice != 'silero-v5_6-ru':
+        spoken = _pronounce_terms(cleaned, TERMS)
+    else:
+        # Numerals precede ordinary Latin processing and only follow known titles.
+        spoken = _TITLE_NUMBER.sub(lambda m: m[1] + ' ' + TITLE_NUMERALS[m[2].upper()], cleaned)
+        # Cleanup expands adjacent Arabic digits without adding whitespace.
+        # Keep technical version prefixes separate from those spoken digits.
+        spoken = re.sub(r'(?<!\w)(IPv|v)(?=(?:' + '|'.join(_ONES) + '))',
+                        lambda m: INITIALISMS[m[1].upper()] + ' ', spoken, flags=re.I)
+        # Whole phrases precede individual words, across any normalized whitespace.
+        spoken = _pronounce_terms(spoken, SILERO_NAMES)
+        spoken = re.sub(r"[A-Za-z]+(?:['’][A-Za-z]+)*",
+                        lambda m: INITIALISMS.get(m[0].upper())
+                        or transliterate_english(m[0]), spoken)
+    # No hidden worker-side rewriter: this is the exact text sent to synthesis.
+    return SpeechPreparation(text, cleaned, spoken, spoken)
 
 
 def prepare_speech(text: str, voice: str) -> str:
     """Adapt only the synthesis copy. One clause still uses one resident voice."""
-    cleaned = clean_speech(text)
-    if voice != 'silero-v5_6-ru':
-        return _pronounce_terms(cleaned, TERMS)
-
-    def russian_span(span):
-        spoken = _pronounce_terms(span.text, SILERO_NAMES)
-        # This model discards Latin characters. Spell unknown names/acronyms
-        # instead of silently omitting them or inventing a pronunciation.
-        return re.sub(r'[A-Za-z]+', lambda m: ' '.join(_LETTER_NAMES[c] for c in m[0].upper()), spoken)
-    return ''.join(russian_span(span) if span.language == 'en' else span.text
-                   for span in language_spans(cleaned))
+    return speech_preparation(text, voice).tts_input
 
 
 _ONES = ('ноль', 'один', 'два', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять')

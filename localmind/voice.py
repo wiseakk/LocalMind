@@ -6,11 +6,13 @@ they never supply filesystem paths, URLs, subprocess arguments, or commands.
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 import importlib.util
 import inspect
 import gc
 import io
 import json
+import logging
 import math
 import os
 from pathlib import Path
@@ -20,10 +22,11 @@ import tempfile
 import threading
 import time
 import wave
+import uuid
 
 from .asr_worker import worker as _asr_worker
 from .settings import ROOT
-from .speech_text import prepare_speech
+from .speech_text import speech_preparation
 from .speech_worker import worker as _speech_worker, SpeechWorkerError, CANDIDATES, candidate_ready
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
@@ -66,6 +69,7 @@ VOICES = {
 MODELS = ROOT / 'models'
 _operation = threading.BoundedSemaphore(1)
 _temporary_directory = tempfile.TemporaryDirectory
+_pronunciation_logger = logging.getLogger('localmind.pronunciation')
 
 
 class VoiceError(Exception):
@@ -199,12 +203,19 @@ def synthesize_speech(text: str, voice: str = DEFAULT_VOICE, generation_id: str 
         raise VoiceError(503, 'Выбранный локальный голос не установлен. Подготовьте отдельную среду и модель по docs/NEXT_VOICE.md. Установка Silero: docs/VOICE.md; setup-tts устанавливает только явно выбранный Piper.')
     if voice == PIPER_VOICE and (not _tts_ready(voice) or not _installed('piper')):
         raise VoiceError(503, 'Локальный голос Piper не установлен. Установите requirements-voice.txt и выполните python -m localmind.voice setup-tts. См. docs/VOICE.md.')
-    spoken = prepare_speech(text, voice)
+    preparation = speech_preparation(text, voice)
+    spoken = preparation.tts_input
     if not spoken:
         raise VoiceError(422, 'После подготовки для речи текст пуст.')
     # Normalization can expand numbers/technical names; bound worker input too.
     if len(spoken) > 2400:
         raise VoiceError(422, 'Для озвучивания разбей текст на более короткие фразы.')
+    # Explicit opt-in only. Parent stderr logging never touches worker stdout or
+    # creates text/audio files. Each chunk has its own ID, even in one generation.
+    if os.environ.get('LOCALMIND_TTS_DIAGNOSTICS') == '1':
+        _pronunciation_logger.warning('%s', json.dumps({
+            'request_id': uuid.uuid4().hex, 'generation_id': generation_id,
+            'voice': voice, **asdict(preparation)}, ensure_ascii=False))
     try:
         return _speech_worker.synthesize(spoken, voice, generation_id)
     except SpeechWorkerError as exc:
