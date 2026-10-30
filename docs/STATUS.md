@@ -440,3 +440,102 @@ blocker after CPU timing, suspended overlay and observable drag-test corrections
 Start: powershell -ExecutionPolicy Bypass -File .\start_windows.ps1
 Offline demo after asset downloads and troubleshooting remain in README.md;
 40 explanatory defense answers remain in docs/DEFENSE_QA.md. No push/deployment.
+
+## 2026-10-30 — Checkpoint A: real-world follow-up and attachment repair
+
+Extended complete-request Russian routing for modal foreground requests, selected
+document questions, selected-file opening and latest PDF naming. App focus is now
+a registered capability: bounded cancellation-aware discovery after authorization,
+verified executable/session/native window identity, ambiguity selection, minimized
+restore and observed foreground verification. Denial, inspection, timeout and stale
+selection remain distinct. No always-on-top or forced close.
+
+Sent attachments transfer only on request/conversation/server/ID-matched inference
+acknowledgement. Immutable message snapshots retain real image thumbnails in the
+in-memory chat history. Draft IDs are removed from future submissions; failures
+retain drafts, and reconnect uses the existing request ID. Persistence stays text-only.
+Metadata naming now revalidates selected-file hashes; permission failures retain
+specific reasons. Extracted text is excluded from public action metadata.
+
+Verified on Windows: 458 Python tests plus 35 subtests; all 34 main DOM checks,
+8 attachment checks and 7 history checks; seven JS syntax checks and diff check.
+Python runtime: existing project Python 3.14 environment, current worktree sources.
+A separate Python 3.11 environment setup was attempted; no system setup changed.
+Playwright collected 35 scenarios but worker launch failed with spawn EPERM.
+Browser connector reported browser host unavailable. These are blockers, not passes.
+Real Obsidian, PDF open, microphone, GPU ASR, speaker listening and browser image
+inference lifecycle are not yet certified by this checkpoint. Model installed:
+qwen3.5:9b, retained unchanged. No push, deployment or personal-file changes.
+
+Start: `python start.py` in the installed environment. Offline setup/demo and
+troubleshooting remain in README.md and docs/VOICE.md; docs/DEFENSE_QA.md retains
+40 explanatory defense answers. Full real-device completion remains pending.
+
+## 2026-10-30 — Checkpoint B: speech channels, voice diagnostics and grounding
+
+Implemented additive display_text/speech_text/structured_result channels, preserving
+answer/action_results. File search speaks only the selected filename; exact metadata
+and further matches are collapsed. Document summaries replace the initial read
+acknowledgement in speech. RU technical pronunciation and EN filename rendering do
+not modify disk names. Existing TTS streaming, interruption and cancellation remain.
+
+Inspected faster-whisper 1.2.1/PyAV 18.1.0/CTranslate2 4.8.4. Retained baseline
+decoding, provider, per-request model isolation and CUDA→CPU fallback. Added measured
+RMS/peak/clipping, diagnostic segment logprob/no-speech, honest uncalibrated confidence
+and editable final review. No live partial recognition is claimed. Expanded the corpus
+to 50 phrases and documented a repeatable consented microphone protocol. The evaluator
+compares baseline/technical-ru/technical-auto on the same bytes, records hashes,
+settings/device/fallback/load-inclusive latency/WER/CER/technical names, and prints raw
+transcripts only with explicit --include-transcripts. No consented recordings supplied;
+real recognition improvement, microphone quality and GPU STT remain unmeasured.
+
+Compact registry/outcome facts replace raw tool status in system instructions.
+Context budgeting protects instructions/current question, drops old history first,
+reranks document passages to preserve relevant later pages, and discloses truncation.
+Insufficient budgets fail explicitly. Public-source Warcraft checks live only in test
+fixtures, with a checked Blizzard reference; production has no hardcoded lore answers.
+
+Review corrections: Canvas sent thumbnails preserve img-src 'none' (no external image
+allowance); manual retries after transport loss reuse the original request and user
+message for two minutes. Revoked file grants retain bounded owner-only denial reasons
+without restoring old IDs. Output channels stay consistent after cancellation/errors.
+
+Current evidence (Windows 10 build 19045; Python 3.14.5; Node 24.19.0; Ollama 0.40.12):
+- 472 Python tests and 35 subtests passed, including negations, revoked/changed files,
+  scanned/encrypted PDFs and explicit write confirmation. These are automated tests;
+  native/LLM doubles are identified in test modules.
+- 51 DOM checks passed, including real message Canvas lifecycle with simulated
+  transport failure/retry, image-only and mixed image/text. These are not screenshots.
+- Seven production JS syntax checks, changed browser-test syntax checks, 76 local
+  assets and diff whitespace checks passed. No separate typecheck/build configured.
+- Real qwen3.5:9b: four production multimodal flows passed (PNG object/text,
+  image-only, page-22 PDF content, document follow-up); two checked-source factuality
+  screenings passed. These are narrow real inference results, not a broad accuracy score.
+- Real Downloads search/read: 12,000 extracted characters; a bounded 6,199-character
+  source with matching selected ID/content was observed in actual local Ollama input.
+  No personal contents, paths or names were written to the evidence report.
+- Real file open returned request_accepted; visible PDF opening is unverified.
+- Obsidian launch first returned process_created. Follow-up discovered multiple
+  matching windows and correctly required selection. No intended foreground HWND
+  was verified; minimized/activation-denied success paths are only tested with doubles.
+- Final python start.py smoke returned HTTP 200 for info/home, qwen3.5:9b selection,
+  loopback binding and strict image CSP. Temporary test server stopped afterward.
+- Playwright collects 35 cases but worker creation fails with spawn EPERM. Browser
+  connector reports host unavailable. Actual browser composer/history rendering and
+  human speaker listening remain unverified. No performance/GPU claims added.
+
+Checkpoint commits A and B could not be created: worktree Git metadata is outside
+the writable root; index.lock creation is denied. A partial early snapshot is in
+.test-artifacts/checkpoint-A.patch; it predates review corrections and is not a final
+deliverable. Final combined diff is saved separately. Changes remain in this worktree.
+The local Python 3.11 environment bootstrap stalled and was interrupted; it contains
+only pip/setuptools. Automatic approval review rejected cleanup of that generated
+.venv and a hidden runner launch without an additional specific reason. Production
+security/Windows settings were not weakened. Populate dependencies with setup_windows.ps1
+in a normal permitted session, or use the existing installed project environment.
+
+Start after setup: `python start.py`. Offline demo after explicit model downloads,
+setup and troubleshooting remain in README.md/docs/VOICE.md. The existing 40 defense
+answers remain in docs/DEFENSE_QA.md. No push, publishing or deployment occurred.
+This mission is not certified complete: real Windows/browser/microphone gates and
+the two repository commits remain outstanding.

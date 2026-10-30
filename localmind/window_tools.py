@@ -20,6 +20,7 @@ import uuid
 
 from .apps import AppError, _launch_guard, catalog
 from .results import ActionResult, refused
+from .generation import check_cancelled, cancellation
 from .windows_state import VerifiedWindow, _inspect_windows, inspect_application, inspect_applications
 
 
@@ -97,6 +98,9 @@ class NativeWindowBackend:
                     while user.IsIconic(hwnd) and time.monotonic() < until:
                         time.sleep(.02)
                 user.SetForegroundWindow(hwnd)
+                until = time.monotonic() + .3
+                while user.GetForegroundWindow() != hwnd and time.monotonic() < until:
+                    time.sleep(.02)
                 observed = user.GetForegroundWindow() == hwnd and not user.IsIconic(hwnd)
                 outcome['state'] = 'focused' if observed else 'foreground_denied'
             elif operation == 'close':
@@ -248,8 +252,43 @@ class WindowTools:
         if len(windows) != 1 or not result.success or result.data.get('truncated'):
             reason = ('У приложения несколько окон. Выбери нужное окно.' if len(windows) > 1 else
                       'Не удалось найти проверенное окно приложения. Проверь его вручную.')
-            return None, refused('apps.focus_window', app_id, reason, status='ambiguous' if windows else 'unavailable')
+            status = ('inspection_unavailable' if not result.success else 'ambiguous' if windows else 'window_pending')
+            return None, ActionResult(False, 'apps.focus_window', app_id, status, error=reason,
+                                      status_text=reason, data=result.data)
         return windows[0]['window_id'], None
+
+    def focus_app(self, app_id, timeout=4.0):
+        """Discover after authorization; support delayed and existing-instance windows.
+
+        Every poll and final native operation revalidates the image grant. Never
+        select by title or just the PID returned by a launcher (Electron handoff).
+        """
+        try:
+            with self.target_provider(app_id) as target:
+                original = target
+        except (AppError, OSError, ValueError):
+            return refused('apps.focus', app_id, 'Проверь разрешение приложения и его исполняемый файл в каталоге.', status='permission_required')
+        deadline = self.clock() + min(max(timeout, 0), 5)
+        while True:
+            check_cancelled()
+            try:
+                with self.target_provider(app_id) as current:
+                    if current != original:
+                        return refused('apps.focus', app_id, 'Цель приложения изменилась. Выбери приложение повторно.', status='stale_target')
+                    window_id, error = self.select_app_window(app_id)
+            except (AppError, OSError, ValueError):
+                return refused('apps.focus', app_id, 'Разрешение или цель приложения изменились.', status='stale_target')
+            if window_id:
+                return self.focus_window(window_id)
+            if error.execution_status != 'window_pending':
+                return error
+            if self.clock() >= deadline:
+                return refused('apps.focus', app_id, 'Проверенное окно не появилось за отведённое время. Повтори после загрузки приложения.', status='window_timeout')
+            event = cancellation.get()
+            if event is not None:
+                event.wait(.1)
+            else:
+                time.sleep(.1)
 
     def _operate(self, window_id, operation):
         action = {'focus': 'apps.focus_window', 'close': 'apps.close_window_safely',
@@ -296,7 +335,7 @@ class WindowTools:
                             status_text=f'{app.name}: запрос закрытия отправлен; исчезновение окна пока не подтверждено.', data=facts)
                     message = ('Windows не разрешила вывести окно на передний план. Выбери его через панель задач.'
                                if state == 'foreground_denied' else 'Windows отклонила запрос к выбранному окну.')
-                    return refused(action, app.id, message, status='failed')
+                    return refused(action, app.id, message, status='activation_denied' if state == 'foreground_denied' else 'inspection_unavailable')
             except (AppError, OSError, ValueError, AttributeError):
                 return refused(action, selection.app.id, 'Не удалось повторно проверить окно и разрешение. Действие отменено.', status='unavailable')
 

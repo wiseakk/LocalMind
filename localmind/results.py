@@ -28,3 +28,33 @@ class ActionResult:
 
 def refused(action: str, target: str | None, reason: str, *, status='denied') -> ActionResult:
     return ActionResult(False, action, target, status, error=reason, status_text=reason)
+
+
+def output_channels(answer, action_results, speech_text=None):
+    """Add channels without altering legacy answer/action_results wire fields.
+
+    The public results already exclude extracted text and image bytes. Never
+    construct speech by serializing structured metadata.
+    """
+    return {'display_text': answer, 'speech_text': answer if speech_text is None else speech_text,
+            'structured_result': {'actions': action_results}}
+
+
+def file_output(result):
+    """Return concise display/speech for verified file metadata, or None."""
+    if not result.success or not result.data or not result.action.startswith('files.'):
+        return None
+    name = result.data.get('filename')
+    if not isinstance(name, str):
+        return None
+    from .speech_text import pronounce_filename
+    if result.action in ('files.search', 'files.find_latest_pdf_in_downloads'):
+        return ('Выбран файл: ' + name + '. Подробности и другие совпадения — ниже.',
+                'Найден файл: ' + pronounce_filename(name) + '.')
+    if result.action == 'files.describe_selected_file':
+        return name, pronounce_filename(name)
+    if result.action == 'files.open_selected_file':
+        # Keep the adapter's distinction between accepted and observed opening.
+        prefix = 'Окно документа обнаружено: ' if result.observed_state == 'visible_window' else 'Запрос открытия передан Windows: '
+        return str(result), prefix + pronounce_filename(name) + '.'
+    return None

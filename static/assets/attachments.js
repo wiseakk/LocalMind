@@ -4,7 +4,7 @@
   const get=id=>document.getElementById(id),list=get('attachmentList'),notice=get('attachmentNotice');
   const LIMITS=Object.freeze({count:8,file:10*1024*1024,total:40*1024*1024,imagePixels:16000000});
   const types={pdf:['application/pdf'],txt:['text/plain'],md:['text/plain','text/markdown','text/x-markdown'],json:['application/json','text/plain'],docx:['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],csv:['text/csv','application/csv','text/plain','application/vnd.ms-excel'],png:['image/png'],jpg:['image/jpeg'],jpeg:['image/jpeg'],webp:['image/webp']};
-  const images=new Set(['png','jpg','jpeg','webp']),groups=new Map();
+  const images=new Set(['png','jpg','jpeg','webp']),groups=new Map(),submissions=new Map();
   let entries=[],serial=0,conversation='',selection=0,previewEntry=null,requestOverride=null,sessionOverride=null;
   groups.set('',entries);
   const labels={preparing:'Подготовка…',parsing:'Обрабатываем локально…',ready:'Загружено · будет передано со следующим сообщением',added:'Включено в запрос к локальной модели',error:'Не добавлено',removing:'Удалено из будущих запросов'};
@@ -172,10 +172,32 @@
     if(notice){notice.hidden=!entries.length;notice.textContent=entries.length?'Вложения этого диалога · локальная обработка':'';}changed();
   }
   function clearConversation(id){const key=id||'';const group=groups.get(key);if(!group)return;for(const entry of [...group])remove(entry);groups.delete(key);if(key===conversation){entries=[];groups.set(key,entries);changed();}}
-  function reset(){selection++;closePreview();for(const group of groups.values())for(const e of [...group])remove(e);groups.clear();conversation='';entries=[];groups.set('',entries);get('fileInput').value='';if(get('imageInput'))get('imageInput').value='';notice.hidden=true;notice.textContent='';zone.classList.remove('drop-active');dragDepth=0;changed();}
+  function reset(){selection++;closePreview();submissions.clear();for(const group of groups.values())for(const e of [...group])remove(e);groups.clear();conversation='';entries=[];groups.set('',entries);get('fileInput').value='';if(get('imageInput'))get('imageInput').value='';notice.hidden=true;notice.textContent='';zone.classList.remove('drop-active');dragDepth=0;changed();}
   function hasPending(){return entries.some(e=>e.state==='preparing'||e.state==='parsing');}
-  function contextIds(){return entries.filter(e=>e.serverId&&['ready','added'].includes(e.state)).map(e=>e.serverId);}
-  function acknowledge(sources){const ids=new Set((sources||[]).map(s=>s.id));for(const entry of entries)if(entry.serverId&&ids.has(entry.serverId))status(entry,'added');}
+  function contextIds(){return entries.filter(e=>e.serverId&&e.state==='ready').map(e=>e.serverId);}
+  function beginSubmission(request){
+    if(submissions.has(request.request_id))return submissions.get(request.request_id).snapshot;
+    const chosen=entries.filter(e=>request.attachment_ids.includes(e.serverId)&&e.state==='ready'&&e.session?.conversation_id===request.conversation_id&&e.session?.server_instance===request.server_instance);
+    const snapshot=Object.freeze(chosen.map(e=>Object.freeze({id:e.serverId,label:label(e),kind:images.has(e.ext)?'image':'document',thumbnail:e.thumbnail?.toDataURL('image/png')||null})));
+    submissions.set(request.request_id,{conversation:request.conversation_id,instance:request.server_instance,chosen,snapshot});
+    return snapshot;
+  }
+  function acknowledge(value,request){
+    const sent=submissions.get(request?.request_id);
+    if(!sent||value.request_id!==request.request_id||value.server_instance!==sent.instance||value.conversation_id!==sent.conversation||value.attachment_state!=='included_in_inference')return false;
+    const ids=new Set((value.context_sources||[]).map(s=>s.id));
+    if(!sent.chosen.every(e=>ids.has(e.serverId)))return false;
+    for(const e of sent.chosen){
+      // Transfer ownership to the submitted message. Do not delete server data:
+      // a reconnect replays the original request with exactly these IDs.
+      if(!live(e))continue;
+      e.alive=false;e.state='sent';e.row.remove();e.group.splice(e.group.indexOf(e),1);e.preview='';
+      if(previewEntry===e)closePreview();
+    }
+    submissions.delete(request.request_id);
+    if(!entries.length){notice.hidden=true;notice.textContent='';}changed();return true;
+  }
+  function releaseSubmission(id){submissions.delete(id);}
   window.addEventListener('pagehide',reset);
-  window.localmindAttachments={add,reset,setConversation,adoptConversation,clearConversation,contextIds,hasPending,acknowledge,limits:LIMITS,configure:options=>{requestOverride=options?.request||null;sessionOverride=options?.getSession||null;},snapshot:()=>entries.map(e=>({id:e.id,serverId:e.serverId,state:e.state,hasFile:Boolean(e.file)}))};
+  window.localmindAttachments={add,reset,setConversation,adoptConversation,clearConversation,contextIds,hasPending,beginSubmission,releaseSubmission,acknowledge,limits:LIMITS,configure:options=>{requestOverride=options?.request||null;sessionOverride=options?.getSession||null;},snapshot:()=>entries.map(e=>({id:e.id,serverId:e.serverId,state:e.state,hasFile:Boolean(e.file)}))};
 })();

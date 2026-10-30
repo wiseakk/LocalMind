@@ -39,7 +39,7 @@ async function setup(page,baseURL){
     if(path==='/api/chat/stream'){
       const body=data();state.chat.push(body);const conversation=body.conversation_id||create();
       const sources=(body.attachment_ids||[]).map(id=>state.documents.get(id)).filter(Boolean).map(({id,name,characters,truncated})=>({id,name,characters,truncated}));
-      const result={answer:'Local response: '+body.text,engine:'mock-local',action_results:[],context_sources:sources,conversation_id:conversation};
+      const result={answer:'Local response: '+body.text,engine:'mock-local',action_results:[],context_sources:sources,conversation_id:conversation,server_instance:INSTANCE,request_id:body.request_id,attachment_state:'included_in_inference'};
       return route.fulfill({contentType:'application/x-ndjson',body:JSON.stringify({type:'status',data:result})+'\n'+JSON.stringify({type:'final',data:result})+'\n'});
     }
     if(path==='/api/tts/cancel'||path==='/api/chat/cancel')return json({ok:true});
@@ -91,11 +91,27 @@ test('new-conversation document upload reaches chat as opaque context, with genu
   expect(state.uploads[0].multipart).toContain('ORBIT-842 reference text');await expect(page.locator('.attachment')).not.toHaveAttribute('data-state','added');
   await page.locator('.preview-button').click();await expect(page.locator('#previewText')).toHaveText('ORBIT-842 reference text');await page.locator('#previewClose').click();
   await send(page,'Describe the reference');expect(state.chat[0].attachment_ids).toEqual([state.uploads[0].document.id]);expect(JSON.stringify(state.chat[0])).not.toContain('ORBIT-842');
-  await expect(page.locator('.attachment')).toHaveAttribute('data-state','added');
+  await expect(page.locator('.attachment')).toHaveCount(0);await expect(page.locator('.sent-attachment')).toHaveCount(1);
   await page.locator('#newChat').click();await send(page,'Isolated conversation');expect(state.chat[1].attachment_ids).toEqual([]);
   await page.locator('#historyOpen').click();await page.locator('.history-entry').filter({hasText:'Describe the reference'}).locator('button').first().click();
-  await expect(page.locator('.attachment')).toHaveAttribute('data-state','added');await page.locator('.attachment .icon-button').click();
+  await expect(page.locator('.attachment')).toHaveCount(0);await expect(page.locator('.sent-attachment')).toHaveCount(1);expect(await page.evaluate(()=>localmindAttachments.contextIds())).toEqual([]);
   await send(page,'Without the document');expect(state.chat[2].attachment_ids).toEqual([]);
+});
+
+for(const text of ['', 'What is in this image?'])test(`PNG sent thumbnail clears composer: ${text || 'image only'}`,async({page})=>{
+  const state=artifacts.get(page);await ready(page);
+  const png=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=32;c.height=24;c.getContext('2d').fillRect(0,0,32,24);return c.toDataURL('image/png').split(',')[1];});
+  await page.locator('#imageInput').setInputFiles({name:'actual.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
+  await expect(page.locator('.attachment')).toHaveAttribute('data-state','ready');
+  await send(page,text);await expect(page.locator('#attachmentList .attachment')).toHaveCount(0);
+  await expect(page.locator('.bubble.me .sent-attachment canvas')).toBeVisible();
+  await expect(page.locator('.sent-attachment canvas')).toHaveAttribute('data-rendered','true');
+  expect(await page.locator('.sent-attachment canvas').evaluate(canvas=>canvas.dataset.rendered==='true')).toBe(true);
+  expect(state.uploads).toHaveLength(1);expect(state.chat[0].attachment_ids).toHaveLength(1);
+  await send(page,'Follow up');expect(state.chat[1].attachment_ids).toEqual([]);
+  await page.locator('#newChat').click();await send(page,'Other chat');
+  await page.locator('#historyOpen').click();await page.locator('.history-entry').nth(1).locator('button').first().click();
+  await expect(page.locator('.sent-attachment canvas')).toBeVisible();await expect(page.locator('#attachmentList .attachment')).toHaveCount(0);
 });
 
 test('drawers contain keyboard focus, all five modes work, Map restores draft and focus',async({page})=>{

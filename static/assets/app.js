@@ -35,6 +35,22 @@ function bubble(text, who) {
   } else el.textContent = text;
   $('thread').append(el); scrollEnd(); return el;
 }
+function renderSentAttachments(el,attachments){
+  if(el.querySelector('.sent-attachments'))return;
+  const group=document.createElement('div');group.className='sent-attachments';
+  for(const attachment of attachments || []){
+    const card=document.createElement('figure');card.className='sent-attachment';
+    if(attachment.kind==='image'&&attachment.thumbnail){
+      // Canvas keeps img-src 'none': decode our own bounded PNG snapshot without
+      // a URL load, remote image request or widening the Markdown image policy.
+      const canvas=document.createElement('canvas');canvas.width=192;canvas.height=192;canvas.setAttribute('role','img');canvas.setAttribute('aria-label',attachment.label);card.append(canvas);
+      const bytes=Uint8Array.from(atob(attachment.thumbnail.split(',')[1]),c=>c.charCodeAt(0));
+      void createImageBitmap(new Blob([bytes],{type:'image/png'})).then(bitmap=>{try{canvas.getContext('2d').drawImage(bitmap,0,0,192,192);canvas.dataset.rendered='true';}finally{bitmap.close();}}).catch(()=>{canvas.remove();});
+    }
+    const caption=document.createElement('figcaption');caption.textContent=attachment.label;card.append(caption);group.append(card);
+  }
+  if(group.childNodes.length)el.append(group);
+}
 function pending(el) {
   const p = document.createElement('div'); p.className = 'pending'; p.setAttribute('role','status');
   for (let i=0;i<3;i++) p.append(document.createElement('i'));
@@ -42,8 +58,8 @@ function pending(el) {
 }
 function renderStatus(el, value) {
   window.localmindScene?.toolResults(value.action_results);
-  window.localmindAttachments?.acknowledge(value.context_sources || []);
   el.querySelectorAll('.action-chip').forEach(x=>x.remove());
+  el.querySelectorAll('.file-result-details').forEach(x=>x.remove());
   for (const result of value.action_results || []) {
     const chip = document.createElement('div'); chip.className = 'action-chip' + (result.success ? '' : ' error');
     const states = {process_created:'Запуск начат; ожидаем окно', already_running:result.observed_state==='visible_window'?'Окно приложения уже открыто':'Приложение уже работает в фоне', launch_pending:'Приложение ещё запускается', observed:'Состояние подтверждено', request_accepted:'Команда принята; состояние пока не подтверждено'};
@@ -52,6 +68,13 @@ function renderStatus(el, value) {
     const actual=result.observed_state&&result.execution_status!=='request_accepted'?' · Наблюдение: '+(observed[result.observed_state] || result.observed_state):'';
     chip.textContent = (result.mode==='DEMO'?'ДЕМО · симуляция · ':'') + target + ' · ' + (result.success ? states[result.execution_status] || result.status_text || 'Проверка завершена' : result.error || 'Действие не выполнено')+actual;
     el.insertBefore(chip, el.querySelector('.rendered-message')); 
+    if(result.success&&result.action?.startsWith('files.')&&result.data?.filename){
+      const details=document.createElement('details');details.className='file-result-details';
+      const summary=document.createElement('summary');summary.textContent='Метаданные выбранного файла'+(result.data.files?.length>1?' и другие совпадения':'');
+      const exact=document.createElement('pre');const {files,...selected}=result.data;exact.textContent=JSON.stringify(selected,null,2);details.append(summary,exact);
+      for(const match of (files || []).slice(1)){const row=document.createElement('pre');row.textContent=JSON.stringify(match,null,2);details.append(row);}
+      el.append(details);
+    }
     if(result.execution_status==='permission_required') {
       const permission=document.createElement('button');permission.className='text-button';permission.textContent='Проверить разрешения файлов';
       permission.addEventListener('click',()=>{$('appsDialog').showModal();loadFilePermissions()});chip.append(permission);
@@ -80,19 +103,26 @@ async function sendText(value) {
   if (!serverInstance) { showError('Сначала восстановите подключение к серверу.'); return; }
   if(currentConversation.archived){state('Архив доступен для чтения. Начните новый разговор.');return;}
   if(window.localmindAttachments?.hasPending()){state('Дождитесь подготовки документов или удалите их.');return;}
+  const ids=window.localmindAttachments?.contextIds() || [];
+  const previous=currentConversation.retryTurn;
+  const retry=previous&&previous.request.text===text&&previous.request.server_instance===serverInstance&&JSON.stringify(previous.request.attachment_ids)===JSON.stringify(ids)?previous:null;
+  if(retry&&Date.now()-retry.created>120000){state('Срок безопасного повтора истёк. Проверь результат действия вручную; начни новый разговор.');return;}
   lock(true); stopSpeech(); $('welcome').hidden = true; $('draftReview').hidden = true;
   window.localmindScene?.observeConversation(text,history);
-  if(!currentConversation.messages.length&&currentConversation.title==='Новый разговор')currentConversation.title=text.slice(0,60);
-  currentConversation.messages.push({role:'user',content:text});
+  if(!currentConversation.messages.length&&currentConversation.title==='Новый разговор')currentConversation.title=text.slice(0,60)||'Вложения';
+  const userMessage=retry?.userMessage || {role:'user',content:text};if(!retry)currentConversation.messages.push(userMessage);
   updateConversationTitle();
-  bubble(text, 'me'); $('message').value = '';
-  const el = bubble('', 'assistant'); pending(el); state('Проверка намерения и разрешений…');
+  const userBubble=retry?.userBubble || bubble(text, 'me'); $('message').value = '';
+  const el=retry?.el || bubble('', 'assistant');
+  if(retry){const index=currentConversation.messages.indexOf(retry.errorMessage);if(index>=0)currentConversation.messages.splice(index,1);el.querySelector('.rendered-message').textContent='';}
+  pending(el); state('Проверка намерения и разрешений…');
   // A retry after transport loss keeps this ID, so the server never repeats the action.
-  const request = {request_id: crypto.randomUUID(), server_instance:serverInstance, conversation_id:conversationId, text, history: history.slice(-8), actions_authorized:true,
-    attachment_ids:window.localmindAttachments?.contextIds() || [],local_retrieval:Boolean($('useLocalSources')?.checked),
+  const request = retry?.request || {request_id: crypto.randomUUID(), server_instance:serverInstance, conversation_id:conversationId, text, history: history.slice(-8), actions_authorized:true,
+    attachment_ids:ids,local_retrieval:Boolean($('useLocalSources')?.checked),
     response_length:$('responseLength').value, compose_actions:$('composeActions').checked,
     model:$('modelSelect').value || null, reasoning:$('reasoning').value,
     context_tokens:Number($('contextTokens').value),response_tokens:Number($('responseTokens').value),keep_alive_seconds:Number($('keepAlive').value)};
+  const attachmentSnapshot=window.localmindAttachments?.beginSubmission(request)||[];
   const turn={request_id:request.request_id,server_instance:request.server_instance,cancelled:false,controller:null};inFlight=turn;
   let finalValue = null;
   let deltaText = '', lastSequence = 0;
@@ -114,7 +144,7 @@ async function sendText(value) {
           if (item.type === 'status') {
             if(item.data.conversation_id){conversationId=item.data.conversation_id;window.localmindAttachments?.adoptConversation(conversationId);}
             renderStatus(el, item.data);
-            if(!actionSpoken && item.data.action_results?.length && item.data.answer) {
+            if(!actionSpoken && !item.data.speech_deferred && item.data.action_results?.length && item.data.answer) {
               actionSpoken=true;speech.feed(item.data.speech_text || item.data.answer,true);
             }
           }
@@ -126,7 +156,9 @@ async function sendText(value) {
             el.querySelector('.pending')?.remove();
             renderLocalMindMessage(el.querySelector('.rendered-message'), deltaText); state('Отвечаю…'); scrollEnd();
           }
-          if (item.type === 'final') { finalValue = item.data; if(item.data.conversation_id){conversationId=item.data.conversation_id;window.localmindAttachments?.adoptConversation(conversationId);} renderStatus(el, item.data); }
+          if (item.type === 'final') { finalValue = item.data; if(item.data.conversation_id){conversationId=item.data.conversation_id;window.localmindAttachments?.adoptConversation(conversationId);} renderStatus(el, item.data);
+            if(window.localmindAttachments?.acknowledge(item.data,request)){userMessage.attachments=attachmentSnapshot;renderSentAttachments(userBubble,attachmentSnapshot);}
+          }
         }
         while (true) {
           const {value:chunk,done} = await reader.read();
@@ -143,7 +175,8 @@ async function sendText(value) {
         state('Восстанавливаем ответ без повторного действия…');
       } finally {clearTimeout(timeout);controller.abort();}
     }
-    el.querySelector('.pending')?.remove(); renderLocalMindMessage(el.querySelector('.rendered-message'), finalValue.answer);
+    el.querySelector('.pending')?.remove(); renderLocalMindMessage(el.querySelector('.rendered-message'), finalValue.display_text ?? finalValue.answer);
+    if(finalValue.context_budget?.truncated){const notice=document.createElement('small');notice.className='meta';notice.textContent='Контекст сокращён: часть старой истории или источников не включена.';el.append(notice);}
     for(const source of finalValue.sources || []) {
       const provenance=document.createElement('small');provenance.className='meta';provenance.textContent=`Локальная справка: ${source.filename}, строки ${source.line_start}–${source.line_end}`;el.append(provenance);
     }
@@ -155,23 +188,25 @@ async function sendText(value) {
     diagnostics.append(summary,meta,raw); el.append(diagnostics); history.push({role:'user',content:text},{role:'assistant',content:finalValue.answer});
     if (history.length > 16) history.splice(0,history.length-16);
     currentConversation.messages.push({role:'assistant',content:finalValue.answer});
+    currentConversation.retryTurn=null;
     currentConversation.serverId=conversationId;currentConversation.instance=serverInstance;
     currentConversation.results=(finalValue.action_results || []).slice(-8);
     currentConversation.sources=(finalValue.sources || []).slice(-5);
     window.localmindScene?.observeSources(finalValue.sources || []);
     state('Готов к разговору');
-    if(!actionSpoken) speech.feed(deltaText ? '' : finalValue.answer,true);
+    if(!actionSpoken) speech.feed(deltaText ? '' : finalValue.speech_text ?? finalValue.answer,true);
     await refresh();
   } catch (error) {
     stopSpeech();
     el.querySelector('.pending')?.remove();
     el.querySelector('.rendered-message').textContent=turn.cancelled?'Ответ прерван.':'Ответ недоступен: '+error.message;
     state(turn.cancelled?'Ответ прерван; выполненное действие не отменяется.':'Ошибка связи. Полученный результат действия сохранён выше.');
-    currentConversation.messages.push({role:'assistant',content:el.querySelector('.rendered-message').textContent});
+    const errorMessage={role:'assistant',content:el.querySelector('.rendered-message').textContent};currentConversation.messages.push(errorMessage);
+    currentConversation.retryTurn=turn.cancelled?null:{request,userMessage,userBubble,el,errorMessage,created:retry?.created || wallSentAt};
     if(error.status===409&&conversationId){currentConversation.archived=true;updateConversationTitle();}
     if(!$('message').value)$('message').value=text;
     await refresh();
-  } finally { el.classList.remove('streaming');inFlight=null;lock(false);saveConversation(); $('message').focus(); scrollEnd(); }
+  } finally { window.localmindAttachments?.releaseSubmission(request.request_id);el.classList.remove('streaming');inFlight=null;lock(false);saveConversation(); $('message').focus(); scrollEnd(); }
 }
 async function refresh() {
   try {
@@ -259,7 +294,13 @@ async function loadApps(refreshCatalog=false) {
   } catch(error) {if(revision===appsRevision)$('appsList').textContent=error.message;} finally{if(revision===appsRevision)$('rescan').disabled=false;}
 }
 function stageTranscript(r) {
+  if(r.final===false)return; // Provisional text never replaces an editable final draft.
   $('message').value=r.text; $('rawTranscript').textContent='Исходная расшифровка: '+r.text;
+  const warnings={quiet_input:'Тихий вход: приблизь микрофон или проверь уровень.',clipping:'Перегрузка микрофона: уменьши уровень входа.'};
+  const feedback=(r.levels?.warnings || []).map(w=>warnings[w]).filter(Boolean);
+  if(r.quality?.review_recommended)feedback.push('Распознавание требует особенно внимательной проверки.');
+  if(r.quality)feedback.push('Процент точности не измерен. Это финальная расшифровка записи, не прямой эфир.');
+  if(feedback.length)$('rawTranscript').textContent+='\n'+feedback.join(' ');
   $('draftReview').hidden=false; state('Текст НЕ отправлен. Проверьте и исправьте расшифровку.'); $('message').focus();
 }
 $('mic').addEventListener('click',async()=>{
@@ -473,7 +514,7 @@ async function selectConversation(item,ownedTransaction=false){
     if(!item.archived&&(item.serverId||item.messages.length))window.localmindScene?.observeConversation('',item.messages);
     if(!item.archived){window.localmindScene?.toolResults(item.results || []);window.localmindScene?.observeSources(item.sources || []);}
     if(item.view){$('thread').append(item.view);item.view=null;}
-    else for(const m of item.messages)bubble(m.content,m.role==='user'?'me':'assistant');
+    else for(const m of item.messages){const el=bubble(m.content,m.role==='user'?'me':'assistant');if(m.role==='user')renderSentAttachments(el,m.attachments);}
     $('welcome').hidden=item.messages.length>0;
     $('message').value=item.draft;
     $('draftReview').hidden=!item.transcript;$('rawTranscript').textContent=item.transcript;

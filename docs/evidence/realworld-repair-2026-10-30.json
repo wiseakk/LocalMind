@@ -1,0 +1,88 @@
+{
+  "date": "2026-10-30",
+  "base_commit": "de70e9a",
+  "scope": "LocalMind real-world agent and voice repair",
+  "runtime": {
+    "os": "Windows 10 build 19045",
+    "python": "3.14.5",
+    "node": "24.19.0",
+    "ollama": "0.40.12",
+    "model": "qwen3.5:9b",
+    "faster_whisper": "1.2.1",
+    "av": "18.1.0",
+    "ctranslate2": "4.8.4"
+  },
+  "automated": {
+    "python_passed": 472,
+    "python_subtests_passed": 35,
+    "dom_checks_passed": 51,
+    "js_syntax": "passed",
+    "local_assets": 76,
+    "diff_whitespace": "passed",
+    "playwright_collected": 35,
+    "playwright_executed": 0,
+    "playwright_blocker": "worker spawn EPERM; browser connector host unavailable"
+  },
+  "real_inference": {
+    "multimodal_all_passed": true,
+    "multimodal_scenarios": [
+      {
+        "scenario": "image_object_and_text",
+        "checked": true
+      },
+      {
+        "scenario": "image_only",
+        "checked": true
+      },
+      {
+        "scenario": "document_later_page_same_turn",
+        "checked": true
+      },
+      {
+        "scenario": "document_followup",
+        "checked": true
+      }
+    ],
+    "checked_public_source": "https://news.blizzard.com/fr-fr/article/21833317/nouvelle-bande-dessinee-world-of-warcraft-battle-for-azeroth-n3-les-trois-surs",
+    "source_screenings_passed": 2,
+    "general_factuality_score": null
+  },
+  "real_windows": {
+    "first_obsidian_launch": "process_created; not observed window",
+    "obsidian_followup": "ambiguous; multiple verified windows need selection",
+    "intended_foreground_hwnd_verified": false,
+    "downloads_search": "observed actual selected PDF",
+    "pdf_extraction_characters": 12000,
+    "ollama_source_inclusion_verified": true,
+    "sent_source_characters": 6199,
+    "pdf_open": "request_accepted",
+    "pdf_visible_open_observed": false
+  },
+  "startup": {
+    "entrypoint": "python start.py",
+    "http_status": 200,
+    "model": "qwen3.5:9b",
+    "homepage_status": 200,
+    "strict_image_csp": true,
+    "bind": "127.0.0.1:8878"
+  },
+  "microphone_benchmark": {
+    "recordings_supplied": false,
+    "measured_recognition_improvement": null,
+    "gpu_asr_verified": false,
+    "speaker_listening_verified": false,
+    "production_asr_defaults_changed": false
+  },
+  "commits": {
+    "created": false,
+    "reason": "Git worktree metadata outside writable root; index.lock permission denied"
+  },
+  "data_handling": "No personal filenames, paths, PDF contents or summaries in this report. Raw private probe retains only hashes/counts, never extracted text.",
+  "remaining": [
+    "Actual foreground/minimized/delayed/denied Windows observations",
+    "Independent PDF opening observation",
+    "Real browser PNG composer/history lifecycle",
+    "Consented microphone comparison and speaker listening",
+    "Checkpoint A and B repository commits"
+  ]
+}

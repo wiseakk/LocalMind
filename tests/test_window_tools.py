@@ -200,6 +200,48 @@ def test_foreground_failure_is_not_reported_as_focused(tools):
     backend.focus_allowed = False
     result = service.focus_window(key)
     assert not result.success and result.observed_state is None
+    assert result.execution_status == 'activation_denied'
+
+
+def test_app_focus_waits_for_delayed_window_and_handles_existing_instance(tools, monkeypatch):
+    service, backend, _ = tools
+    window = backend.windows.pop()
+    def appear(seconds):
+        backend.windows.append(window)
+    monkeypatch.setattr(module.time, 'sleep', appear)
+    result = service.focus_app('calculator')
+    assert result.success and result.observed_state == 'foreground_window'
+    assert backend.operations.count('focus') == 1
+
+
+def test_app_focus_reports_timeout_inspection_failure_and_ambiguity(tools):
+    service, backend, _ = tools
+    native = backend.windows.pop()
+    assert service.focus_app('calculator', timeout=0).execution_status == 'window_timeout'
+    backend.inspect_state = 'unavailable'
+    assert service.focus_app('calculator').execution_status == 'inspection_unavailable'
+    backend.inspect_state = None
+    backend.windows = [native, replace(native, hwnd=100)]
+    result = service.focus_app('calculator')
+    assert result.execution_status == 'ambiguous' and len(result.data['windows']) == 2
+    assert 'focus' not in backend.operations
+
+
+def test_app_focus_revocation_and_cancellation_stop_discovery(tools, monkeypatch):
+    from threading import Event
+    from localmind.generation import cancellation
+    service, backend, permission = tools
+    backend.windows.clear()
+    monkeypatch.setattr(module.time, 'sleep', lambda _: permission.update(allowed=False))
+    assert service.focus_app('calculator').execution_status == 'stale_target'
+    permission['allowed'] = True
+    event = Event(); event.set(); token = cancellation.set(event)
+    try:
+        with pytest.raises(ValueError):
+            service.focus_app('calculator')
+    finally:
+        cancellation.reset(token)
+    assert 'focus' not in backend.operations
 
 
 def test_accepted_close_is_not_observed_close_and_never_repeated(tools):

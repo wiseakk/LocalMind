@@ -62,7 +62,7 @@ test('documents use local upload, extracted preview, acknowledgement and safe re
   });
   await page.route('**/api/attachments/remove',r=>r.fulfill({json:{ok:true}}));
   await page.route('**/api/chat/stream',r=>{
-    const body=r.request().postDataJSON(),result={answer:'Document fixture answer',engine:'mock',action_results:[],conversation_id:conversation,context_sources:body.attachment_ids.map(id=>({id,name:'private.txt',characters:5,truncated:false}))};
+    const body=r.request().postDataJSON(),result={answer:'Document fixture answer',engine:'mock',action_results:[],conversation_id:conversation,request_id:body.request_id,server_instance:instance,attachment_state:'included_in_inference',context_sources:body.attachment_ids.map(id=>({id,name:'private.txt',characters:5,truncated:false}))};
     return r.fulfill({contentType:'application/x-ndjson',body:JSON.stringify({type:'status',data:result})+'\n'+JSON.stringify({type:'final',data:result})+'\n'});
   });
   await page.route('**/api/tts/cancel',r=>r.fulfill({json:{ok:true}}));
@@ -74,11 +74,9 @@ test('documents use local upload, extracted preview, acknowledgement and safe re
   expect(uploaded).toHaveLength(1);expect(await page.evaluate(()=>localmindAttachments.contextIds())).toEqual(uploaded);
   await page.evaluate(()=>{document.querySelector('#speak').checked=false;});
   await page.locator('#message').fill('Describe the attachment');await page.locator('#send').click();await expect(page.locator('#send')).toBeEnabled();
-  await expect(page.locator('.attachment').first()).toHaveAttribute('data-state','added');
+  await expect(page.locator('.attachment')).toHaveCount(1);await expect(page.locator('.sent-attachment')).toHaveCount(1);
   await page.locator('#settingsOpen').click();await page.locator('#tab-appearance').click();await page.locator('#showFilenames').check();await page.keyboard.press('Escape');
-  await expect(page.locator('.attachment-name').first()).toHaveText('<private>.txt');expect(await page.locator('.attachment-name img').count()).toBe(0);
-  await page.locator('.preview-button').first().click();await expect(page.locator('#attachmentPreview')).toBeVisible();await expect(page.locator('#previewText')).toHaveText('local');
-  await page.locator('#previewClose').click();await page.locator('.attachment').first().locator('.icon-button').click();await expect(page.locator('.attachment')).toHaveCount(1);
+  await expect(page.locator('.sent-attachment')).not.toContainText('<private>');
   expect(await page.evaluate(()=>localmindAttachments.contextIds())).toEqual([]);
   await page.evaluate(()=>{
     const transfer=new DataTransfer();transfer.items.add(new File(['drop'],'drop.md',{type:'text/markdown'}));

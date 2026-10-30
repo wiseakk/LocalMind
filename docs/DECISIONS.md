@@ -256,3 +256,57 @@ CPU draw cost with hysteresis; measure Chrome backend before claiming GPU gains.
 Optional developer overlay must be off by default and contain no private data.
 MDN primary API references: https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Optimizing_canvas
 and https://developer.mozilla.org/en-US/docs/Web/API/Window/requestAnimationFrame .
+
+## 2026-10-30 — Checkpoint A: preserve capability and attachment boundaries
+
+Use apps.focus(app_id) for app-context foreground requests; resolve HWND only inside
+the authorized adapter, including a maximum five-second wait. Reuse existing native
+markers, image grants and Win32 foreground observation; never simulate input or
+change topmost state. Multiple windows return selectable opaque IDs. Failed/stale
+native operations cannot become spoken success.
+
+Resolve file pronouns only in the active file topic and keep the server-owned file
+reference through read/describe/open. Reuse bounded FileAccess extraction and local
+Ollama; do not infer authority from model prose. Metadata display also rechecks hash.
+
+Transfer attachment ownership on final inference acknowledgement with original
+request, server instance, owning conversation and all selected IDs. A message keeps
+frozen display metadata and a bounded local Canvas-derived thumbnail; composer IDs
+cannot include sent entries. Keep original uploads for replay; only text persists
+across page reload. Failed inference/transport never consumes draft attachments.
+
+Automated checks use synthetic files and fake window/LLM adapters. Browser execution
+and human audio evidence cannot be inferred from passing Python/DOM suites.
+
+## 2026-10-30 — Checkpoint B: measured voice, explicit channels and bounded evidence
+
+Keep qwen3.5:9b for real checks and retain installed models. Do not promote an ASR
+experiment without identical consented recordings and a demonstrated improvement on
+reported phrases, ordinary speech and negations. Preserve audio:true and the baseline
+decoder; compare finite offline-only hotword/language variants through the evaluator.
+RMS/clipping and segment diagnostics support correction, not an invented confidence
+percentage. Batch recordings remain batch recordings; no provisional execution.
+
+Keep exact file metadata in structured_result and collapsible display details. Speak
+one selected filename with pronunciation assistance and recompute speech after document
+generation. Do not use raw adapter text as a dialogue system prompt. Keep only compact
+registry and outcome facts. Estimate the combined input/response budget conservatively,
+reserve images, drop older history, reretrieve relevant source passages and disclose
+truncation. Reject budgets unable to retain every selected source.
+
+Retain img-src 'none'. Decode bounded, browser-created PNG snapshots into Canvas for
+sent-message previews. Preserve original request IDs and bubbles on manual transport
+retry; server restarts and the replay deadline prevent unsafe automatic retries.
+File revocation tombstones retain only opaque ID, owning conversation and fixed denial
+reason, bounded to 256; they cannot restore authority or reveal another owner's reason.
+
+Primary API checks: faster-whisper transcribe.py and tests (hotwords, optional language,
+avg_logprob/no_speech_prob): https://github.com/SYSTRAN/faster-whisper/blob/master/faster_whisper/transcribe.py
+Windows foreground restrictions: https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow
+Public factuality fixture: Blizzard's Three Sisters announcement, linked inside
+tests/data/warcraft_grounding.json. Two real source-bound screenings passed; no
+universal anti-hallucination claim. Models, audio and personal document text stay out of Git.
+
+The environment denies Git metadata writes, browser workers and desktop observation.
+Record these as outstanding gates. Do not replace required real evidence with automated
+test counts or describe the blocked checkpoint commits as created.

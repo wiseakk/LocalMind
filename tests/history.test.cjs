@@ -22,6 +22,33 @@ function setup(options={}){
 }
 async function run(name,fn){await fn();console.log('PASS '+name);}
 (async()=>{
+  for(const text of ['', 'Describe this PNG'])await run('sent image lifecycle with transport retry: '+(text||'image only'),async()=>{
+    let uploads=0,attempts=0;const ids=[];
+    const {dom,w,d}=setup({fetch:async(url,init)=>{
+      if(url==='/api/attachments'){uploads++;return Response.json({id:'png-one',conversation_id:'session-created',server_instance:'test',state:'ready',kind:'image'});}
+      if(url==='/api/chat/stream'){
+        const body=JSON.parse(init.body);ids.push(body.request_id);attempts++;
+        if(attempts<=2)throw Error('transport lost after server accepted the request');
+        return new Response(JSON.stringify({type:'final',data:{answer:'PNG answer',engine:'mock',request_id:body.request_id,
+          server_instance:'test',conversation_id:body.conversation_id,attachment_state:'included_in_inference',context_sources:[{id:'png-one',kind:'image'}]}})+'\n');
+      }
+    }});
+    try{
+      w.createImageBitmap=async()=>({close(){}});w.HTMLCanvasElement.prototype.getContext=()=>({drawImage(){}});
+      w.HTMLCanvasElement.prototype.toDataURL=()=> 'data:image/png;base64,iVBORw0KGgo=';
+      await pause(15);d.querySelector('#speak').checked=false;
+      const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGPojjn/HwAF4gK2//l6AAAAAABJRU5ErkJggg==','base64');
+      w.localmindAttachments.add([new w.File([png],'fixture.png',{type:'image/png'})]);
+      for(let i=0;i<50&&w.localmindAttachments.hasPending();i++)await pause(5);
+      await w.sendText(text);assert.equal(attempts,2);assert.equal(d.querySelectorAll('.bubble.me').length,1);
+      assert.deepEqual([...w.localmindAttachments.contextIds()],['png-one']);
+      await w.sendText(text);assert.equal(attempts,3);assert.equal(new Set(ids).size,1);assert.equal(uploads,1);
+      assert.equal(d.querySelectorAll('.bubble.me').length,1);assert.equal(d.querySelectorAll('.sent-attachment canvas').length,1);
+      assert.deepEqual([...w.localmindAttachments.contextIds()],[]);assert.equal(d.querySelectorAll('#attachmentList .attachment').length,0);
+      await w.newConversation();d.querySelector('#historyOpen').click();d.querySelectorAll('.history-entry>button:first-child')[1].click();await pause(15);
+      assert.equal(d.querySelectorAll('.sent-attachment canvas').length,1);assert.deepEqual([...w.localmindAttachments.contextIds()],[]);
+    }finally{dom.window.close();}
+  });
   await run('history preserves independent drafts/messages without replay and new turns isolate context',async()=>{
     const {dom,w,d,requests}=setup();try{
       await pause(10);await w.sendText('Первый разговор');

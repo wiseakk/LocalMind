@@ -10,7 +10,7 @@ from dataclasses import replace
 from .capabilities import ToolIntent, registry, _windows
 from .conversations import Reference
 from .generation import defaults, effective_generation, text_delta
-from .intents import action_clause, command_negated
+from .intents import action_clause, command_negated, focus_request_target
 
 
 def compound_parts(text):
@@ -34,15 +34,19 @@ def pc_intent(text, conversation, assessment):
     end = r'(?:[, ]+пожалуйста)?[.!]?'
     if command_negated(normalized) or re.search(r'[«»"`]|\b(?:если|когда)\b', normalized, re.I):
         return None, None, None
-    file_ref = conversation.references.get('file')
-    read = re.fullmatch(polite + r'(?:а\s+)?(?:что\s+(?:(?:этот|этот самый)\s+файл\s+)?(?:внутри|содержит)|что\s+в\s+(?:нём|нем|этом файле)|(?:прочитай|объясни|перескажи|суммируй)\s+(?:его|этот файл|содержимое файла))' + r'[?!.]*', normalized, re.I)
+    file_ref = conversation.references.get('file') if conversation.focus == 'file' else None
+    document = r'(?:его|этот (?:файл|документ)|последний PDF(?:-файл)?|содержимое (?:файла|документа))'
+    read = re.fullmatch(polite + r'(?:а\s+)?(?:что\s+(?:(?:этот|этот самый)\s+(?:файл|документ)\s+)?(?:внутри|содержит)|что\s+(?:находится\s+)?(?:внутри\s+(?:этого\s+(?:документа|файла)|него)|в\s+(?:нём|нем|этом (?:файле|документе)))|(?:прочитай|объясни|перескажи|суммируй)\s+' + document + r')[?!.]*', normalized, re.I)
     if read:
         if not file_ref:
             return None, 'Сначала выбери файл через поиск.', None
         return ToolIntent('files.read_selected_file', {'file_id': file_ref.id}), None, file_ref
-    if re.fullmatch(r'(?:ну[, ]+)?(?:ебать[, ]+)?(?:название\s+скажи|скажи\s+название|как\s+он\s+называется)[?!.]*', normalized, re.I):
+    if re.fullmatch(r'(?:ну[, ]+)?(?:ебать[, ]+)?(?:название\s+скажи|скажи\s+название(?:\s+(?:последнего PDF(?:-файла)?|этого (?:документа|файла)))?|как\s+он\s+называется)[?!.]*', normalized, re.I):
         if file_ref:
             return ToolIntent('files.describe_selected_file', {'file_id': file_ref.id}), None, file_ref
+        if re.search(r'последнего PDF', normalized, re.I):
+            return ToolIntent('files.find_latest_pdf_in_downloads', {}), None, None
+        return None, 'Сначала выбери файл через поиск.', None
     # Scope names map to server-owned roots, never a model-provided path.
     search = re.fullmatch(polite + r'(?:найди|покажи)\s+(?:(самый\s+старый|самый\s+новый|последний|старейший|новейший)\s+)?(?:(?:скачанный|скачанный мной)\s+)?(PDF(?:-файл)?|пдф|TXT|DOCX|CSV|MD|JSON|файл(?:ы)?)(?:\s*,?\s*который\s+я\s+скачал)?(?:\s+в\s+(?:(?:папке|каталоге)\s+)?(Downloads|Загрузках|Загрузки|одобренных папках))?' + end, normalized, re.I)
     if search:
@@ -58,9 +62,9 @@ def pc_intent(text, conversation, assessment):
     named_file = re.fullmatch(polite + r'найди\s+файл\s+([\w .()\-]{1,128})(?:\s+в\s+Downloads)' + end, normalized, re.I)
     if named_file:
         return ToolIntent('files.search', {'query': named_file.group(1), 'extension': '', 'scope': 'downloads', 'sort_by': 'name', 'order': 'asc'}), None, None
-    foreground = re.fullmatch(polite + r'(?:выведи|покажи|подними)\s+(.+?)\s+(?:поверх\s+(?:всех\s+)?окон|на\s+передний\s+план)' + end, normalized, re.I)
+    foreground = focus_request_target(normalized)
     if foreground:
-        target = foreground.group(1).casefold()
+        target = foreground.casefold()
         if target in ('его', 'её', 'ее', 'это окно'):
             ref = conversation.references.get(conversation.focus)
             if not ref or ref.kind not in ('application', 'window'):
@@ -74,10 +78,7 @@ def pc_intent(text, conversation, assessment):
             if len(matches) != 1:
                 return None, 'Уточни одно приложение из каталога.', None
             app_id = matches[0]
-        window_id, error = _windows().select_app_window(app_id)
-        if error:
-            return None, str(error), Reference('application', app_id)
-        return ToolIntent('apps.focus_window', {'window_id': window_id}), None, Reference('application', app_id)
+        return ToolIntent('apps.focus', {'app_id': app_id}), None, Reference('application', app_id)
     device = re.fullmatch(polite + r'(включи|выключи) (его|её|ее|это устройство)' + end, normalized, re.I)
     if device:
         ref = conversation.references.get('device') if conversation.focus == 'device' else None
@@ -110,6 +111,8 @@ def pc_intent(text, conversation, assessment):
         app_id = ref.id
         if verb == 'открой':
             return ToolIntent('apps.open', {'app_id': app_id}), None, ref
+        if verb != 'закрой':
+            return ToolIntent('apps.focus', {'app_id': app_id}), None, ref
         window_id, error = _windows().select_app_window(app_id)
         if error:
             return None, str(error), None
@@ -132,10 +135,7 @@ def pc_intent(text, conversation, assessment):
                    if target == key.casefold() or target in [a.casefold() for a in aliases]]
         if len(matches) != 1:
             return None, 'Уточни одно приложение из разрешённого каталога.', None
-        window_id, error = _windows().select_app_window(matches[0])
-        if error:
-            return None, str(error), None
-        return ToolIntent('apps.focus_window', {'window_id': window_id}), None, Reference('window', window_id)
+        return ToolIntent('apps.focus', {'app_id': matches[0]}), None, Reference('application', matches[0])
     return None, None, None
 
 

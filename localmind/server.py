@@ -244,6 +244,9 @@ def _entry(data: ChatRequest):
             prepared = prepare_reply(data.text, [], data.actions_authorized, data.response_length,
                                      data.compose_actions, generation, conversation=conversation, local_retrieval=data.local_retrieval,
                                      document_facts=context)
+            prepared.initial.update(request_id=data.request_id, server_instance=SERVER_INSTANCE)
+            from .results import output_channels
+            prepared.initial.update(output_channels(prepared.initial['answer'], prepared.initial['action_results'], prepared.initial.get('speech_text')))
             def finish(final):
                 try:
                     conversation.remember(data.text, final or prepared.initial, prepared.reference)

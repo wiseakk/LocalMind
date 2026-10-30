@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -32,6 +33,15 @@ PROFILES = {
     'cpu-fast': {'model': 'base', 'device': 'cpu', 'compute_type': 'int8', 'label': 'CPU · быстро'},
     'balanced': {'model': 'small', 'device': 'cpu', 'compute_type': 'int8', 'label': 'CPU · баланс'},
     'gpu-quality': {'model': 'medium', 'device': 'cuda', 'compute_type': 'float16', 'label': 'GPU · точность'},
+}
+# Compare on identical consented recordings before promoting any experiment.
+# HTTP capture continues to use baseline; these are finite evaluation choices.
+DECODINGS = {
+    'baseline': {'language': 'ru', 'initial_prompt': 'Русская речь. Пельмени, Codex, Кодекс, Obsidian, Discord, Visual Studio Code, блокнот, калькулятор.'},
+    'technical-ru': {'language': 'ru', 'initial_prompt': 'Русская и английская речь. Downloads, Obsidian, PDF, Windows, Steam, Python, Warcraft, RSA. Имена файлов и обычный разговор.',
+                     'hotwords': 'Downloads, Obsidian, PDF, Windows, Steam, Python, Warcraft, RSA'},
+    'technical-auto': {'language': None, 'initial_prompt': 'Russian and English conversation. Downloads, Obsidian, PDF, Windows, Steam, Python, Warcraft, RSA.',
+                       'hotwords': 'Downloads, Obsidian, PDF, Windows, Steam, Python, Warcraft, RSA'},
 }
 DEFAULT_VOICE = 'ru_RU-denis-medium'
 VOICES = {
@@ -143,9 +153,11 @@ def _run_worker(kind: str, selection: str, data: bytes, suffix: str) -> tuple[di
         _operation.release()
 
 
-def transcribe_audio(data: bytes, suffix: str, profile: str = 'balanced') -> dict:
+def transcribe_audio(data: bytes, suffix: str, profile: str = 'balanced', decoding: str = 'baseline') -> dict:
     if profile not in PROFILES:
         raise VoiceError(422, 'Неизвестный профиль распознавания.')
+    if decoding not in DECODINGS:
+        raise VoiceError(422, 'Неизвестная настройка декодирования.')
     if suffix.lower() not in SUPPORTED_SUFFIXES:
         raise VoiceError(415, 'Поддерживаются webm, ogg, mp4, wav, m4a.')
     if len(data) > MAX_UPLOAD_BYTES:
@@ -156,7 +168,8 @@ def transcribe_audio(data: bytes, suffix: str, profile: str = 'balanced') -> dic
         raise VoiceError(503, 'Для локального распознавания установите requirements-voice.txt. См. docs/VOICE.md.')
     if not _stt_ready(profile):
         raise VoiceError(503, f'Модель не загружена. Выполните: python -m localmind.voice setup-stt --profile {profile}')
-    return _run_worker('stt', profile, data, suffix.lower())[0]
+    selection = profile if decoding == 'baseline' else profile + ':' + decoding
+    return _run_worker('stt', selection, data, suffix.lower())[0]
 
 
 def synthesize_speech(text: str, voice: str = DEFAULT_VOICE, generation_id: str | None = None) -> bytes:
@@ -239,7 +252,22 @@ def _decode_bounded(source: Path):
     return signal
 
 
-def _recognize(source: Path, profile: str) -> dict:
+def signal_levels(signal):
+    """Measured levels, never a claimed speech-recognition probability."""
+    count = len(signal)
+    rms = math.sqrt(math.fsum(float(x) ** 2 for x in signal) / max(1, count))
+    peak = max((abs(float(x)) for x in signal), default=0)
+    clipped = sum(abs(float(x)) >= .99 for x in signal) / max(1, count)
+    dbfs = round(20 * math.log10(max(rms, 1e-9)), 1)
+    warnings = []
+    if dbfs < -35:
+        warnings.append('quiet_input')
+    if clipped > .01:
+        warnings.append('clipping')
+    return {'rms_dbfs': dbfs, 'peak': round(peak, 4), 'clipped_fraction': round(clipped, 4), 'warnings': warnings}
+
+
+def _recognize(source: Path, profile: str, decoding: str = 'baseline') -> dict:
     from faster_whisper import WhisperModel
 
     signal = _decode_bounded(source)
@@ -247,22 +275,35 @@ def _recognize(source: Path, profile: str) -> dict:
     model_directory = MODELS / 'whisper' / config['model']
     device, compute_type = config['device'], config['compute_type']
     fallback = False
+    model_load_ms = 0
+    levels = signal_levels(signal)
 
     def run(selected_device, selected_compute):
-        model = WhisperModel(str(model_directory), device=selected_device, compute_type=selected_compute,
-                             cpu_threads=4, num_workers=1, local_files_only=True)
-        segments, _ = model.transcribe(signal, language='ru', vad_filter=True, beam_size=5,
-                                      condition_on_previous_text=False,
-                                      initial_prompt='Русская речь. Пельмени, Codex, Кодекс, Obsidian, Discord, Visual Studio Code, блокнот, калькулятор.')
-        words = []
+        nonlocal model_load_ms
+        loading = time.monotonic()
+        try:
+            model = WhisperModel(str(model_directory), device=selected_device, compute_type=selected_compute,
+                                 cpu_threads=4, num_workers=1, local_files_only=True)
+        finally:
+            model_load_ms += round((time.monotonic() - loading) * 1000)
+        segments, info = model.transcribe(signal, vad_filter=True, beam_size=5,
+                                         condition_on_previous_text=False, **DECODINGS[decoding])
+        words, logprobs, no_speech = [], [], []
         for segment in segments:
             words.append(segment.text.strip())
+            if isinstance(getattr(segment, 'avg_logprob', None), (int, float)):
+                logprobs.append(segment.avg_logprob)
+            if isinstance(getattr(segment, 'no_speech_prob', None), (int, float)):
+                no_speech.append(segment.no_speech_prob)
             if sum(map(len, words)) > 4000:
                 raise VoiceError(422, 'Слишком длинная расшифровка.')
-        return ' '.join(words).strip()
+        quality = {'calibrated_confidence': None, 'mean_segment_logprob': sum(logprobs) / len(logprobs) if logprobs else None,
+                   'max_no_speech_probability': max(no_speech) if no_speech else None,
+                   'review_recommended': bool(levels['warnings'] or any(x < -1 for x in logprobs) or any(x > .6 for x in no_speech))}
+        return ' '.join(words).strip(), quality, getattr(info, 'language', None)
 
     try:
-        text = run(device, compute_type)
+        text, quality, language = run(device, compute_type)
     except (RuntimeError, ValueError, OSError):
         if device != 'cuda':
             raise
@@ -270,10 +311,13 @@ def _recognize(source: Path, profile: str) -> dict:
     if fallback:
         # Leave the exception handler first so its traceback no longer retains
         # the failed GPU model while loading the CPU fallback.
-        text = run(device, compute_type)
+        text, quality, language = run(device, compute_type)
     if not text:
         raise VoiceError(422, 'Речь не обнаружена. Говорите ближе к микрофону.')
     return {'text': text, 'profile': profile, 'device': device, 'fallback': fallback,
+            'model': config['model'], 'compute_type': compute_type, 'decoding': decoding,
+            'language': language, 'levels': levels, 'quality': quality, 'final': True,
+            'model_load_ms': model_load_ms, 'decoding_settings': {**DECODINGS[decoding], 'beam_size': 5, 'vad_filter': True},
             'recording_seconds': round(len(signal) / SAMPLE_RATE, 3)}
 
 
@@ -294,8 +338,9 @@ def _synthesize(source: Path, voice: str, destination: Path) -> dict:
 def _worker(kind: str, selection: str, source: Path, result: Path, destination: Path):
     started = time.monotonic()
     try:
-        if kind == 'stt' and selection in PROFILES:
-            payload = _recognize(source, selection)
+        if kind == 'stt' and selection.split(':')[0] in PROFILES and (':' not in selection or selection.split(':', 1)[1] in DECODINGS):
+            profile, _, decoding = selection.partition(':')
+            payload = _recognize(source, profile, decoding or 'baseline')
         elif kind == 'tts' and selection in VOICES:
             payload = _synthesize(source, selection, destination)
         else:

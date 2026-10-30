@@ -42,6 +42,7 @@ def action_clause(text: str) -> str:
     particular `не открывай` is never rewritten into an affirmative command.
     """
     text = ' '.join(text.strip().split())
+    text = re.sub(r'^(?:здорова|привет)[,! ]+', '', text, flags=re.I)
     text = re.sub(r'^(?:ну[, ]+)?(?:нихуя\s+ты\s+не\s+сделал|ты\s+ничего\s+не\s+сделал)[,!. ]+', '', text, flags=re.I)
     text = re.sub(r'^(?:ну[, ]+|блин[, ]+|ебать[, ]+|по-братски[, ]+)', '', text, flags=re.I)
     text = re.sub(r'(?<=\s)по-братски[, ]+', '', text, flags=re.I)
@@ -169,3 +170,29 @@ def parse_app_intent(text: str, aliases: Mapping[str, Sequence[str]]) -> AppInte
         if len(matches) == 1:
             proposals.append(AppIntent(action, matches[0]))
     return proposals[0] if len(proposals) == 1 else None
+
+
+def focus_request_target(text: str) -> str | None:
+    """Consume an entire one-time foreground request, including modal forms."""
+    if not isinstance(text, str) or len(text) > 2000 or any(mark in text for mark in _QUOTES):
+        return None
+    tokens = _tokens(action_clause(text))
+    if _NEGATION.intersection(tokens):
+        return None
+    for _ in range(3):
+        if tokens and tokens[-1] in {'.', '!', '?'}:
+            tokens.pop()
+    body = _request_body(tokens, {
+        'imperative': {'выведи', 'покажи', 'подними'},
+        'infinitive': {'вывести', 'показать', 'поднять'},
+        'past': {'вывел', 'вывела', 'показал', 'показала', 'поднял', 'подняла'},
+    })
+    if not body:
+        return None
+    for ending in (['на', 'передний', 'план'], ['поверх', 'всех', 'окон'], ['поверх', 'окон']):
+        if body[-len(ending):] == ending and len(body) > len(ending):
+            target = body[:-len(ending)]
+            if any(t in {'и', 'или', 'затем', 'потом', ';', ',', '!', '?', '&', '|'} for t in target):
+                return None
+            return ' '.join(target)
+    return None

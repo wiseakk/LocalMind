@@ -1,0 +1,11 @@
+{
+  "source_url": "https://news.blizzard.com/fr-fr/article/21833317/nouvelle-bande-dessinee-world-of-warcraft-battle-for-azeroth-n3-les-trois-surs",
+  "source_title": "Blizzard Entertainment: Les trois sœurs",
+  "checked_utc": "2026-10-30",
+  "method": "Short Russian paraphrase of the official comic announcement; evaluation fixture only, never production lore rules.",
+  "text": "Аллерия Ветрокрылая просит своих сестёр Сильвану и Верису помочь вернуть их родной дом. Это три сестры. Имена их родителей в этой выдержке не указаны.",
+  "cases": [
+    {"question": "Назови трёх сестёр, перечисленных в источнике, и родство между ними.", "required": ["Аллер", "Сильван", "Верис", "сестр"]},
+    {"question": "Как зовут мать этих сестёр согласно этому источнику? Если имя не указано, так и скажи.", "required": ["не указ"]}
+  ]
+}

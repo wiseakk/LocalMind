@@ -178,7 +178,15 @@ class FileAccess:
         self._lock = RLock()
         self._folder_grant = None
         self._selected, self._grants = {}, set()
+        self._invalidations = {}  # bounded denial reasons, never retained grants
         self.personal_mode = PersonalMode(persistence)
+
+    def _invalidate(self, reason):
+        self._invalidations.update((key, (item.owner, reason)) for key, item in self._selected.items())
+        while len(self._invalidations) > 256:
+            self._invalidations.pop(next(iter(self._invalidations)))
+        self._selected.clear()
+        self._grants.clear()
 
     def personal_info(self):
         return self.personal_mode.public()
@@ -187,8 +195,7 @@ class FileAccess:
         with self._lock:
             self.personal_mode.set(enabled, roots)
             # IDs issued under an old scope cannot become grants for a new scope.
-            self._selected.clear()
-            self._grants.clear()
+            self._invalidate('Разрешение на область чтения изменилось. Проверь режим личного компьютера и разрешённые папки; повтори поиск.')
 
     def known_app_launch_allowed(self):
         return self.personal_mode.enabled()
@@ -213,8 +220,7 @@ class FileAccess:
         with self._lock:
             if not allowed:
                 self._folder_grant = None
-                self._selected.clear()
-                self._grants.clear()
+                self._invalidate('Разрешение на чтение системной папки Загрузки отозвано. Разреши чтение папки в настройках и повтори поиск.')
                 return
             folder = _checked(self.folder_provider())
             with _locked_path(folder, True):
@@ -274,6 +280,9 @@ class FileAccess:
         from .personal_permissions import ordinary_path
         selected = self._selected.get(file_id)
         if selected is None or selected.owner != owner:
+            invalidated = self._invalidations.get(file_id)
+            if invalidated and invalidated[0] == owner:
+                raise FileAccessError(invalidated[1])
             raise FileAccessError('Выбери документ в этом разговоре повторно.')
         if not ordinary_path(selected.path):
             raise FileAccessError('Секретные и системные файлы исключены из доступа.')
@@ -285,7 +294,11 @@ class FileAccess:
     def selected_info(self, owner, file_id):
         with self._lock:
             selected = self._selection(owner, file_id)
-            return {**selected.public(), 'open_allowed': file_id in self._grants or self.personal_mode.allows(selected.path)}
+            with _locked_path(selected.path):
+                if _fingerprint(_checked(selected.path)) != (selected.stamp, selected.digest):
+                    self._grants.discard(file_id)
+                    raise FileAccessError('Файл изменился. Найди его повторно.')
+                return {**selected.public(), 'open_allowed': file_id in self._grants or self.personal_mode.allows(selected.path)}
 
     def set_open_permission(self, owner, file_id, allowed):
         with self._lock:
@@ -320,8 +333,9 @@ class FileAccess:
                     return ActionResult(True, action, file_id, 'request_accepted',
                         status_text=f'Команда открытия {selected.path.name} передана Windows; появление окна не проверено.',
                         data=selected.public())
-        except (OSError, ValueError, RuntimeError):
-            return refused(action, file_id, 'Не удалось безопасно открыть выбранный документ. Найди и разреши файл повторно.')
+        except (OSError, ValueError, RuntimeError) as exc:
+            reason = str(exc) if isinstance(exc, FileAccessError) else 'Не удалось безопасно открыть выбранный документ. Найди и разреши файл повторно.'
+            return refused(action, file_id, reason, status='permission_required' if 'разреш' in reason.lower() else 'denied')
 
     def _scopes(self, scope):
         if scope == 'downloads':
@@ -478,7 +492,7 @@ class FileAccess:
         except (OSError, ValueError, RuntimeError) as exc:
             self.personal_mode.record('read', str(file_id), 'denied')
             reason = str(exc) if isinstance(exc, (FileAccessError, AttachmentError)) else 'Не удалось безопасно прочитать документ.'
-            return refused(action, file_id, reason)
+            return refused(action, file_id, reason, status='permission_required' if 'разреш' in reason.lower() else 'denied')
 
 
 from .settings import ROOT

@@ -89,6 +89,7 @@ class CapabilityRegistry:
         definitions = [
             Capability('apps.list_running', (), 'reviewed_request_and_app_grant', 'Список проверенных окон разрешённых приложений.', lambda a, o: _windows().list_running()),
             Capability('apps.open', ('app_id',), 'fingerprint_bound_app_grant', 'Запустить разрешённое приложение или выбрать его проверенное окно.', _open),
+            Capability('apps.focus', ('app_id',), 'fingerprint_bound_app_grant', 'Найти окно разрешённого приложения и один раз вывести на передний план; без always-on-top.', lambda a, o: _windows().focus_app(a['app_id'])),
             Capability('apps.focus_window', ('window_id',), 'verified_window_and_app_grant', 'Перевести проверенное окно на передний план, если Windows разрешает.', lambda a, o: _windows().focus_window(a['window_id'])),
             Capability('apps.close_window_safely', ('window_id',), 'verified_window_and_safe_close_policy', 'Мягко закрыть безопасное окно; для документов объяснить ограничение.', lambda a, o: _windows().close_window_safely(a['window_id'])),
             Capability('files.find_latest_pdf_in_downloads', (), 'explicit_downloads_read_grant', 'Найти PDF по времени изменения, без вложенных папок.', _latest),

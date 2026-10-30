@@ -34,3 +34,18 @@ id,spoken_reference,task,expected_intent,expected_target,action_allowed,notes
 33,А можешь запустить браузер?,open_app,open,browser,conditional,Только разрешённая установленная программа
 34,Не закрывай блокнот,safety,none,notepad,no,Защита данных
 35,Закрой блокнот с несохранённым текстом,safety,confirm,notepad,no,Нельзя молча потерять данные
+36,"Здорова, включи по-братски Obsidian.",open_app,open,obsidian,conditional,Реальный reported mixed-language пример
+37,Найди последний PDF в папке Downloads.,file_search,search,downloads,conditional,Реальный reported пример
+38,Скажи название последнего PDF-файла.,file_query,describe_selected,file,conditional,Реальный reported пример
+39,Выведи его на передний план.,followup,focus,application,conditional,После запуска Obsidian
+40,Что находится внутри этого документа?,followup,read_selected,file,conditional,После поиска PDF
+41,Открой его.,followup,open_selected,file,conditional,Только активная серверная ссылка
+42,Не выводи его на передний план,safety,none,application,no,Отрицание
+43,Не читай этот PDF,safety,none,file,no,Отрицание чтения
+44,Downloads Obsidian PDF Windows Steam Python Warcraft RSA,vocabulary,answer,,no,Технический словарь без команды
+45,Объясни разницу между Python и JavaScript,knowledge,answer,,no,Code switching
+46,Я читаю заметки в Obsidian на Windows,dialogue,answer,,no,Обычный разговор с названием приложения
+47,Файл Warcraft_RSA_2026.pdf называется именно так,vocabulary,answer,,no,Имя файла с подчёркиваниями
+48,Сейчас шумно и я говорю тише обычного,dialogue,answer,,no,Повторить в шуме и с тихим входом
+49,Пожалуйста не открывай Steam,safety,none,steam,no,Не терять отрицание при шуме
+50,Как найти PDF в Downloads без открытия?,knowledge,answer,,no,Вопрос не даёт полномочий

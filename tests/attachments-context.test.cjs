@@ -24,8 +24,13 @@ async function run(name,fn){await fn();console.log('PASS '+name);}
       assert.equal(calls[0].url,'/api/attachments');assert.equal(calls[0].options.body.get('conversation_id'),'one');assert.equal(calls[0].options.body.get('server_instance'),'server');
       resolve(Response.json(ready()));await tick();await tick();
       assert.equal(a.hasPending(),false);assert.equal(a.snapshot()[0].state,'ready');assert.deepEqual([...a.contextIds()],['doc']);assert.equal(a.snapshot()[0].hasFile,false);
-      a.acknowledge([{id:'other'}]);assert.equal(a.snapshot()[0].state,'ready');a.acknowledge([{id:'doc'}]);assert.equal(a.snapshot()[0].state,'added');
+      const request={request_id:'request',conversation_id:'one',server_instance:'server',attachment_ids:['doc']};
+      const snapshot=a.beginSubmission(request);assert.equal(snapshot.length,1);assert.ok(Object.isFrozen(snapshot[0]));
+      const ack={...request,attachment_state:'included_in_inference',context_sources:[{id:'doc'}]};
+      assert.equal(a.acknowledge({...ack,server_instance:'foreign'},request),false);assert.equal(a.snapshot()[0].state,'ready');
       d.querySelector('.preview-button').click();assert.equal(d.querySelector('#previewText').textContent,'<script>untrusted</script>');assert.equal(d.querySelector('#previewText script'),null);assert.equal(d.querySelector('#attachmentPreview').open,true);
+      assert.equal(a.acknowledge(ack,request),true);assert.equal(a.snapshot().length,0);assert.deepEqual([...a.contextIds()],[]);
+      assert.equal(a.acknowledge(ack,request),false);a.setConversation('two');a.setConversation('one');assert.equal(a.snapshot().length,0);
     }finally{dom.window.close();}
   });
   await run('removal during parsing cleans late server result without resurrecting context',async()=>{
@@ -60,6 +65,10 @@ async function run(name,fn){await fn();console.log('PASS '+name);}
       const bytes=new Uint8Array(24),view=new DataView(bytes.buffer);view.setUint32(0,0x89504e47);view.setUint32(4,0x0d0a1a0a);view.setUint32(16,2);view.setUint32(20,2);
       a.add([new w.File([bytes],'preview.png',{type:'image/png'})]);await new Promise(r=>setTimeout(r,25));assert.equal(a.snapshot()[0].state,'ready');assert.equal(calls,1);
       assert.deepEqual([...a.contextIds()],['image-ref']);assert.equal(a.snapshot()[0].hasFile,false);
+      const req={request_id:'image',conversation_id:'one',server_instance:'server',attachment_ids:['image-ref']};
+      w.HTMLCanvasElement.prototype.toDataURL=()=> 'data:image/png;base64,thumbnail';
+      const snap=a.beginSubmission(req);assert.ok(snap[0].thumbnail.startsWith('data:image/png'));a.releaseSubmission('image');
+      assert.equal(a.snapshot()[0].state,'ready');assert.equal(calls,1);
       a.setConversation('other');a.setConversation('one');assert.equal(a.snapshot()[0].state,'ready');assert.deepEqual([...a.contextIds()],['image-ref']);
     }finally{dom.window.close();}
   });

@@ -115,6 +115,12 @@ class RequestStore:
                 final['cancelled'] = True
                 if not final.get('action_results'):
                     final.update(answer='Ответ прерван.', engine='cancelled')
+            if 'display_text' in prepared.initial:
+                from .results import output_channels
+                speech = final.get('speech_text')
+                if not final.get('action_results') and final.get('engine') in ('offline-error', 'cancelled'):
+                    speech = final['answer']
+                final.update(output_channels(final['answer'], final.get('action_results', []), speech))
             entry.final.set_result(final)
         except Exception as exc:
             if not entry.initial.done():

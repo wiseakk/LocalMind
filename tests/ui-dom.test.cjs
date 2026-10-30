@@ -382,7 +382,7 @@ function makeCanvasDom(){
       assert.ok(d.querySelector('#attachmentNotice').textContent.includes('\u043b\u043e\u043a\u0430\u043b\u044c\u043d\u044b\u043c \u0441\u0435\u0440\u0432\u0435\u0440\u043e\u043c'));
       assert.equal(requests.length,1);assert.equal(requests[0].url,'/api/attachments');
       assert.deepEqual(Array.from(w.localmindAttachments.contextIds()),['document-one']);
-      w.localmindAttachments.acknowledge([{id:'document-one'}]);assert.equal(w.localmindAttachments.snapshot()[0].state,'added');
+      assert.equal(w.localmindAttachments.acknowledge([{id:'document-one'}]),false);assert.equal(w.localmindAttachments.snapshot()[0].state,'ready');
       d.querySelector('#showFilenames').checked=true;d.querySelector('#showFilenames').dispatchEvent(new w.Event('change'));
       assert.ok(d.querySelector('.attachment-name').textContent.includes('<img'));
       assert.ok(!d.querySelector('.attachment-name').textContent.includes('\u202e'));
