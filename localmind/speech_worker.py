@@ -214,6 +214,9 @@ class WarmSpeechWorker:
             with wave.open(io.BytesIO(audio), 'rb') as decoded:
                 if decoded.getnchannels() != 1 or decoded.getsampwidth() != 2 or decoded.getframerate() not in (8000, 16000, 22050, 24000, 44100, 48000) or decoded.getnframes() > decoded.getframerate() * 120:
                     raise SpeechWorkerError('worker')
+            with self.state_lock:
+                if self.cancelled:
+                    raise SpeechWorkerError('cancelled')
             return audio
         except (OSError, ValueError, wave.Error, SpeechWorkerError) as exc:
             self._close()

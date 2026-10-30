@@ -23,7 +23,7 @@ import wave
 
 from .asr_worker import worker as _asr_worker
 from .settings import ROOT
-from .speech_text import normalize_speech
+from .speech_text import prepare_speech
 from .speech_worker import worker as _speech_worker, SpeechWorkerError, CANDIDATES, candidate_ready
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
@@ -55,10 +55,12 @@ DECODINGS = {
 }
 DECODINGS['baseline-auto'] = {**DECODINGS['baseline'], 'language': None}
 DECODINGS['multilingual'] = {**DECODINGS['technical-auto'], 'multilingual': True}
-DEFAULT_VOICE = 'ru_RU-denis-medium'
+PIPER_VOICE = 'ru_RU-denis-medium'
+DEFAULT_VOICE = 'silero-v5_6-ru'
 VOICES = {
-    DEFAULT_VOICE: {'label': 'Денис · Piper · CPU', 'dataset_license': 'CC0', 'engine': 'piper'},
-    'silero-v5_6-ru': {'label': 'Silero v5_6_ru · CPU · экспериментальный', 'license': 'CC-BY-NC-SA-4.0', 'engine': 'silero'},
+    DEFAULT_VOICE: {'label': 'Silero · xenia · CPU', 'license': 'CC-BY-NC-SA-4.0', 'engine': 'silero',
+                    'model': 'v5_6_ru', 'speaker': 'xenia', 'device': 'cpu', 'threads': 4, 'sample_rate': 24000},
+    PIPER_VOICE: {'label': 'Денис · Piper · CPU', 'dataset_license': 'CC0', 'engine': 'piper'},
     'chatterbox-v3-ru': {'label': 'Chatterbox Multilingual V3 · экспериментальный', 'license': 'MIT', 'engine': 'chatterbox'},
 }
 MODELS = ROOT / 'models'
@@ -105,15 +107,16 @@ def _tts_ready(voice: str) -> bool:
 
 def voice_status() -> dict:
     stt_installed = _installed('faster_whisper') and _installed('av')
-    tts_installed = _installed('piper')
+    ready = {key: _tts_ready(key) and (key in CANDIDATES or _installed('piper')) for key in VOICES}
     return {
         'stt_installed': stt_installed,
-        'tts_installed': tts_installed,
+        'tts_installed': ready[DEFAULT_VOICE],
+        'default_voice': DEFAULT_VOICE,
         'default_profile': 'balanced',
         'max_recording_seconds': MAX_RECORDING_SECONDS,
         'max_upload_bytes': MAX_UPLOAD_BYTES,
         'profiles': [{'id': key, **value, 'ready': stt_installed and _stt_ready(key)} for key, value in PROFILES.items()],
-        'voices': [{'id': key, **value, 'ready': _tts_ready(key) and (key in CANDIDATES or tts_installed)} for key, value in VOICES.items()],
+        'voices': [{'id': key, **value, 'ready': ready[key]} for key, value in VOICES.items()],
         'setup': 'См. docs/VOICE.md. Установите requirements-voice.txt и загрузите выбранную модель отдельно.',
         'local_only': True,
     }
@@ -193,10 +196,10 @@ def synthesize_speech(text: str, voice: str = DEFAULT_VOICE, generation_id: str 
     if not isinstance(text, str) or not text.strip() or len(text) > MAX_TTS_CHARACTERS:
         raise VoiceError(422, 'Для озвучивания нужен текст от 1 до 1200 символов.')
     if voice in CANDIDATES and not _tts_ready(voice):
-        raise VoiceError(503, 'Выбранный локальный голос не установлен. Подготовьте отдельную среду и модель по docs/NEXT_VOICE.md или выберите Piper.')
-    if voice == DEFAULT_VOICE and (not _tts_ready(voice) or not _installed('piper')):
+        raise VoiceError(503, 'Выбранный локальный голос не установлен. Подготовьте отдельную среду и модель по docs/NEXT_VOICE.md. Установка Silero: docs/VOICE.md; setup-tts устанавливает только явно выбранный Piper.')
+    if voice == PIPER_VOICE and (not _tts_ready(voice) or not _installed('piper')):
         raise VoiceError(503, 'Локальный голос Piper не установлен. Установите requirements-voice.txt и выполните python -m localmind.voice setup-tts. См. docs/VOICE.md.')
-    spoken = normalize_speech(text)
+    spoken = prepare_speech(text, voice)
     if not spoken:
         raise VoiceError(422, 'После подготовки для речи текст пуст.')
     # Normalization can expand numbers/technical names; bound worker input too.
@@ -211,7 +214,7 @@ def synthesize_speech(text: str, voice: str = DEFAULT_VOICE, generation_id: str 
 
 def warm_tts():
     """Optional startup warm-up, never download or make startup depend on TTS."""
-    if _installed('piper') and _tts_ready(DEFAULT_VOICE):
+    if _tts_ready(DEFAULT_VOICE):
         try:
             _speech_worker.synthesize('Готов.', DEFAULT_VOICE)
         except SpeechWorkerError:
@@ -449,7 +452,7 @@ def main():
         from piper.download_voices import download_voice
         directory = MODELS / 'piper'
         directory.mkdir(parents=True, exist_ok=True)
-        download_voice(DEFAULT_VOICE, directory)
+        download_voice(PIPER_VOICE, directory)
         print('Russian voice downloaded. See docs/VOICE.md for engine and voice licenses.')
     else:
         print(json.dumps(voice_status(), ensure_ascii=False, indent=2))

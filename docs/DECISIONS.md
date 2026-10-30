@@ -356,3 +356,49 @@ into a guessed summary. Report playback API completion separately from human hea
 Compound replies containing document generation propagate speech_deferred, matching
 the single-document path. Otherwise the browser's existing actionSpoken latch would
 silence summary deltas. This is covered without changing Blacksite UI or styling.
+# 2026-10-31 — preserve Silero xenia for mixed-language speech
+
+The declared runtime configuration, not a guessed voice/model, is authoritative:
+v5_6_ru.pt, speaker xenia, CPU/four threads, 24 kHz, accent/ё handling enabled.
+The loaded package exposes a Cyrillic-only symbols table and no enabled phoneme
+mode; pure Latin input raises ValueError. Mixed Latin text can be stripped silently.
+Use a small speech-only dictionary and letter spelling for unknown Latin words.
+Keep normalize_speech's Russian filename contract; clean_speech preserves Latin
+before language_spans and voice-specific prepare_speech. Never alter display or
+action data to improve speech. No per-language process restart or audio joining.
+
+Evaluate v3_en/en_0 separately at 24 kHz; do not add it to automatic routing or the
+public voice selector until listening establishes an improvement and the owner
+explicitly opts into a different speaker. Upstream lists distinct English speakers,
+not xenia: https://github.com/snakers4/silero-models#v3 and models.yml. Use local
+torch.package only; setup downloads are separate from offline inference.
+
+Open/focus is a separate change: await bounded image-based window discovery after
+launch, bind focus to the original grant, and preserve all native identity checks.
+Obsidian may hand off to another PID. A background Obsidian win32 instance may
+receive one serialized executable activation; all other background apps retain
+the prior no-relaunch policy. Never infer foreground from launch/SetForegroundWindow
+return. Windows may deny activation even under documented conditions:
+https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow
+Electron's single-instance behavior is documented at:
+https://www.electronjs.org/docs/latest/api/app#apprequestsingleinstancelockadditionaldata
+Do not work around denial with simulated input, elevation, lock changes or
+AttachThreadInput. Keep the reported Obsidian bug open until physical verification.
+
+## 2026-10-31 - evidence and sign-off decision
+
+Keep the Silero pronunciation repair reviewable without asserting perceptual
+success: successful WAV/HTTP generation does not rate intelligibility or voice
+consistency. Preserve failed legacy attempts, model hashes and measured timings.
+Keep v3_en as an explicit local evaluation asset, not an automatic route.
+The English evaluation prepares PDF/C++/Warcraft III using English words/letters
+before synthesis because those symbols/numerals are not evidence of correct
+English pronunciation merely by surviving WAV generation.
+
+Keep the Obsidian foreground bug open after native ambiguity. Do not filter out
+candidate windows or choose by title to turn this test into an apparent success.
+The recorded native launch did not demonstrate a usable interactive editor.
+Check cancellation again after launch inspection and immediately before spawn;
+revoked/cancelled requests must not trigger background-instance activation.
+No app/window permission is broadened by the TTS changes. Browser runner/host
+restrictions and the rejected Zen inspection remain explicit verification limits.

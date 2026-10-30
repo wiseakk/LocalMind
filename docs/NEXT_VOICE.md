@@ -1,6 +1,8 @@
 ﻿# LocalMind Next: локальная потоковая речь
 
-Piper остаётся рабочим CPU baseline. Приложение сохраняет редактируемую STT-
+Silero v5_6_ru / xenia теперь выбран по умолчанию; Piper доступен только при
+явном выборе. Голос сохраняется в браузере как локальная настройка
+при явном изменении. Приложение сохраняет редактируемую STT-
 расшифровку. Синтез получает только публичные текстовые дельты, а подтверждения
 действий — проверенные результаты адаптеров. При наличии законченной фразы
 синтез начинается до события final. Если модель выдаёт одну короткую фразу
@@ -35,7 +37,11 @@ Steam, World of Warcraft и др. Markdown очищается независим
 текста, URL заменяются словом «ссылка», код не читается, математические символы
 произносятся без вычисления выражений. Числа читаются по цифрам: безопасно для
 длинных номеров, но не заменяет полноценную русскую морфологию числительных.
-Неизвестные английские слова сохраняются. Это явно ограниченная эвристика, а не
+Очистка сохраняет английское написание до определения RU/EN/neutral spans.
+Для Silero добавлены Arthas Menethil, Warcraft III, Reign of Chaos, The Frozen
+Throne, Heroes of the Storm и Hearthstone. Неизвестные латинские слова Silero
+читает по буквам: реальный v5_6_ru удаляет латиницу. Другие выбранные движки и
+normalize_speech сохраняют прежний контракт. Это ограниченная эвристика, а не
 гарантия идеальной интонации или произношения каждого технического термина.
 
 ## Проверенные upstream identities (28 октября 2026)
@@ -73,7 +79,7 @@ Silero torch.package исполняет код доверенного автор
 
 ```powershell
 py -3.11 -m venv .voice-envs/silero
-.\.voice-envs\silero\Scripts\python.exe -m pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+.\.voice-envs\silero\Scripts\python.exe -m pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu
 .\.voice-envs\silero\Scripts\python.exe -m pip install -r requirements-tts-silero.txt
 .\.voice-envs\silero\Scripts\python.exe scripts/setup_voice_assets.py silero
 
@@ -95,7 +101,21 @@ ff1c8ac55a976971245cdd53c18d6131ca00d993. Локальный download-manifest.j
 После подготовки выберите голос в настройках. Если зависимостей или assets нет,
 сервер возвращает понятную ошибку, сохраняя текстовый ответ и базовый голос.
 
-## Фактическая проверка в текущем checkout
+## Проверка bilingual в checkout fee423c + изменения 31.10.2026
+
+Актуальные результаты, ограничения, хэши и команды: [BILINGUAL_SILERO.md](BILINGUAL_SILERO.md).
+Английский v3_en / en_0 исследуется отдельно, без автоматического переключения
+с xenia. Установка английского кандидата не меняет основной голос:
+
+```powershell
+.\.voice-envs\silero\Scripts\python.exe scripts/setup_voice_assets.py silero --english-evaluation
+.\.voice-envs\silero\Scripts\python.exe scripts/eval_bilingual.py --retain-audio
+```
+
+Результат — `.test-artifacts/bilingual/listen.html`, WAV и JSON. Прослушивание
+обязательно: генерация WAV не подтверждает понятность или согласованность голоса.
+
+## Исторические проверки до этой задачи
 
 CPU Piper1.8.0/Denis на Python3.14.5: настоящий supervisor создал WAV без облака.
 Первый запрос (с загрузкой и пробным прогревом)3.413s,4.365s аудио; следующий

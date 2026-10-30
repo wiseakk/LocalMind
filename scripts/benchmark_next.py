@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import io
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -125,17 +126,21 @@ def main():
     parser.add_argument('--allow-real', action='store_true', help='Explicit permission to actuate real configured light')
     parser.add_argument('--retain-audio', action='store_true', help='Save synthesized comparison WAVs beside output')
     parser.add_argument('--direct-voice', action='store_true', help='Use the local supervised voice adapter without a running HTTP server')
+    parser.add_argument('--speech-preparation', choices=('current', 'legacy', 'literal'), default='current',
+                        help='Direct evaluation only: legacy Russian substitutions or original cleaned Latin text')
     parser.add_argument('--output', type=Path, default=ROOT / 'docs/evidence/next-response-benchmark.json')
     args = parser.parse_args()
     if not 1 <= args.n <= 500:
         parser.error('--n must be 1..500')
     if args.direct_voice and args.kind != 'voice':
         parser.error('--direct-voice requires --kind voice')
+    if args.speech_preparation != 'current' and not args.direct_voice:
+        parser.error('--speech-preparation requires --direct-voice')
     base = local_url(args.base)
     if args.text is not None and not 1 <= len(args.text) <= 1200:
         parser.error('text must be 1..1200 characters')
     document = {'schema_version': 2, 'started_utc': datetime.now(timezone.utc).isoformat(),
-                'kind': args.kind, 'rows': [], 'environment': {'ram': memory(), 'gpu': gpu()},
+                'kind': args.kind, 'speech_preparation': args.speech_preparation, 'rows': [], 'environment': {'ram': memory(), 'gpu': gpu()},
                 'cold_semantics': 'First sample is first call observed; no claim OS caches or worker were cleared',
                 'quality': {'naturalness': None, 'pronunciation': None, 'review': 'Listening required; no automatic quality claim'}}
     with httpx.Client(timeout=httpx.Timeout(125, connect=3), trust_env=False, headers={'X-LocalMind-Key': args.key}) as client:
@@ -143,11 +148,25 @@ def main():
         if args.direct_voice:
             sys.path.insert(0, str(ROOT))
             from localmind.voice import synthesize_speech, VoiceError
+            from localmind.speech_text import normalize_speech, clean_speech
+            from localmind.speech_worker import worker, candidate_ready, SpeechWorkerError
+            silero_path = ROOT / 'models/silero/v5_6_ru.pt'
+            if silero_path.is_file():
+                with silero_path.open('rb') as model_file:
+                    model_hash = hashlib.file_digest(model_file, 'sha256').hexdigest()
+                document['silero'] = {'model': 'v5_6_ru', 'sha256': model_hash,
+                                      'speaker': 'xenia', 'device': 'cpu', 'threads': 4, 'sample_rate': 24000}
             def direct_synth(text, voice):
                 try:
+                    if args.speech_preparation != 'current':
+                        if voice != 'silero-v5_6-ru' or not candidate_ready(voice):
+                            raise ValueError('Preparation comparison requires installed silero-v5_6-ru')
+                        return worker.synthesize((normalize_speech if args.speech_preparation == 'legacy' else clean_speech)(text), voice)
                     return synthesize_speech(text, voice)
                 except VoiceError as exc:
                     raise ValueError(f'VoiceError {exc.status_code}: {exc.detail}') from exc
+                except SpeechWorkerError as exc:
+                    raise ValueError('Local speech comparison failed: ' + str(exc)) from exc
             info = {}
         else:
             status = client.get(base + '/api/info')

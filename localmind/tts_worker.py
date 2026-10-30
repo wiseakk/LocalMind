@@ -38,6 +38,11 @@ def load_engine(voice):
 def synthesize(engine, voice, text):
     output = io.BytesIO()
     with wave.open(output, 'wb') as audio:
+        # Keep the original inference exception if unsupported text fails before
+        # writing frames; wave.close must not replace it with a header error.
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(24000)
         if voice == 'ru_RU-denis-medium':
             engine.synthesize_wav(text, audio)
         else:

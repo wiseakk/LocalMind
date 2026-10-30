@@ -10,7 +10,7 @@ from __future__ import annotations
 from contextlib import contextmanager, ExitStack
 import ctypes
 from ctypes import wintypes as w
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import os
 from pathlib import Path
 import secrets
@@ -281,7 +281,36 @@ class WindowTools:
                                       status_text=reason, data=result.data)
         return windows[0]['window_id'], None
 
-    def focus_app(self, app_id, timeout=4.0):
+    def open_app(self, app_id, launcher):
+        """Launch once, then observe a permission-bound window and focus it.
+
+        Snapshot the grant before launch so a changed executable cannot silently
+        become the focus target. Electron may hand off to a different PID; the
+        normal image/session/HWND checks discover that window independently.
+        """
+        check_cancelled()
+        try:
+            with self.target_provider(app_id) as target:
+                original = target
+        except (AppError, OSError, ValueError):
+            # Some launch types (Steam) have no verifiable window image. Their
+            # launcher still enforces its own grants; never infer focus there.
+            return launcher(app_id)
+        window_id, error = self.select_app_window(app_id)
+        if window_id:
+            return self.focus_window(window_id)
+        if error.execution_status != 'window_pending':
+            return error
+        check_cancelled()
+        launched = launcher(app_id)
+        if not launched.success:
+            return launched
+        check_cancelled()
+        focused = self.focus_app(app_id, timeout=10.0, expected_target=original)
+        return replace(focused, action='apps.open',
+                       data={**(focused.data or {}), 'launch_status': launched.execution_status})
+
+    def focus_app(self, app_id, timeout=4.0, *, expected_target=None):
         """Discover after authorization; support delayed and existing-instance windows.
 
         Every poll and final native operation revalidates the image grant. Never
@@ -290,9 +319,11 @@ class WindowTools:
         try:
             with self.target_provider(app_id) as target:
                 original = target
+                if expected_target is not None and original != expected_target:
+                    return refused('apps.focus', app_id, 'Цель приложения изменилась после запуска.', status='stale_target')
         except (AppError, OSError, ValueError):
             return refused('apps.focus', app_id, 'Проверь разрешение приложения и его исполняемый файл в каталоге.', status='permission_required')
-        deadline = self.clock() + min(max(timeout, 0), 5)
+        deadline = self.clock() + min(max(timeout, 0), 10)
         while True:
             check_cancelled()
             try:

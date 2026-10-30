@@ -134,6 +134,22 @@ def test_worker_rejects_mismatched_frame(monkeypatch):
     assert calls[0][2].killed
 
 
+def test_cancellation_after_reply_never_returns_stale_audio(monkeypatch):
+    worker, calls = fake_worker(monkeypatch)
+    worker.synthesize('Прогрев.', voice.DEFAULT_VOICE)
+    receive = worker._receive
+
+    def late_reply():
+        reply = receive()
+        worker.cancel('generation')
+        return reply
+
+    monkeypatch.setattr(worker, '_receive', late_reply)
+    with pytest.raises(speech_worker.SpeechWorkerError, match='cancelled'):
+        worker.synthesize('Фраза.', voice.DEFAULT_VOICE, 'generation')
+    assert calls[0][2].killed
+
+
 def test_candidate_interpreters_are_fixed_project_local_paths():
     assert speech_worker.interpreter('silero-v5_6-ru').is_relative_to(speech_worker.ROOT / '.voice-envs')
     assert speech_worker.interpreter('chatterbox-v3-ru').is_relative_to(speech_worker.ROOT / '.voice-envs')

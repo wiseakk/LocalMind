@@ -20,14 +20,18 @@ Windows 10/11, Python 3.11+ с `py`, Ollama. Из корня проекта:
 .\setup_windows.ps1 -Voice -Dev
 ollama pull qwen3:4b
 .\.venv\Scripts\python.exe -m localmind.voice setup-stt --profile balanced
-.\.venv\Scripts\python.exe -m localmind.voice setup-tts
+py -3.11 -m venv .voice-envs/silero
+.\.voice-envs\silero\Scripts\python.exe -m pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu
+.\.voice-envs\silero\Scripts\python.exe -m pip install -r requirements-tts-silero.txt
+.\.voice-envs\silero\Scripts\python.exe scripts/setup_voice_assets.py silero
 ```
 
 Это явный сетевой этап. Для минимального текстового приложения достаточно
 `.\setup_windows.ps1`. Скрипты не меняют execution policy, firewall или драйверы.
 Необязательные профили: `setup-stt --profile cpu-fast` и `--profile gpu-quality`.
 Модели размещаются в игнорируемой Git папке `models/`; лицензии — в
-[VOICE](docs/VOICE.md). Piper engine GPL-3.0 и лицензии голосов различаются.
+[VOICE](docs/VOICE.md). Silero xenia сохраняется основным голосом; Piper доступен
+при явном выборе. Лицензии движков и моделей различаются.
 
 После установки **одна команда**:
 
@@ -50,7 +54,7 @@ ollama pull qwen3:4b
   анимации ожидания/записи/сообщений, reduced motion, диалоги и разрешения.
 - Запись только кнопкой, максимум 30 секунд. Исходная расшифровка видна отдельно,
   исправляется в поле и **не исполняется до явной отправки**.
-- Русские multilingual STT base/small/medium, VAD, CPU fallback. Piper/Denis
+- Русские multilingual STT base/small/medium, VAD, CPU fallback. Silero/xenia
   озвучивает локальный WAV; stop/mute отменяют и отложенное воспроизведение.
   Для действий произносится только окончательный проверенный комментарий или
   достоверный fallback; частичные ответы в TTS не отправляются.
@@ -82,7 +86,7 @@ ollama pull qwen3:4b
    если они есть. Откройте каждую выбранную запись, сверяя результат с окном.
    Окна закрывайте вручную с сохранением данных. Неизвестное/неоднозначное имя
    должно отказать. Перезапуск отменяет разрешения.
-6. Включите Piper, проверьте ответ, stop/mute; затем тишину, отсутствующую модель,
+6. Включите озвучку Silero, проверьте ответ, stop/mute; затем тишину, отсутствующую модель,
    ошибку Ollama и CPU fallback. При ошибке генерации чип результата остаётся.
 7. Выполните checklist [UI_QA](docs/UI_QA.md) на 100/125/140%, клавиатурой и с
    reduced motion. Отметьте каждый реально выполненный пункт, не переносите mocks

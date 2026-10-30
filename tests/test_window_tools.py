@@ -244,6 +244,82 @@ def test_app_focus_revocation_and_cancellation_stop_discovery(tools, monkeypatch
     assert 'focus' not in backend.operations
 
 
+def test_open_cold_launch_waits_for_verified_handoff_window(tools, monkeypatch):
+    from localmind.results import ActionResult
+    service, backend, _ = tools
+    native = replace(backend.windows[0], pid=999, created=5678)
+    backend.windows.clear()
+    backend.inspect_state = 'background'
+    launcher = Mock(return_value=ActionResult(True, 'open_app', 'Calculator', 'process_created'))
+    monkeypatch.setattr(module.time, 'sleep', lambda _: backend.windows.append(native))
+    result = service.open_app('calculator', launcher)
+    launcher.assert_called_once_with('calculator')
+    assert result.success and result.observed_state == 'foreground_window'
+    assert result.data['launch_status'] == 'process_created'
+    assert backend.operations.count('focus') == 1
+
+
+def test_open_existing_window_focuses_without_launch(tools):
+    service, backend, _ = tools
+    launcher = Mock()
+    assert service.open_app('calculator', launcher).observed_state == 'foreground_window'
+    launcher.assert_not_called()
+
+
+@pytest.mark.parametrize('change', ['allowed', 'fingerprint', 'cancelled'])
+def test_open_does_not_focus_changed_target_after_launch(tools, change):
+    from localmind.results import ActionResult
+    from localmind.generation import cancellation
+    from threading import Event
+    service, backend, permission = tools
+    native = backend.windows.pop()
+    event = Event()
+    token = cancellation.set(event)
+
+    def launch(app_id):
+        backend.windows.append(native)
+        if change == 'cancelled':
+            event.set()
+        else:
+            permission[change] = False if change == 'allowed' else 'new-image'
+        return ActionResult(True, 'open_app', 'Calculator', 'process_created')
+
+    try:
+        if change == 'cancelled':
+            with pytest.raises(ValueError):
+                service.open_app('calculator', launch)
+        else:
+            assert not service.open_app('calculator', launch).success
+    finally:
+        cancellation.reset(token)
+    assert 'focus' not in backend.operations
+
+
+def test_open_foreground_denial_is_failure_even_after_successful_launch(tools):
+    from localmind.results import ActionResult
+    service, backend, _ = tools
+    native = backend.windows.pop()
+    backend.focus_allowed = False
+
+    def launch(app_id):
+        backend.windows.append(native)
+        return ActionResult(True, 'open_app', 'Calculator', 'process_created')
+
+    result = service.open_app('calculator', launch)
+    assert not result.success and result.execution_status == 'activation_denied'
+    assert result.data['launch_status'] == 'process_created'
+
+
+def test_open_ambiguity_and_inspection_failure_never_launch(tools):
+    service, backend, _ = tools
+    launcher = Mock()
+    backend.windows.append(replace(backend.windows[0], hwnd=100))
+    assert service.open_app('calculator', launcher).execution_status == 'ambiguous'
+    backend.inspect_state = 'unavailable'
+    assert not service.open_app('calculator', launcher).success
+    launcher.assert_not_called()
+
+
 def test_accepted_close_is_not_observed_close_and_never_repeated(tools):
     service, backend, _ = tools
     key = selected(service)

@@ -49,6 +49,31 @@ function makeCanvasDom(){
   });
 }
 (async()=>{
+  await run('Silero defaults and explicit voice preferences survive reload without switching engines',async()=>{
+    for(const saved of [null,'ru_RU-denis-medium','silero-v5_6-ru','chatterbox-v3-ru','../../unknown']){
+      const dom=makeDom(null,w=>{if(saved)w.localStorage.setItem('localmind.ttsVoice.v1',saved)});
+      try{
+        const w=dom.window,select=w.document.getElementById('ttsVoice');
+        assert.equal(select.value,saved&& !saved.startsWith('../')?saved:'silero-v5_6-ru');
+        select.value='ru_RU-denis-medium';select.dispatchEvent(new w.Event('change'));
+        assert.equal(w.localStorage.getItem('localmind.ttsVoice.v1'),'ru_RU-denis-medium');
+      }finally{dom.window.close()}
+    }
+  });
+  await run('stream deltas and length cuts keep complete and partial English names intact',async()=>{
+    for(const [head,tail,name] of [['World of W','arcraft','World of Warcraft'],['Arthas M','enethil','Arthas Menethil'],['The Frozen Throne','','The Frozen Throne']]){
+      const dom=makeDom();
+      try{
+        const w=dom.window,calls=[];
+        const speech=new w.LocalMindSpeech({request:text=>{calls.push(text);return new Promise(()=>{})},
+          enabled:()=>true,voice:()=> 'silero-v5_6-ru',report:()=>{}});
+        speech.start();speech.feed('слово '.repeat(39)+head);speech.feed(tail,true);
+        assert.equal(calls.length,1);assert.equal(calls[0],'слово '.repeat(39).trim());
+        assert.equal(speech.session.texts.map(item=>item.text).join(' '),name);
+        speech.cancel();
+      }finally{dom.window.close()}
+    }
+  });
   await run('mismatched info and conversation instances reject valid PNG before any upload',async()=>{
     const calls=[];
     const dom=makeDom(async(url,options)=>{

@@ -36,10 +36,16 @@ def download(url, destination):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('candidate', choices=('silero', 'chatterbox'))
+    parser.add_argument('--english-evaluation', action='store_true',
+                        help='Silero only: also download v3_en for listening evaluation; no app routing')
     args = parser.parse_args()
+    if args.english_evaluation and args.candidate != 'silero':
+        parser.error('--english-evaluation requires silero')
     if args.candidate == 'silero':
         folder = ROOT / 'models/silero'
         urls = [('v5_6_ru.pt', 'https://models.silero.ai/models/tts/ru/v5_6_ru.pt')]
+        if args.english_evaluation:
+            urls.append(('v3_en.pt', 'https://models.silero.ai/models/tts/en/v3_en.pt'))
     else:
         folder = ROOT / 'models/chatterbox-v3'
         urls = [(name, f'https://huggingface.co/ResembleAI/chatterbox/resolve/{CHATTERBOX_REVISION}/{name}') for name in CHATTERBOX_FILES]

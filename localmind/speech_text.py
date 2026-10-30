@@ -1,8 +1,10 @@
 """Conservative Russian speech rendering, independent of displayed Markdown.
 
 This is pronunciation assistance, not a mathematical evaluator or a translator.
-Unknown English words are kept; known technical names use reviewed Russian forms.
+Cleanup keeps English spelling. The Russian Silero adapter pronounces reviewed
+names and spells unknown Latin words because this model drops Latin input.
 """
+from dataclasses import dataclass
 import re
 
 TERMS = {
@@ -15,6 +17,64 @@ TERMS = {
     'Word': 'Ворд', 'Markdown': 'Маркдаун', 'CSV': 'си эс ви',
     'TSV': 'ти эс ви', 'JSON': 'джейсон',
 }
+# Speech-only spellings for the selected Russian speaker. These are reviewed
+# vocabulary, not translation, a general transliterator, or Silero phoneme tags.
+SILERO_NAMES = {
+    **TERMS,
+    'Arthas Menethil': 'Артас Менетил', 'Arthas': 'Артас', 'Menethil': 'Менетил',
+    'Warcraft III': 'Варкрафт три', 'Reign of Chaos': 'Рэйн оф Кэйос',
+    'The Frozen Throne': 'Зэ Фроузен Троун',
+    'Heroes of the Storm': 'Хироуз оф зэ Сторм', 'Hearthstone': 'Хартстоун',
+}
+
+
+@dataclass(frozen=True)
+class LanguageSpan:
+    language: str
+    text: str
+
+
+def language_spans(text: str) -> tuple[LanguageSpan, ...]:
+    """Lossless script spans, before pronunciation changes; no language guessing.
+
+    Latin words are English candidates. Unknown words stay intact. Whitespace
+    inside a phrase is kept together; punctuation and numbers remain neutral.
+    """
+    spans = []
+    for match in re.finditer(r"[A-Za-z]+(?:['’][A-Za-z]+)*(?:\+\+|#)?|[А-Яа-яЁё]+|[^A-Za-zА-Яа-яЁё]+", text):
+        word = match[0]
+        language = 'en' if word[0].isascii() and word[0].isalpha() else 'ru' if re.match('[А-Яа-яЁё]', word) else 'neutral'
+        if spans and spans[-1].language == language:
+            spans[-1] = LanguageSpan(language, spans[-1].text + word)
+        elif len(spans) >= 2 and spans[-1].text.isspace() and spans[-2].language == language:
+            space = spans.pop().text
+            spans[-1] = LanguageSpan(language, spans[-1].text + space + word)
+        else:
+            spans.append(LanguageSpan(language, word))
+    return tuple(spans)
+
+
+def _pronounce_terms(text, terms):
+    for term, spoken in sorted(terms.items(), key=lambda pair: len(pair[0]), reverse=True):
+        text = re.sub(r'(?<!\w)' + re.escape(term) + r'(?!\w|[+#])', spoken, text, flags=re.I)
+    return text
+
+
+def prepare_speech(text: str, voice: str) -> str:
+    """Adapt only the synthesis copy. One clause still uses one resident voice."""
+    cleaned = clean_speech(text)
+    if voice != 'silero-v5_6-ru':
+        return _pronounce_terms(cleaned, TERMS)
+
+    def russian_span(span):
+        spoken = _pronounce_terms(span.text, SILERO_NAMES)
+        # This model discards Latin characters. Spell unknown names/acronyms
+        # instead of silently omitting them or inventing a pronunciation.
+        return re.sub(r'[A-Za-z]+', lambda m: ' '.join(_LETTER_NAMES[c] for c in m[0].upper()), spoken)
+    return ''.join(russian_span(span) if span.language == 'en' else span.text
+                   for span in language_spans(cleaned))
+
+
 _ONES = ('ноль', 'один', 'два', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять')
 
 # Reviewed vocabulary only. Do not transliterate an unknown word into a guessed
@@ -133,7 +193,8 @@ def pronounce_filename(filename: str, language: str = 'ru') -> str:
     return text
 
 
-def normalize_speech(text: str) -> str:
+def clean_speech(text: str) -> str:
+    """Remove display syntax without replacing English names or choosing a voice."""
     text = re.sub(r'```[\s\S]*?(?:```|$)', ' фрагмент кода. ', text)
     text = re.sub(r'!\[([^\]]*)\]\([^)]*\)', r'\1', text)
     text = re.sub(r'\[([^\]]+)\]\([^)]*\)', r'\1', text)
@@ -147,8 +208,6 @@ def normalize_speech(text: str) -> str:
     text = re.sub(r'\\[a-zA-Z]+', ' ', text)
     # File names often put technical words next to underscores.
     text = text.replace('_', ' ')
-    for term, spoken in sorted(TERMS.items(), key=lambda pair: len(pair[0]), reverse=True):
-        text = re.sub(r'(?<!\w)' + re.escape(term) + r'(?!\w)', spoken, text, flags=re.I)
     text = re.sub(r'(?<=\d)[.,](?=\d)', ' запятая ', text)
     text = re.sub(r'\^\s*2\b', ' в квадрате ', text)
     text = re.sub(r'\^\s*3\b', ' в кубе ', text)
@@ -164,3 +223,8 @@ def normalize_speech(text: str) -> str:
     text = re.sub(r'[`*_{}|~]', ' ', text)
     text = ''.join(c for c in text if c in '\n\t' or c.isprintable())
     return re.sub(r'\s+', ' ', text).strip()
+
+
+def normalize_speech(text: str) -> str:
+    """Compatibility renderer for Russian filename and legacy speech callers."""
+    return _pronounce_terms(clean_speech(text), TERMS)

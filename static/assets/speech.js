@@ -1,5 +1,19 @@
 /* Local, bounded clause synthesis and ordered playback; no browser/cloud voices. */
 'use strict';
+// Match speech_text.SILERO_NAMES phrases. Keep names together at the length
+// boundary, including a partially received name at the end of a text delta.
+const speechNames=['World of Warcraft','Arthas Menethil','Warcraft III','Reign of Chaos','The Frozen Throne','Heroes of the Storm'];
+function nameSafeCut(buffer,cut) {
+  const lower=buffer.toLowerCase();
+  for(let start=Math.max(0,cut-24);start<cut;start++) {
+    if(start && /[\p{L}\p{N}_]/u.test(buffer[start-1]))continue;
+    for(const name of speechNames) {
+      const candidate=lower.slice(start,start+name.length);
+      if(candidate.length && name.toLowerCase().startsWith(candidate) && start+name.length>cut)cut=start;
+    }
+  }
+  return cut;
+}
 class LocalMindSpeech {
   constructor({request, cancelRequest, enabled, voice, report}) {
     this.request=request;this.enabled=enabled;this.voice=voice;this.report=report;
@@ -38,7 +52,7 @@ class LocalMindSpeech {
       let match;
       while((match=end.exec(s.buffer))){if(match.index>=12){cut=match.index+1;break;}}
       if(!cut && s.buffer.length>=110){const comma=s.buffer.indexOf(', ',60);if(comma>=0)cut=comma+1;}
-      if(!cut && s.buffer.length>240){cut=s.buffer.lastIndexOf(' ',240);if(cut<40)cut=240;}
+      if(!cut && s.buffer.length>240){cut=s.buffer.lastIndexOf(' ',240);if(cut<40)cut=240;cut=nameSafeCut(s.buffer,cut);}
       if(!cut && final)cut=s.buffer.length;
       if(!cut)break;
       const text=s.buffer.slice(0,cut).trim();s.buffer=s.buffer.slice(cut);

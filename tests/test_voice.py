@@ -56,8 +56,8 @@ def test_missing_assets_never_start_a_worker_or_download():
         with pytest.raises(voice.VoiceError, match='setup-stt'):
             voice.transcribe_audio(b'x' * 1024, '.wav')
     worker.assert_not_called()
-    with mock.patch.object(voice, '_installed', return_value=False), mock.patch.object(voice, '_run_worker') as worker:
-        with pytest.raises(voice.VoiceError, match='setup-tts'):
+    with mock.patch.object(voice, '_tts_ready', return_value=False), mock.patch.object(voice._speech_worker, 'synthesize') as worker:
+        with pytest.raises(voice.VoiceError, match='NEXT_VOICE'):
             voice.synthesize_speech('Привет')
     worker.assert_not_called()
 
@@ -166,7 +166,7 @@ def test_piper_generates_wav_from_literal_text_without_shell(tmp_path):
     class Piper:
         @staticmethod
         def load(path, **options):
-            assert path.endswith(voice.DEFAULT_VOICE + '.onnx')
+            assert path.endswith(voice.PIPER_VOICE + '.onnx')
             assert options == {'use_cuda': False}
             return Piper()
 
@@ -178,10 +178,10 @@ def test_piper_generates_wav_from_literal_text_without_shell(tmp_path):
             output.writeframes(b'\x00\x00' * 100)
 
     with mock.patch.dict('sys.modules', {'piper': SimpleNamespace(PiperVoice=Piper)}):
-        result = voice._synthesize(source, voice.DEFAULT_VOICE, destination)
+        result = voice._synthesize(source, voice.PIPER_VOICE, destination)
     assert seen == ['Не удалось открыть приложение.']
     assert destination.read_bytes().startswith(b'RIFF')
-    assert result['voice'] == voice.DEFAULT_VOICE
+    assert result['voice'] == voice.PIPER_VOICE
 
 
 def test_worker_suppresses_native_diagnostics_and_audio_details(tmp_path):

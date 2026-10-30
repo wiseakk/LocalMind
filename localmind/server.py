@@ -28,7 +28,7 @@ from .conversations import conversations, ConversationError
 from .file_access import file_access, FileAccessError
 from .attachments import (AttachmentError, MAX_FILE_BYTES, add_document,
                           document_context, extract_document)
-from .voice import VoiceError, voice_status, transcribe_audio, synthesize_speech, MAX_UPLOAD_BYTES
+from .voice import VoiceError, voice_status, transcribe_audio, synthesize_speech, MAX_UPLOAD_BYTES, DEFAULT_VOICE
 
 @asynccontextmanager
 async def lifespan(app):
@@ -128,7 +128,7 @@ class PermissionRequest(BaseModel):
 
 class SpeechRequest(BaseModel):
     text: str = Field(min_length=1, max_length=1200)
-    voice: Literal['ru_RU-denis-medium', 'silero-v5_6-ru', 'chatterbox-v3-ru'] = 'ru_RU-denis-medium'
+    voice: Literal['ru_RU-denis-medium', 'silero-v5_6-ru', 'chatterbox-v3-ru'] = DEFAULT_VOICE
     generation_id: str | None = Field(default=None, pattern=r'^[a-f0-9]{32}$')
 
 class SpeechCancelRequest(BaseModel):

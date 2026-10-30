@@ -39,12 +39,7 @@ def _windows():
 
 def _open(args, owner):
     from .agent import open_app
-    window_id, error = _windows().select_app_window(args['app_id'])
-    if window_id:
-        return _windows().focus_window(window_id)
-    if error and error.execution_status == 'ambiguous':
-        return error
-    return open_app(args['app_id'])
+    return _windows().open_app(args['app_id'], open_app)
 
 
 def _latest(args, owner):

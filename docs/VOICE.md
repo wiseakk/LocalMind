@@ -11,7 +11,10 @@
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-voice.txt
 .\.venv\Scripts\python.exe -m localmind.voice setup-stt --profile balanced
-.\.venv\Scripts\python.exe -m localmind.voice setup-tts
+py -3.11 -m venv .voice-envs/silero
+.\.voice-envs\silero\Scripts\python.exe -m pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu
+.\.voice-envs\silero\Scripts\python.exe -m pip install -r requirements-tts-silero.txt
+.\.voice-envs\silero\Scripts\python.exe scripts/setup_voice_assets.py silero
 .\.venv\Scripts\python.exe -m localmind.voice status
 ```
 
@@ -41,7 +44,13 @@ objects, а не память декодера. Дальнейшее усиле�
 для worker, совместимость которого нужно проверить с моделью и GPU; случайного
 ограничения памяти основного сервера или изменений системной конфигурации нет.
 
-Для Piper используется объявленный голос `ru_RU-denis-medium` на CPU.
+По умолчанию используется существующий Silero `v5_6_ru`, speaker `xenia`,
+CPU / четыре потока / 24 kHz. Полные имена остаются в отображаемом тексте;
+произношение готовится только для TTS. Поддерживаемые имена, сравнения и текущие
+ограничения: [BILINGUAL_SILERO.md](BILINGUAL_SILERO.md).
+Для явно выбранного Piper используется голос `ru_RU-denis-medium` на CPU.
+Команда `python -m localmind.voice setup-tts` по-прежнему скачивает только Piper;
+она не устанавливает Silero и не переключает выбранный голос.
 Текст ограничен 1200 символами, результат — 2 минутами и 12 МБ. В интерфейсе
 озвучивание начинается по фразам; его можно приостановить, продолжить, остановить или выключить. Ошибки действий должны
 озвучиваться как ошибки; TTS не имеет доступа к инструментам управления ПК.

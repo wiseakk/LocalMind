@@ -23,6 +23,43 @@ def test_existing_or_uncertain_state_never_spawns(tmp_path, state):
     assert result.observed_state == (None if state == 'unavailable' else state)
 
 
+def test_opt_in_background_activation_is_bounded_and_never_claims_focus(tmp_path):
+    target = tmp_path / 'Obsidian.exe'
+    target.touch()
+    state = ['background']
+    coordinator = LaunchCoordinator(inspector=lambda _: ApplicationState(state[0]))
+    spawn = Mock(return_value=Mock(poll=Mock(return_value=0)))
+    first = coordinator.launch(target, 'Obsidian', spawn, activate_background=True)
+    assert first.execution_status == 'process_created' and first.observed_state is None
+    assert coordinator.launch(target, 'Obsidian', spawn, activate_background=True).execution_status == 'launch_pending'
+    spawn.assert_called_once()
+    state[0] = 'visible_window'
+    assert coordinator.launch(target, 'Obsidian', spawn, activate_background=True).observed_state == 'visible_window'
+    spawn.assert_called_once()
+
+
+def test_cancellation_during_launch_inspection_prevents_spawn(tmp_path):
+    from threading import Event
+    from localmind.generation import cancellation
+    target = tmp_path / 'Obsidian.exe'
+    target.touch()
+    event = Event()
+
+    def inspect(_):
+        event.set()
+        return ApplicationState('background')
+
+    coordinator = LaunchCoordinator(inspector=inspect)
+    token = cancellation.set(event)
+    spawn = Mock()
+    try:
+        with pytest.raises(ValueError):
+            coordinator.launch(target, 'Obsidian', spawn, activate_background=True)
+    finally:
+        cancellation.reset(token)
+    spawn.assert_not_called()
+
+
 def test_concurrent_different_requests_share_inspection_spawn_lock(tmp_path):
     target = tmp_path / 'steam.exe'
     target.touch()

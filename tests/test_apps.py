@@ -54,6 +54,22 @@ def test_permissions_default_deny_and_bind_current_picker(tmp_path):
         assert spawn.call_args.kwargs['shell'] is False
 
 
+@pytest.mark.parametrize('name,activated', [('Obsidian', True), ('Editor', False)])
+def test_only_granted_obsidian_opts_into_background_handoff(tmp_path, monkeypatch, name, activated):
+    executable = make_exe(tmp_path / (name.lower() + '.exe'))
+    catalog = apps.AppCatalog(lambda: [source(executable, name=name)])
+    [entry] = catalog.refresh()
+    coordinator = mock.Mock()
+    from localmind.results import ActionResult
+    coordinator.launch.return_value = ActionResult(True, 'open_app', name, 'process_created')
+    monkeypatch.setattr(apps, 'launch_coordinator', coordinator)
+    assert not catalog.launch(entry['id'])['success']
+    coordinator.launch.assert_not_called()
+    catalog.set_permission(entry['id'], True, entry['fingerprint'])
+    assert catalog.launch(entry['id'])['success']
+    assert coordinator.launch.call_args.kwargs == {'activate_background': activated}
+
+
 from contextlib import contextmanager
 
 

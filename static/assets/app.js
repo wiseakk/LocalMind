@@ -231,7 +231,7 @@ async function refresh() {
     }
     renderDevices(info);
     const voice=info.voice || {};
-    const selectedVoice=voice.voices?.find(v=>v.id===($('ttsVoice').value || 'ru_RU-denis-medium'));
+    const selectedVoice=voice.voices?.find(v=>v.id===($('ttsVoice').value || 'silero-v5_6-ru'));
     $('voiceStatus').textContent=selectedVoice?.ready ? 'Ресурсы выбранного голоса найдены. Синтез выполняется локально; облачная замена отключена.' : 'Выбранный голос требует установки. Piper: docs/VOICE.md; Silero/Chatterbox: docs/NEXT_VOICE.md. Облачная озвучка не используется.';
     if (voice.setup) $('voiceStatus').textContent += '\n'+voice.setup;
   } catch (error) { $('status').textContent=error.message; $('connectionDot').classList.remove('online'); }
@@ -266,7 +266,7 @@ const speech = new LocalMindSpeech({
   },
   cancelRequest:async(generation_id)=>fetch('/api/tts/cancel',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({generation_id})}),
   enabled:()=>$('speak').checked,
-  voice:()=>$('ttsVoice')?.value || 'ru_RU-denis-medium',
+  voice:()=>$('ttsVoice')?.value || 'silero-v5_6-ru',
   report:message=>{state(message);$('voiceStatus').textContent=message;}
 });
 function stopSpeech() {speech.cancel();$('pauseAudio').setAttribute('aria-pressed','false');window.localmindIcon?.($('pauseAudio'),'pause');}
@@ -356,7 +356,17 @@ $('appsOpen').addEventListener('click',()=>{$('appsDialog').showModal();loadApps
 $('rescan').addEventListener('click',()=>loadApps(true));
 $('key').addEventListener('change',()=>{refresh();loadApps();});
 $('speak').addEventListener('change',()=>{if(!$('speak').checked)stopSpeech()});
-$('ttsVoice').addEventListener('change',()=>{stopSpeech();refresh()});
+// Persist only an explicit, declared voice choice; never infer from installation.
+const VOICE_KEY='localmind.ttsVoice.v1';
+try {
+  const savedVoice=localStorage.getItem(VOICE_KEY);
+  if(Array.from($('ttsVoice').options).some(option=>option.value===savedVoice))$('ttsVoice').value=savedVoice;
+} catch(_) { /* Voice selection still works when storage is disabled. */ }
+$('ttsVoice').addEventListener('change',()=>{
+  stopSpeech();
+  try{localStorage.setItem(VOICE_KEY,$('ttsVoice').value);}catch(_){ /* optional preference */ }
+  refresh();
+});
 $('stopAudio').addEventListener('click',()=>{stopSpeech();state('Озвучка остановлена')});
 $('pauseAudio').addEventListener('click',()=>{const paused=speech.pause();$('pauseAudio').setAttribute('aria-pressed',String(Boolean(paused)));window.localmindIcon?.($('pauseAudio'),paused?'play':'pause');window.localmindScene?.redraw();});
 $('discardDraft').addEventListener('click',()=>{$('draftReview').hidden=true;$('message').value='';state('Готов к разговору')});

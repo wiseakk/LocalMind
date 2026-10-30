@@ -884,7 +884,12 @@ class AppCatalog:
                         spawn = (lambda: _activate_packaged(entry.launch_id)) if entry.launch_type == 'packaged' else (
                             lambda: subprocess.Popen([str(entry.target)], shell=False, close_fds=True,
                                                      cwd=str(entry.target.parent)))
-                        result = launch_coordinator.launch(entry.target, target, spawn)
+                        # Obsidian's single-instance activation can ask an
+                        # existing background instance to create/show a window.
+                        # Only this reviewed image gets one bounded handoff;
+                        # never generalize relaunch to arbitrary background apps.
+                        result = launch_coordinator.launch(entry.target, target, spawn,
+                            activate_background=entry.launch_type == 'win32' and entry.target.name.casefold() == 'obsidian.exe')
             return {**result.to_dict(), 'duration_ms': round((time.perf_counter() - started) * 1000, 2)}
         except (AppError, OSError) as exc:
             # Exception text is controlled here, OS errors/paths are not reflected.

@@ -575,3 +575,62 @@ The original checkout's installed environment was reused read-only; local Python
 Final fresh start.py startup returned HTTP 200 in DEMO mode; real local Ollama smoke
 passed again and the owned test server was stopped. Compound document speech now
 defers initial action audio so summary deltas reach TTS; the DOM regression passed.
+# 2026-10-31 — Silero bilingual implementation milestone (verification pending)
+
+Started at fee423c. Default API/UI/warm-up now use the existing declared Silero
+v5_6_ru / xenia / CPU / four threads / 24 kHz. Explicit voice IDs are preserved;
+Piper readiness and setup no longer depend on the default ID. UI persists an
+explicit voice preference. Speech-only script spans precede name adaptation;
+the Russian model's Cyrillic-only alphabet was inspected in the actual downloaded
+package. Unknown Latin words are spelled rather than silently removed. Display
+text and tool arguments are untouched. Clause queues, bounded worker reuse and
+cancellation remain; cancellation after a reply is explicitly checked.
+
+New launch-to-focus integration snapshots/revalidates the image grant, waits at
+most ten seconds for a verified window, supports PID-independent Electron handoff,
+and keeps foreground equality as the success criterion. Only the granted Obsidian
+win32 image opts into bounded background-instance activation. Obsidian foreground
+bug remains OPEN until actual desktop cold/existing/minimized cases pass.
+
+At this milestone: 559 Python tests and 35 subtests passed, four dependency skips;
+JS syntax checks passed. Playwright runner failed before tests with spawn EPERM.
+Browser access host is unavailable; automatic approval review rejected Zen
+inspection because Computer Use was not approved. Audio comparisons are being
+generated locally; listening, browser playback start, microphone and GPU are
+unverified. No completion or listening-quality claim is made.
+
+## 2026-10-31 - bilingual verification milestone
+
+Final Python verification: 562 passed, 4 optional-dependency skips, 35 subtests;
+JS syntax, 54 DOM behavior checks and all 76 local asset references passed.
+The Playwright runner still cannot spawn its worker (EPERM). No build/typecheck
+script is declared in package.json. Final scoped diff review found no new
+security blocker; launch grants, native identity, ambiguity and observed
+foreground checks remain enforced.
+
+Actual Silero comparisons retained WAVs for all eight adapted phrases, with six
+supervised attempts each. Three legacy English-only phrases failed all attempts;
+no replacement/silent baseline files were fabricated. Literal Latin experiments
+and twelve English Silero excerpts were also generated. Runtime identities,
+model hashes, load/repeated timings and the unrated listening worksheet are in
+BILINGUAL_SILERO.md and evidence/bilingual-silero-20261031.json. Warm adapted
+synthesis medians were 36.3-98.3 ms; first calls including worker/model/warm-up
+were 3.34-3.43 s. These are synthesis measurements, not browser/acoustic latency.
+All eight phrases also returned actual mono PCM16/24 kHz WAVs through the running
+current-checkout API. Real cancellation while loading and after dispatch of a
+warm request stopped the owned worker; successor synthesis and stale-cancel
+isolation passed. No physical network disconnection was performed.
+
+Obsidian native attempt reused an exact fingerprint already allowed in the
+existing LocalMind runtime. From absent state, cold launch created a process but
+window discovery found three candidates and correctly refused ambiguity; repeated
+open also refused. Two candidates were input-indicator windows and one a dialog;
+the interactive inventory did not expose them. This is not successful editor
+foreground verification. The original bug remains OPEN. No forced close or
+arbitrary candidate selection was used. The separate existing server was left
+untouched; only the Builder's isolated test server was stopped.
+
+Completion remains blocked on listening feedback, interactive Obsidian cases and
+browser playback-start verification. Browser host access was unavailable and
+automatic approval review rejected Zen inspection as not approved for Computer
+Use. Microphone and GPU remain unverified. English routing remains disabled.

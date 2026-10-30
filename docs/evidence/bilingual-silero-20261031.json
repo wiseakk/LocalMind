@@ -1,0 +1,643 @@
+{
+  "date": "2026-10-31",
+  "base_commit": "fee423ca14000e3b5b69d41dfc46cbef83e98e08",
+  "models": {
+    "v5_6_ru": {
+      "sha256": "04cc9b1d08ce38bcaa9d02c488d80d3e6806d17f7eaa7c95982f36a3cbf50b2e",
+      "speaker": "xenia",
+      "cold_package_load_ms": 1803.262,
+      "symbols": "_~|!+,-.:;?абвгдежзийклмнопрстуфхцчшщъыьэюяё–… ",
+      "phons": null
+    },
+    "v3_en": {
+      "sha256": "02b71034d9f13bc4001195017bac9db1c6bb6115e03fea52983e8abcff13b665",
+      "speaker": "en_0",
+      "cold_package_load_ms": 318.119,
+      "symbols": "_~| !\"',-.:;?abcdefghijklmnopqrstuvwxyz",
+      "phons": null
+    }
+  },
+  "environment": {
+    "python": "3.11.9",
+    "torch": "2.15.0+cpu",
+    "platform": "Windows-10-10.0.19045-SP0",
+    "device": "cpu",
+    "threads": 4,
+    "sample_rate": 24000
+  },
+  "benchmark": [
+    {
+      "phase": "legacy",
+      "phrase_id": "arthas",
+      "text": "Расскажи про Arthas Menethil из World of Warcraft",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3384.259,
+      "warm_median_ms": 73.208,
+      "audio_duration_s": 1.8375
+    },
+    {
+      "phase": "legacy",
+      "phrase_id": "frozen-throne",
+      "text": "The Frozen Throne",
+      "attempts": 6,
+      "failures": 6,
+      "first_observed_ms": null,
+      "warm_median_ms": null,
+      "audio_duration_s": null
+    },
+    {
+      "phase": "legacy",
+      "phrase_id": "hearthstone",
+      "text": "Hearthstone",
+      "attempts": 6,
+      "failures": 6,
+      "first_observed_ms": null,
+      "warm_median_ms": null,
+      "audio_duration_s": null
+    },
+    {
+      "phase": "legacy",
+      "phrase_id": "heroes",
+      "text": "Heroes of the Storm",
+      "attempts": 6,
+      "failures": 6,
+      "first_observed_ms": null,
+      "warm_median_ms": null,
+      "audio_duration_s": null
+    },
+    {
+      "phase": "legacy",
+      "phrase_id": "obsidian",
+      "text": "Открой Obsidian",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3335.019,
+      "warm_median_ms": 46.254,
+      "audio_duration_s": 1.0375
+    },
+    {
+      "phase": "legacy",
+      "phrase_id": "pdf-downloads",
+      "text": "Найди PDF в Downloads",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3387.287,
+      "warm_median_ms": 62.959,
+      "audio_duration_s": 1.5375
+    },
+    {
+      "phase": "legacy",
+      "phrase_id": "python-cpp",
+      "text": "Я программирую на Python и C++",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3436.472,
+      "warm_median_ms": 89.483,
+      "audio_duration_s": 2.3375
+    },
+    {
+      "phase": "legacy",
+      "phrase_id": "warcraft-iii",
+      "text": "Warcraft III: Reign of Chaos",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3356.564,
+      "warm_median_ms": 43.27,
+      "audio_duration_s": 0.9625
+    },
+    {
+      "phase": "current",
+      "phrase_id": "arthas",
+      "text": "Расскажи про Arthas Menethil из World of Warcraft",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3424.114,
+      "warm_median_ms": 98.315,
+      "audio_duration_s": 2.575
+    },
+    {
+      "phase": "current",
+      "phrase_id": "frozen-throne",
+      "text": "The Frozen Throne",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3409.421,
+      "warm_median_ms": 51.306,
+      "audio_duration_s": 1.175
+    },
+    {
+      "phase": "current",
+      "phrase_id": "hearthstone",
+      "text": "Hearthstone",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3353.846,
+      "warm_median_ms": 36.257,
+      "audio_duration_s": 0.7625
+    },
+    {
+      "phase": "current",
+      "phrase_id": "heroes",
+      "text": "Heroes of the Storm",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3398.63,
+      "warm_median_ms": 49.413,
+      "audio_duration_s": 1.2
+    },
+    {
+      "phase": "current",
+      "phrase_id": "obsidian",
+      "text": "Открой Obsidian",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3341.833,
+      "warm_median_ms": 46.137,
+      "audio_duration_s": 1.0375
+    },
+    {
+      "phase": "current",
+      "phrase_id": "pdf-downloads",
+      "text": "Найди PDF в Downloads",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3364.748,
+      "warm_median_ms": 62.762,
+      "audio_duration_s": 1.5375
+    },
+    {
+      "phase": "current",
+      "phrase_id": "python-cpp",
+      "text": "Я программирую на Python и C++",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3391.013,
+      "warm_median_ms": 90.461,
+      "audio_duration_s": 2.3375
+    },
+    {
+      "phase": "current",
+      "phrase_id": "warcraft-iii",
+      "text": "Warcraft III: Reign of Chaos",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3426.07,
+      "warm_median_ms": 87.326,
+      "audio_duration_s": 2.2875
+    },
+    {
+      "phase": "literal",
+      "phrase_id": "arthas",
+      "text": "Расскажи про Arthas Menethil из World of Warcraft",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3330.959,
+      "warm_median_ms": 43.057,
+      "audio_duration_s": 0.975
+    },
+    {
+      "phase": "literal",
+      "phrase_id": "frozen-throne",
+      "text": "The Frozen Throne",
+      "attempts": 6,
+      "failures": 6,
+      "first_observed_ms": null,
+      "warm_median_ms": null,
+      "audio_duration_s": null
+    },
+    {
+      "phase": "literal",
+      "phrase_id": "hearthstone",
+      "text": "Hearthstone",
+      "attempts": 6,
+      "failures": 6,
+      "first_observed_ms": null,
+      "warm_median_ms": null,
+      "audio_duration_s": null
+    },
+    {
+      "phase": "literal",
+      "phrase_id": "heroes",
+      "text": "Heroes of the Storm",
+      "attempts": 6,
+      "failures": 6,
+      "first_observed_ms": null,
+      "warm_median_ms": null,
+      "audio_duration_s": null
+    },
+    {
+      "phase": "literal",
+      "phrase_id": "obsidian",
+      "text": "Открой Obsidian",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3229.974,
+      "warm_median_ms": 30.652,
+      "audio_duration_s": 0.5875
+    },
+    {
+      "phase": "literal",
+      "phrase_id": "pdf-downloads",
+      "text": "Найди PDF в Downloads",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3146.018,
+      "warm_median_ms": 30.495,
+      "audio_duration_s": 0.5875
+    },
+    {
+      "phase": "literal",
+      "phrase_id": "python-cpp",
+      "text": "Я программирую на Python и C++",
+      "attempts": 6,
+      "failures": 0,
+      "first_observed_ms": 3223.709,
+      "warm_median_ms": 55.207,
+      "audio_duration_s": 1.35
+    },
+    {
+      "phase": "literal",
+      "phrase_id": "warcraft-iii",
+      "text": "Warcraft III: Reign of Chaos",
+      "attempts": 6,
+      "failures": 6,
+      "first_observed_ms": null,
+      "warm_median_ms": null,
+      "audio_duration_s": null
+    }
+  ],
+  "listening": {
+    "intelligibility": null,
+    "names": null,
+    "voice_consistency": null,
+    "pauses": null,
+    "joins": null,
+    "reviewer": null
+  },
+  "english_routing": "disabled pending listening and explicit choice",
+  "browser_playback_start_ms": null,
+  "acoustic_latency_ms": null,
+  "browser_blockers": [
+    "Playwright spawn EPERM before test execution",
+    "Browser access host unavailable",
+    "Automatic approval review rejected Zen inspection: Computer Use not approved"
+  ],
+  "obsidian": {
+    "before": "absent",
+    "permission": "Exact same executable/source fingerprint already allowed in existing LocalMind runtime",
+    "cases": [
+      {
+        "case": "cold-open",
+        "success": false,
+        "status": "ambiguous",
+        "observed_state": null,
+        "elapsed_ms": 969,
+        "after": "visible_window",
+        "window_count": 3,
+        "launch_status": "process_created"
+      },
+      {
+        "case": "existing-open",
+        "success": false,
+        "status": "ambiguous",
+        "observed_state": null,
+        "elapsed_ms": 265,
+        "after": "visible_window",
+        "window_count": 3,
+        "launch_status": null
+      }
+    ]
+  },
+  "real_cancellation": [
+    {
+      "case": "cancel-during-load",
+      "active_before_cancel": true,
+      "dispatched_before_cancel": false,
+      "stopped": true,
+      "cancel_ms": 0.344,
+      "error": "worker"
+    },
+    {
+      "case": "successor-after-load-cancel",
+      "bytes": 85244
+    },
+    {
+      "case": "cancel-after-warm-dispatch",
+      "active_before_cancel": true,
+      "dispatched_before_cancel": true,
+      "stopped": true,
+      "cancel_ms": 2.321,
+      "error": "worker"
+    },
+    {
+      "case": "successor-after-synthesis-cancel",
+      "bytes": 66044
+    },
+    {
+      "case": "stale-cancel-spares-new",
+      "bytes": 105044
+    }
+  ],
+  "english_evaluation": [
+    {
+      "phrase_id": "arthas",
+      "original": "Расскажи про Arthas Menethil из World of Warcraft",
+      "mode": "english-excerpt-1",
+      "model": "v3_en",
+      "input": "Arthas Menethil",
+      "synthesis_ms": [
+        593.614,
+        43.729,
+        43.189,
+        43.162,
+        42.434,
+        43.286
+      ],
+      "audio_duration_s": 0.7875,
+      "original_excerpt": "Arthas Menethil"
+    },
+    {
+      "phrase_id": "arthas",
+      "original": "Расскажи про Arthas Menethil из World of Warcraft",
+      "mode": "english-excerpt-2",
+      "model": "v3_en",
+      "input": "World of Warcraft",
+      "synthesis_ms": [
+        78.4,
+        52.817,
+        54.226,
+        53.847,
+        53.349,
+        57.532
+      ],
+      "audio_duration_s": 1.025,
+      "original_excerpt": "World of Warcraft"
+    },
+    {
+      "phrase_id": "warcraft-iii",
+      "original": "Warcraft III: Reign of Chaos",
+      "mode": "english-excerpt-1",
+      "model": "v3_en",
+      "input": "Warcraft three",
+      "synthesis_ms": [
+        70.013,
+        47.442,
+        47.154,
+        48.484,
+        48.466,
+        48.208
+      ],
+      "audio_duration_s": 0.95,
+      "original_excerpt": "Warcraft III"
+    },
+    {
+      "phrase_id": "warcraft-iii",
+      "original": "Warcraft III: Reign of Chaos",
+      "mode": "english-excerpt-2",
+      "model": "v3_en",
+      "input": "Reign of Chaos",
+      "synthesis_ms": [
+        59.235,
+        39.148,
+        39.068,
+        38.362,
+        38.987,
+        39.435
+      ],
+      "audio_duration_s": 0.725,
+      "original_excerpt": "Reign of Chaos"
+    },
+    {
+      "phrase_id": "frozen-throne",
+      "original": "The Frozen Throne",
+      "mode": "english-excerpt-1",
+      "model": "v3_en",
+      "input": "The Frozen Throne",
+      "synthesis_ms": [
+        73.64,
+        52.619,
+        51.431,
+        51.031,
+        52.688,
+        52.736
+      ],
+      "audio_duration_s": 0.9875,
+      "original_excerpt": "The Frozen Throne"
+    },
+    {
+      "phrase_id": "heroes",
+      "original": "Heroes of the Storm",
+      "mode": "english-excerpt-1",
+      "model": "v3_en",
+      "input": "Heroes of the Storm",
+      "synthesis_ms": [
+        74.414,
+        51.204,
+        51.36,
+        51.372,
+        52.107,
+        52.439
+      ],
+      "audio_duration_s": 1.0,
+      "original_excerpt": "Heroes of the Storm"
+    },
+    {
+      "phrase_id": "hearthstone",
+      "original": "Hearthstone",
+      "mode": "english-excerpt-1",
+      "model": "v3_en",
+      "input": "Hearthstone",
+      "synthesis_ms": [
+        57.193,
+        38.467,
+        37.852,
+        37.039,
+        36.672,
+        37.728
+      ],
+      "audio_duration_s": 0.6625,
+      "original_excerpt": "Hearthstone"
+    },
+    {
+      "phrase_id": "obsidian",
+      "original": "Открой Obsidian",
+      "mode": "english-excerpt-1",
+      "model": "v3_en",
+      "input": "Obsidian",
+      "synthesis_ms": [
+        47.601,
+        30.647,
+        30.07,
+        29.939,
+        30.488,
+        30.556
+      ],
+      "audio_duration_s": 0.475,
+      "original_excerpt": "Obsidian"
+    },
+    {
+      "phrase_id": "pdf-downloads",
+      "original": "Найди PDF в Downloads",
+      "mode": "english-excerpt-1",
+      "model": "v3_en",
+      "input": "P D F",
+      "synthesis_ms": [
+        36.822,
+        26.166,
+        25.94,
+        26.806,
+        26.553,
+        26.339
+      ],
+      "audio_duration_s": 0.325,
+      "original_excerpt": "PDF"
+    },
+    {
+      "phrase_id": "pdf-downloads",
+      "original": "Найди PDF в Downloads",
+      "mode": "english-excerpt-2",
+      "model": "v3_en",
+      "input": "Downloads",
+      "synthesis_ms": [
+        54.104,
+        34.834,
+        34.616,
+        34.145,
+        34.995,
+        34.504
+      ],
+      "audio_duration_s": 0.6,
+      "original_excerpt": "Downloads"
+    },
+    {
+      "phrase_id": "python-cpp",
+      "original": "Я программирую на Python и C++",
+      "mode": "english-excerpt-1",
+      "model": "v3_en",
+      "input": "Python",
+      "synthesis_ms": [
+        42.835,
+        25.953,
+        25.629,
+        25.542,
+        25.394,
+        25.258
+      ],
+      "audio_duration_s": 0.3875,
+      "original_excerpt": "Python"
+    },
+    {
+      "phrase_id": "python-cpp",
+      "original": "Я программирую на Python и C++",
+      "mode": "english-excerpt-2",
+      "model": "v3_en",
+      "input": "C plus plus",
+      "synthesis_ms": [
+        60.697,
+        41.121,
+        40.938,
+        41.157,
+        40.643,
+        41.219
+      ],
+      "audio_duration_s": 0.75,
+      "original_excerpt": "C++"
+    }
+  ],
+  "interpretation": [
+    "WAV generation is not listening evidence.",
+    "Legacy English-only failures have no WAV placeholders.",
+    "First supervised sample includes interpreter/model start and warm-up.",
+    "Adapted phrases contain more spoken names than literal/legacy omissions.",
+    "No physical network disconnection, microphone, GPU or browser playback test.",
+    "Windows attempt returned ambiguity; the reported foreground bug is open."
+  ],
+  "current_http_smoke": [
+    {
+      "phrase_id": "arthas",
+      "status": 200,
+      "wav_response_ms": 104.509,
+      "rate": 24000,
+      "channels": 1,
+      "sample_width": 2,
+      "frames": 61800
+    },
+    {
+      "phrase_id": "warcraft-iii",
+      "status": 200,
+      "wav_response_ms": 90.584,
+      "rate": 24000,
+      "channels": 1,
+      "sample_width": 2,
+      "frames": 54900
+    },
+    {
+      "phrase_id": "frozen-throne",
+      "status": 200,
+      "wav_response_ms": 51.844,
+      "rate": 24000,
+      "channels": 1,
+      "sample_width": 2,
+      "frames": 28200
+    },
+    {
+      "phrase_id": "heroes",
+      "status": 200,
+      "wav_response_ms": 51.398,
+      "rate": 24000,
+      "channels": 1,
+      "sample_width": 2,
+      "frames": 28800
+    },
+    {
+      "phrase_id": "hearthstone",
+      "status": 200,
+      "wav_response_ms": 38.049,
+      "rate": 24000,
+      "channels": 1,
+      "sample_width": 2,
+      "frames": 18300
+    },
+    {
+      "phrase_id": "obsidian",
+      "status": 200,
+      "wav_response_ms": 48.487,
+      "rate": 24000,
+      "channels": 1,
+      "sample_width": 2,
+      "frames": 24900
+    },
+    {
+      "phrase_id": "pdf-downloads",
+      "status": 200,
+      "wav_response_ms": 66.623,
+      "rate": 24000,
+      "channels": 1,
+      "sample_width": 2,
+      "frames": 36900
+    },
+    {
+      "phrase_id": "python-cpp",
+      "status": 200,
+      "wav_response_ms": 93.524,
+      "rate": 24000,
+      "channels": 1,
+      "sample_width": 2,
+      "frames": 56100
+    }
+  ],
+  "verification": {
+    "python": {
+      "passed": 562,
+      "skipped": 4,
+      "subtests": 35
+    },
+    "javascript_syntax": "passed",
+    "dom_checks": 54,
+    "local_assets": 76,
+    "playwright": "blocked before execution: spawn EPERM",
+    "build_and_typecheck": "No scripts declared",
+    "security_diff_review": "No new security blocker found; existing grants/native identity and foreground equality preserved"
+  }
+}

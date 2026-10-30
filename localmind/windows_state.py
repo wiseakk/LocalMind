@@ -15,6 +15,7 @@ import threading
 import time
 
 from .results import ActionResult
+from .generation import check_cancelled
 
 
 @dataclass(frozen=True)
@@ -244,18 +245,19 @@ class LaunchCoordinator:
         self._locks = tuple(threading.RLock() for _ in range(64))
         self._pending = tuple({} for _ in self._locks)
 
-    def launch(self, target: Path, display_name: str, spawn) -> ActionResult:
+    def launch(self, target: Path, display_name: str, spawn, *, activate_background=False) -> ActionResult:
         key = os.path.normcase(str(target.resolve(strict=True)))
         stripe = hash(key) % len(self._locks)
         with self._locks[stripe]:
+            check_cancelled()
             state = self.inspector(target)
             pending = self._pending[stripe]
-            if state.state in ('visible_window', 'background'):
+            if state.state == 'visible_window' or (state.state == 'background' and not activate_background):
                 pending.pop(key, None)
                 text = (f'{display_name}: окно уже открыто.' if state.state == 'visible_window'
                         else f'{display_name} уже работает в фоне; видимое окно не обнаружено.')
                 return ActionResult(True, 'open_app', display_name, 'already_running', state.state, status_text=text)
-            if state.state != 'absent':
+            if state.state != 'absent' and not (state.state == 'background' and activate_background):
                 return ActionResult(False, 'open_app', display_name, 'inspection_unavailable',
                                     error='Не удалось проверить состояние приложения; повторный запуск отменён.',
                                     status_text='Не удалось проверить состояние приложения; проверь его вручную.')
@@ -281,6 +283,7 @@ class LaunchCoordinator:
                 return ActionResult(False, 'open_app', display_name, 'inspection_unavailable',
                                     error='Слишком много незавершённых запусков; проверь приложения вручную.',
                                     status_text='Слишком много незавершённых запусков; проверь приложения вручную.')
+            check_cancelled()
             process = spawn()
             pending[key] = (process, now)
             return ActionResult(True, 'open_app', display_name, 'process_created',
