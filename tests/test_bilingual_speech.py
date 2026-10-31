@@ -13,7 +13,7 @@ from localmind.speech_text import SILERO_NAMES, clean_speech, language_spans, no
 
 
 PHRASES = [
-    ('Расскажи про Arthas Menethil из World of Warcraft', 'Артас Менетил из Ворлд оф Варкрафт'),
+    ('Расскажи про Arthas Menethil из World of Warcraft', 'Расскажи про Артас Менетил из Ворлд оф Варкрафт'),
     ('Warcraft III: Reign of Chaos', 'Варкрафт три: Рэйн оф Кэйос'),
     ('The Frozen Throne', 'Зэ Фроузен Троун'),
     ('Heroes of the Storm', 'Хироуз оф зэ Сторм'),
@@ -31,7 +31,7 @@ PHRASES = [
 
 @pytest.mark.parametrize('original,expected', PHRASES)
 def test_supplied_names_use_one_russian_speaker(original, expected):
-    assert expected in prepare_speech(original, voice.DEFAULT_VOICE)
+    assert expected == prepare_speech(original, voice.DEFAULT_VOICE)
     assert not re.search('[A-Za-z]', prepare_speech(original, voice.DEFAULT_VOICE))
     assert ''.join(span.text for span in language_spans(original)) == original
     assert clean_speech(original) == original
@@ -85,11 +85,107 @@ def test_context_case_whitespace_possessives_and_versions(text, expected):
 
 
 @pytest.mark.parametrize('text', ['API II', 'I', 'Warcraft I enjoy', 'Warcraft IV.2',
-                                'Warcraft IIIx', 'Warcraft IV2', 'Diablo IV+', 'Civil IV'])
+                                'Warcraft IIIx', 'Warcraft IV2', 'Diablo IV+'])
 def test_numerals_require_conservative_title_context(text):
     # Arabic version digits may still be spoken; Roman IV must not become four.
     forbidden = r'\b(три|четыре)\b' if '2' in text else r'\b(два|три|четыре)\b'
     assert not re.search(forbidden, prepare_speech(text, voice.DEFAULT_VOICE))
+
+
+NORMALIZATION_CASES = [
+    ('StarCraft II', 'стар крафт два'),
+    ('StarCraft III', 'стар крафт три'),
+    ('Diablo IV', 'Диабло четыре'),
+    ('Civil IV', 'сивил четыре'),
+    ('Zephyr XLII', 'зефир сорок два'),  # Unseen title; no franchise vocabulary.
+    ('Zephyr IIV', 'зефир иив'),  # Noncanonical numeral.
+    ('Zephyr IIIx', 'зефир ииикс'),
+    ('Zephyr IV2', 'зефир ивдва'),
+    ('Zephyr IV.2', 'зефир ив.два'),
+    ('Zephyr IV+', 'зефир ив+'),
+    ('Zephyr IV+2', 'зефир ив плюс два'),
+    ('API II', 'эй пи ай ии'),
+    ('CLI IV', 'си эл ай ив'),
+    ('Zephyr CLI', 'зефир си эл ай'),
+    ('Warcraft V', 'Варкрафт пять'),
+    ('I', 'ай'),
+    ('Command & Conquer', 'комманд энд конквер'),
+    ('Command&Conquer', 'комманд энд конквер'),
+    ('C&C', 'си энд си'),
+    ('R&D', 'ар энд ди'),
+    ('C & C', 'си энд си'),
+    ('R & D & C', 'ар энд ди энд си'),
+    ('труд & отдых', 'труд и отдых'),
+    ('труд&отдых', 'труд и отдых'),
+    ('Python & Obsidian', 'Пайтон энд Обсидиан'),
+    ('В 1977 году', 'В тысяча девятьсот семьдесят седьмом году'),
+    ('В 2014 году', 'В две тысячи четырнадцатом году'),
+    ('Выпущена в 2002 году', 'Выпущена в две тысячи втором году'),
+    ('1999 году', 'тысяча девятьсот девяносто девятом году'),
+    ('2026 году', 'две тысячи двадцать шестом году'),
+    ('2000 году', 'двухтысячном году'),
+    ('1900 году', 'тысяча девятисотом году'),
+    ('2003 году', 'две тысячи третьем году'),
+    ('2020 году', 'две тысячи двадцатом году'),
+    ('2100 году', 'две тысячи сотом году'),
+    ('2026 года', 'две тысячи двадцать шестого года'),
+    ('за 2026 год', 'за две тысячи двадцать шестой год'),
+    ('за 2000 год', 'за двухтысячный год'),
+    ('2014', 'две тысячи четырнадцать'),
+    ('42', 'сорок два'),
+    ('0', 'ноль'),
+    ('-42', 'минус сорок два'),
+    ('−11', 'минус одиннадцать'),
+    ('10 11 19 20', 'десять одиннадцать девятнадцать двадцать'),
+    ('100 200 900', 'сто двести девятьсот'),
+    ('1000 1001 2000 21000', 'тысяча тысяча один две тысячи двадцать одна тысяча'),
+    ('1000000', 'один миллион'),
+    ('42-й', 'сорок второй'),
+    ('3-ом', 'третьем'),
+    ('100-й 200-й 1000-й', 'сотый двухсотый тысячный'),
+    ('21-я 3-я', 'двадцать первая третья'),
+    ('192.168.1.1', 'один девять два запятая один шесть восемь запятая один запятая один'),
+    ('v2.1', 'ви два запятая один'),
+    ('v2026.1', 'ви два ноль два шесть запятая один'),
+    ('IPv4', 'ай пи ви четыре'),
+    ('IPv4 v2.1', 'ай пи ви четыре ви два запятая один'),
+    ('версия 2026.1', 'версия два ноль два шесть запятая один'),
+    ('v2026.1 году', 'ви два ноль два шесть запятая один году'),
+    ('31.10.2026', 'тридцать один точка десять точка две тысячи двадцать шесть'),
+    ('2026-10-31', 'две тысячи двадцать шесть дефис десять дефис тридцать один'),
+    ('31.10.2026 году', 'тридцать один точка десять точка две тысячи двадцать шесть году'),
+    ('2026-10-31 году', 'две тысячи двадцать шесть дефис десять дефис тридцать один году'),
+    ('31/10/2026 году', 'тридцать один дробь десять дробь две тысячи двадцать шесть году'),
+    ('3.14', 'три целых четырнадцать сотых'),
+    ('3,14', 'три целых четырнадцать сотых'),
+    ('-0.02', 'минус ноль целых две сотых'),
+    ('1.1', 'одна целая одна десятая'),
+    ('2.001', 'две целых одна тысячная'),
+    ('3.11', 'три целых одиннадцать сотых'),
+    ('2014.5 году', 'две тысячи четырнадцать целых пять десятых году'),
+    ('007', 'ноль ноль семь'),
+]
+
+
+@pytest.mark.parametrize('text,expected', NORMALIZATION_CASES)
+def test_exact_normalization_contract(text, expected):
+    stages = speech_preparation(text, 'silero-v5_6-ru')
+    assert stages.original_text == text
+    assert stages.cleaned_text == text
+    assert stages.pronunciation_text == stages.tts_input == expected
+    assert prepare_speech(text, 'silero-v5_6-ru') == expected
+
+
+def test_numbers_are_bounded_before_integer_conversion_and_expansion(monkeypatch):
+    text = '9' * 5000
+    assert prepare_speech(text, voice.DEFAULT_VOICE) == ' '.join(['девять'] * 5000)
+    monkeypatch.setattr(voice, '_tts_ready', lambda _: True)
+    worker = Mock()
+    monkeypatch.setattr(voice._speech_worker, 'synthesize', worker)
+    with pytest.raises(voice.VoiceError) as error:
+        voice.synthesize_speech('999999999999 ' * 40)
+    assert error.value.status_code == 422
+    worker.assert_not_called()
 
 
 def test_preparation_stages_are_distinct_and_display_copy_unchanged():

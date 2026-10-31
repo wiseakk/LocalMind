@@ -28,7 +28,7 @@ def test_speech_normalization_is_readable_and_not_an_evaluator():
         '[Документация](https://example.com). https://example.com/private?q=secret '
         '\\(x^2 = 25\\), 3.14 и 12%. ```python\neval("danger")\n```')
     for expected in ('Пайтон', 'си шарп', 'си плюс плюс', 'эр эс эй', 'Обсидиан',
-                     'Стим', 'Ворлд оф Варкрафт', 'в квадрате', 'три запятая один четыре', 'процентов'):
+                     'Стим', 'Ворлд оф Варкрафт', 'в квадрате', 'три целых четырнадцать сотых', 'процентов'):
         assert expected in text
     assert all(value not in text for value in ('https', 'private', 'secret', 'eval', '**', '\\('))
     assert normalize_speech('unknownEnglish словo') == 'unknownEnglish словo'

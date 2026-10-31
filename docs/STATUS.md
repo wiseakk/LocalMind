@@ -682,3 +682,47 @@ speech quality or this task fully signed off until all required WAVs and the
 same streamed sentences receive listening review. Other historical open issues
 remain unchanged. The owned isolated test server was stopped after verification;
 the pre-existing LocalMind server was not changed or stopped.
+
+## 2026-10-31 — three pronunciation bugs: implementation milestone
+
+General Roman title context replaces the franchise whitelist; explicit
+initialisms, English I, canonical parsing and version boundaries have precedence.
+Numbers are retained until classification, then become bounded Russian
+cardinals/ordinals/decimal fractions with explicit year inflection. Technical
+versions, IPs and dates are consumed first. Ampersands use original scripts:
+English titles/letter initialisms get энд, Russian contexts и. Shared filename
+year rendering remains stable. Streaming protects generic contexts and partial
+tokens. No voice/engine/worker settings or displayed response changes.
+
+## 2026-10-31 — three pronunciation bugs: verification milestone, gate open
+
+Final automated results: 172 focused Python tests; 678 full-suite tests and 35
+subtests; 38 main DOM, ten attachment-context and seven history checks; JS syntax,
+76 asset references and git diff --check passed. Exact whole-result regressions
+cover the requested matrix, unseen titles, initialisms, invalid/version Roman
+tokens, negative/zero/teen/tens/hundreds/thousands, ordinal exceptions, technical
+counterexamples and oversized numeric expansion. No separate build/typecheck/
+Python lint command is configured. Python 3.14.5 app/tests reused installed
+packages read-only; pytest cache provider disabled because cache creation was
+denied. No dependency or model downloads.
+
+Actual CPU synthesis: 76 current xenia WAVs with zero errors (Python 3.12.10,
+PyTorch 2.6.0+cpu, four threads, 24 kHz). An isolated current server on 8879
+also produced 33 HTTP WAVs, including 23 standalone cases and ten clauses from
+119 real qwen3.5:9b streamed deltas fed into the production JavaScript chunker.
+Every recorded HTTP row matched original_text, cleaned_text, pronunciation_text
+and exact tts_input in correlated opt-in stderr diagnostics. Original final
+display text equals the streamed text; no pronunciation rewrite leaked into it.
+Actual API retired-generation rejection, successor synthesis and stale-cancel
+isolation passed. The chunker ran queue-only, without browser playback. Private
+synthetic WAVs/worksheet are under .test-artifacts/numeric-ampersand; aggregate
+evidence is docs/evidence/silero-normalization-20261031.json. The owned test
+server was stopped; existing unrelated servers were untouched.
+
+NOT finished: actual listening and live UI pause/resume/stop/mute/successor
+playback remain UNVERIFIED. Browser access host is unavailable; Playwright
+fails before tests with spawn EPERM. Automatic approval review rejected Zen
+inspection because Computer Use was not approved to use Zen. No acoustic rating
+is inferred from successful WAVs/HTTP or DOM doubles. Windows microphone and GPU
+remain untested. Current commands, offline listening worksheet, troubleshooting
+and the existing defense-question document are linked in BILINGUAL_SILERO.md.

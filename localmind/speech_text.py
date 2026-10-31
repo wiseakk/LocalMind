@@ -1,8 +1,8 @@
 """Conservative Russian speech rendering, independent of displayed Markdown.
 
 This is pronunciation assistance, not a mathematical evaluator or a translator.
-Cleanup keeps English spelling. The Russian Silero adapter pronounces reviewed
-names and spells unknown Latin words because this model drops Latin input.
+Cleanup keeps English spelling and numeric separators. The Russian Silero
+adapter applies deterministic pronunciation rules because it drops Latin input.
 """
 from dataclasses import dataclass
 import re
@@ -42,11 +42,43 @@ INITIALISMS = {
     'LLM': 'эл эл эм', 'TTS': 'ти ти эс', 'STT': 'эс ти ти',
     'SDK': 'эс ди кей', 'CLI': 'си эл ай', 'URL': 'ю ар эл',
 }
-TITLE_NUMERALS = {'II': 'два', 'III': 'три', 'IV': 'четыре', 'V': 'пять',
-                  'VI': 'шесть', 'VII': 'семь', 'VIII': 'восемь', 'IX': 'девять', 'X': 'десять'}
-# Only known title families opt into Roman numerals; standalone I is a pronoun.
+# A Latin word followed by a separate canonical numeral is a title-like cue,
+# independent of franchise and case. Explicit initialisms and English I opt out.
 _TITLE_NUMBER = re.compile(
-    r"(?<!\w)(Warcraft|Diablo)\s+(VIII|VII|III|VI|IV|II|IX|V|X)(?!\w|[+#]|\.[^\s.,!?;:)])", re.I)
+    r"(?<!\w)([A-Za-z]{2,})\s+([IVXLCDM]{2,15}|[VXLCDM])(?!\w|[+#]|\.[^\s.,!?;:)])", re.I)
+_CANONICAL_ROMAN = re.compile(r'M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})')
+
+
+def _title_numbers(text: str) -> str:
+    def render(match):
+        title, roman = match[1], match[2].upper()
+        if (title.upper() in INITIALISMS or (len(roman) > 1 and roman in INITIALISMS)
+                or _CANONICAL_ROMAN.fullmatch(title.upper())
+                or not _CANONICAL_ROMAN.fullmatch(roman)):
+            return match[0]
+        values = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000}
+        number = sum(-values[c] if i + 1 < len(roman) and values[c] < values[roman[i + 1]]
+                     else values[c] for i, c in enumerate(roman))
+        return title + ' ' + _cardinal(number)
+    return _TITLE_NUMBER.sub(render, text)
+
+
+def _ampersands(text: str) -> str:
+    """Use adjacent original scripts, before any Latin pronunciation replacement."""
+    def render(match):
+        token = match[0]
+        if token == '&':
+            left = re.search(r'([A-Za-zА-Яа-яЁё]+)\s*$', text[:match.start()])
+            right = re.match(r'\s*([A-Za-zА-Яа-яЁё]+)', text[match.end():])
+            english = left and right and left[1].isascii() and right[1].isascii()
+            return ' энд ' if english else ' и '
+        if len(token) == 1 and token.isascii() and (
+                re.search(r'&\s*$', text[:match.start()])
+                or re.match(r'\s*&', text[match.end():])):
+            return _LETTER_NAMES[token.upper()]
+        return token
+    return re.sub(r'[A-Za-zА-Яа-яЁё]+|&', render, text)
+
 
 # Compact English sound approximation, independent of optional lexicons/services.
 # Ordered clusters and positional rules beat letter spelling for unseen names;
@@ -146,20 +178,16 @@ def speech_preparation(text: str, voice: str) -> SpeechPreparation:
     """Distinct, inspectable stages; original_text is the incoming speech chunk."""
     cleaned = clean_speech(text)
     if voice != 'silero-v5_6-ru':
-        spoken = _pronounce_terms(cleaned, TERMS)
+        spoken = _pronounce_terms(_numbers(cleaned), TERMS)
     else:
-        # Numerals precede ordinary Latin processing and only follow known titles.
-        spoken = _TITLE_NUMBER.sub(lambda m: m[1] + ' ' + TITLE_NUMERALS[m[2].upper()], cleaned)
-        # Cleanup expands adjacent Arabic digits without adding whitespace.
-        # Keep technical version prefixes separate from those spoken digits.
-        spoken = re.sub(r'(?<!\w)(IPv|v)(?=(?:' + '|'.join(_ONES) + '))',
-                        lambda m: INITIALISMS[m[1].upper()] + ' ', spoken, flags=re.I)
+        spoken = _numbers(_ampersands(_title_numbers(cleaned)))
         # Whole phrases precede individual words, across any normalized whitespace.
         spoken = _pronounce_terms(spoken, SILERO_NAMES)
         spoken = re.sub(r"[A-Za-z]+(?:['’][A-Za-z]+)*",
                         lambda m: INITIALISMS.get(m[0].upper())
                         or transliterate_english(m[0]), spoken)
     # No hidden worker-side rewriter: this is the exact text sent to synthesis.
+    spoken = re.sub(r'\s+', ' ', spoken).strip()
     return SpeechPreparation(text, cleaned, spoken, spoken)
 
 
@@ -200,22 +228,152 @@ _TENS = ('', '', 'двадцать', 'тридцать', 'сорок', 'пять
          'семьдесят', 'восемьдесят', 'девяносто')
 _ORDINAL_TENS = ('', '', 'двадцатый', 'тридцатый', 'сороковой', 'пятидесятый',
                  'шестидесятый', 'семидесятый', 'восьмидесятый', 'девяностый')
+_TEENS = ('десять', 'одиннадцать', 'двенадцать', 'тринадцать', 'четырнадцать',
+          'пятнадцать', 'шестнадцать', 'семнадцать', 'восемнадцать', 'девятнадцать')
+_HUNDREDS = ('', 'сто', 'двести', 'триста', 'четыреста', 'пятьсот', 'шестьсот',
+             'семьсот', 'восемьсот', 'девятьсот')
+_ORDINAL_HUNDREDS = ('', 'сотый', 'двухсотый', 'трёхсотый', 'четырёхсотый',
+                     'пятисотый', 'шестисотый', 'семисотый', 'восьмисотый', 'девятисотый')
+_THOUSAND_STEMS = ('', '', 'двух', 'трёх', 'четырёх', 'пяти', 'шести', 'семи', 'восьми', 'девяти')
+
+
+def _plural(number: int, forms: tuple[str, str, str]) -> str:
+    if 11 <= number % 100 <= 14:
+        return forms[2]
+    if number % 10 == 1:
+        return forms[0]
+    return forms[1] if number % 10 in (2, 3, 4) else forms[2]
+
+
+def _cardinal(number: int, feminine: bool = False) -> str:
+    """Bounded callers supply at most twelve digits (through billions)."""
+    if number == 0:
+        return _ONES[0]
+    if number < 0:
+        return 'минус ' + _cardinal(-number, feminine)
+    words = []
+    for scale, forms in ((10**9, ('миллиард', 'миллиарда', 'миллиардов')),
+                         (10**6, ('миллион', 'миллиона', 'миллионов')),
+                         (1000, ('тысяча', 'тысячи', 'тысяч'))):
+        count, number = divmod(number, scale)
+        if count:
+            if scale != 1000 or count != 1:
+                words.append(_cardinal(count, scale == 1000))
+            words.append(_plural(count, forms))
+    hundreds, rest = divmod(number, 100)
+    if hundreds:
+        words.append(_HUNDREDS[hundreds])
+    if 10 <= rest < 20:
+        words.append(_TEENS[rest - 10])
+    else:
+        tens, ones = divmod(rest, 10)
+        if tens:
+            words.append(_TENS[tens])
+        if ones:
+            words.append({1: 'одна', 2: 'две'}.get(ones, _ONES[ones]) if feminine else _ONES[ones])
+    return ' '.join(words)
+
+
+def _ordinal(number: int, ending: str = 'й') -> str:
+    """Explicit masculine ordinals/years, 0–9999; only the last component inflects."""
+    if number >= 1000 and number % 1000 == 0:
+        word = _THOUSAND_STEMS[number // 1000] + 'тысячный'
+        prefix = ''
+    else:
+        remainder = number % 100
+        if remainder == 0 and number:
+            last = number % 1000
+            word = _ORDINAL_HUNDREDS[last // 100]
+        elif remainder < 20:
+            last = remainder
+            word = _ORDINALS[last] if last else 'нулевой'
+        elif remainder % 10 == 0:
+            last = remainder
+            word = _ORDINAL_TENS[last // 10]
+        else:
+            last = remainder % 10
+            word = _ORDINALS[last]
+        prefix = _cardinal(number - last) + ' ' if number != last else ''
+    if ending != 'й':
+        if word == 'третий':
+            word = 'треть' + {'ом': 'ем', 'ым': 'им', 'я': 'я', 'е': 'е', 'ю': 'ю',
+                              'ого': 'его', 'ому': 'ему'}[ending]
+        else:
+            word = word[:-2] + {'я': 'ая', 'е': 'ое', 'ю': 'ую'}.get(ending, ending)
+    return prefix + word
+
+
+def _digits(token: str) -> str:
+    return ' '.join(_ONES[int(c)] for c in token)
+
+
+def _integer(token: str, feminine: bool = False) -> str:
+    # Bound before int(), including leading zeros and attacker-sized tokens.
+    if len(token) > 12 or (len(token) > 1 and token.startswith('0')):
+        return _digits(token)
+    return _cardinal(int(token), feminine)
+
+
+# Order matters: technical identifiers/dates, explicit year/ordinal context,
+# decimals, then ordinary integers. A consumed technical token cannot be a year.
+_NUMBER = re.compile(
+    r'(?P<technical>(?<!\w)(?:IPv\s*[0-9]+|v\s*[0-9]+(?:[.,][0-9]+)*))'
+    r'|(?P<date>(?<!\w)[0-9]{4}-[0-9]{2}-[0-9]{2}(?!\w)|(?<!\w)[0-9]{1,2}[./][0-9]{1,2}[./][0-9]{4}(?!\w|\.[0-9]))'
+    r'|(?P<dotted>[0-9]+(?:\.[0-9]+){2,})'
+    r'|(?P<version>(?<!\w)(?:version|верси[яи])(?:\s+ПО)?\s+[0-9]+(?:[.,][0-9]+)*)'
+    r'|(?P<year>(?<![\w.+,−-])[1-9][0-9]{0,3}\s+(?:году|годом|года|год)\b)'
+    r'|(?P<ordinal>(?<![\w.,−-])[0-9]{1,4}-(?:ого|ому|ым|ом|й|я|е|ю)\b)'
+    r'|(?P<decimal>(?<!\w)[-−]?[0-9]+[.,][0-9]+)'
+    r'|(?P<integer>[-−]?[0-9]+)', re.I)
+
+
+def _numbers(text: str) -> str:
+    # Symbols are rendered after title recognition so IV+2 cannot become IV.
+    text = re.sub(r'\^\s*2\b', ' в квадрате ', text)
+    text = re.sub(r'\^\s*3\b', ' в кубе ', text)
+    text = re.sub(r'\^', ' в степени ', text)
+    text = re.sub(r'(?<=\w)\s*=\s*(?=\w)', ' равно ', text)
+    text = re.sub(r'(?<=\w)\s*\+\s*(?=\w)', ' плюс ', text)
+    text = re.sub(r'(?<=\w)\s*[×*]\s*(?=\w)', ' умножить на ', text)
+    text = re.sub(r'(?<=\d)%', ' процентов ', text)
+
+    def render(match):
+        token, kind = match[0], match.lastgroup
+        if kind in ('technical', 'version', 'dotted'):
+            # Preserve established version/IP digit speech, including IPv4 v2.1.
+            token = re.sub(r'(?i)^(IPv|v)(?=[0-9])', r'\1 ', token)
+            return re.sub(r'[0-9]+', lambda m: _digits(m[0]), token.replace('.', ' запятая ').replace(',', ' запятая '))
+        if kind == 'date':
+            separator = ' дефис ' if '-' in token else ' дробь ' if '/' in token else ' точка '
+            return separator.join(_integer(part) for part in re.split(r'[-./]', token))
+        if kind == 'year':
+            value, noun = token.split()
+            ending = {'году': 'ом', 'годом': 'ым', 'года': 'ого', 'год': 'й'}[noun.lower()]
+            return _ordinal(int(value), ending) + ' ' + noun
+        if kind == 'ordinal':
+            value, ending = token.split('-')
+            return _ordinal(int(value), ending.lower())
+        if kind == 'decimal':
+            negative = token.startswith(('-', '−'))
+            whole, fraction = re.split(r'[.,]', token.lstrip('-−'))
+            if len(whole) > 12 or len(fraction) > 6:
+                return ('минус ' if negative else '') + _integer(whole) + ' запятая ' + _digits(fraction)
+            count = int(fraction)
+            units = ('десятая', 'сотая', 'тысячная', 'десятитысячная', 'стотысячная', 'миллионная')
+            singular = count % 10 == 1 and count % 100 != 11
+            unit = units[len(fraction) - 1]
+            return (('минус ' if negative else '') + _integer(whole, True) + ' '
+                    + _plural(int(whole), ('целая', 'целых', 'целых')) + ' '
+                    + _cardinal(count, True) + ' ' + (unit if singular else unit[:-2] + 'ых'))
+        return ('минус ' if token.startswith(('-', '−')) else '') + _integer(token.lstrip('-−'))
+    text = _NUMBER.sub(render, text)
+    text = re.sub(r'(?<=\w)\s*/\s*(?=\w)', ' разделить на ', text)
+    return re.sub(r'\s+', ' ', text).strip()
 
 
 def _year(number: int) -> str:
     """Accusative masculine year, for the explicit phrase «за … год»."""
-    if number == 2000:
-        return 'двухтысячный'
-    if number == 1900:
-        return 'тысяча девятисотый'
-    century, remainder = divmod(number, 100)
-    prefix = 'тысяча девятьсот' if century == 19 else 'две тысячи'
-    if remainder < 20:
-        ordinal = _ORDINALS[remainder]
-    else:
-        tens, ones = divmod(remainder, 10)
-        ordinal = (_TENS[tens] + ' ' + _ORDINALS[ones]) if ones else _ORDINAL_TENS[tens]
-    return prefix + ' ' + ordinal
+    return _ordinal(number)
 
 
 def _filename_parts(filename):
@@ -301,18 +459,7 @@ def clean_speech(text: str) -> str:
     text = re.sub(r'\\[a-zA-Z]+', ' ', text)
     # File names often put technical words next to underscores.
     text = text.replace('_', ' ')
-    text = re.sub(r'(?<=\d)[.,](?=\d)', ' запятая ', text)
-    text = re.sub(r'\^\s*2\b', ' в квадрате ', text)
-    text = re.sub(r'\^\s*3\b', ' в кубе ', text)
-    text = re.sub(r'\^', ' в степени ', text)
-    text = re.sub(r'(?<=\w)\s*=\s*(?=\w)', ' равно ', text)
-    text = re.sub(r'(?<=\w)\s*\+\s*(?=\w)', ' плюс ', text)
     text = re.sub(r'(?<=\w)\s*[×*]\s*(?=\w)', ' умножить на ', text)
-    text = re.sub(r'(?<=\w)\s*/\s*(?=\w)', ' разделить на ', text)
-    text = re.sub(r'(?<=\d)%', ' процентов ', text)
-    # Read digits individually: avoids wrong case, oversized integer conversion,
-    # dates interpreted as arithmetic, and ambiguous decimal magnitude.
-    text = re.sub(r'\d+', lambda m: ' '.join(_ONES[int(d)] for d in m[0] if d in '0123456789'), text, flags=re.ASCII)
     text = re.sub(r'[`*_{}|~]', ' ', text)
     text = ''.join(c for c in text if c in '\n\t' or c.isprintable())
     return re.sub(r'\s+', ' ', text).strip()
@@ -320,4 +467,4 @@ def clean_speech(text: str) -> str:
 
 def normalize_speech(text: str) -> str:
     """Compatibility renderer for Russian filename and legacy speech callers."""
-    return _pronounce_terms(clean_speech(text), TERMS)
+    return _pronounce_terms(_numbers(clean_speech(text)), TERMS)

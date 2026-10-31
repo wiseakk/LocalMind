@@ -435,3 +435,36 @@ Automated tests and generated WAVs are implementation evidence, not perceptual
 approval. Keep audible correctness and real streamed playback open after
 Playwright EPERM, unavailable browser host and rejected Zen access. Never fill
 reviewer/quality fields from synthesis success or claim microphone/GPU testing.
+
+## 2026-10-31 — general numeral, numeric-context and ampersand repair
+
+Supersede the Warcraft/Diablo numeral whitelist with syntactic title context:
+an ordinary Latin word of at least two letters followed by a separate canonical
+Roman numeral (through 3999), case-insensitively. Exclude known initialisms in
+either position, canonical-Roman title cues, standalone I, embedded characters
+and version-like suffixes. The existing single-letter V rule yields to a title
+cue. Ambiguous Civil IV is a title by convention; unseen Zephyr XLII exercises
+the same rule. This is not semantic title detection or another franchise list.
+
+Preserve numeric spelling in cleaned_text. Consume technical/version/date tokens
+before contextual years, explicit ordinal suffixes, decimals and ordinary
+cardinals. Share the ordinal renderer with filename «за … год» speech. Bound
+integer conversion before int(): twelve cardinal digits, four ordinal/year
+digits, six fractional digits. Larger/leading-zero tokens use digit speech;
+existing request/worker expansion limits remain. Preserve IPv4 v2.1 exactly.
+Ampersand decisions use original adjacent scripts before name replacement:
+Latin pairs get энд, other contexts и; single Latin letters beside & are spoken
+as letters. No engine, model, inference settings or network dependency changes.
+
+Protect syntactic context and pending tokens in streaming rather than maintaining
+parallel franchise tables. Python alone determines pronunciation. Preserve exact
+display/history/file/action data, worker reuse, queues and cancellation.
+
+Evidence is separated: 76 direct CPU xenia WAVs, 33 real HTTP synthesis requests,
+119 local Ollama deltas passed through the real chunker into ten clauses, and
+exact four-stage diagnostic correlation. Display text equality and API retired/
+successor/stale-cancel behavior passed. Queue-only chunking does not establish UI
+playback. Current listening fields remain null. Browser host unavailable,
+Playwright spawn EPERM and rejected Zen Computer Use inspection prevent the
+required UI/listening gate. Keep the repair unapproved for audible quality.
+See BILINGUAL_SILERO.md and evidence/silero-normalization-20261031.json.

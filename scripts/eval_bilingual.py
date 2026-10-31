@@ -26,6 +26,15 @@ REVIEW_ENTITIES = (
     ('blizzard-entertainment', 'Blizzard Entertainment'), ('hearthstone', 'Hearthstone'),
     ('heroes-of-the-storm', 'Heroes of the Storm'),
     ('ai', 'AI'), ('api', 'API'), ('pdf', 'PDF'), ('rsa', 'RSA'), ('cpp', 'C++'),
+    ('starcraft-ii', 'StarCraft II'), ('starcraft-iii', 'StarCraft III'),
+    ('unseen-title', 'Zephyr XLII'), ('command-conquer', 'Command & Conquer'),
+    ('cc', 'C&C'), ('rd', 'R&D'), ('ru-ampersand', 'труд & отдых'),
+    ('year-1977', 'В 1977 году'), ('year-2014', 'В 2014 году'),
+    ('year-2002', 'Выпущена в 2002 году'), ('year-1999', '1999 году'),
+    ('year-2026', '2026 году'), ('year-2000', '2000 году'),
+    ('cardinal', '42'), ('decimal-dot', '3.14'), ('decimal-comma', '3,14'),
+    ('ip', '192.168.1.1'), ('version', 'v2.1'), ('yearlike-version', 'v2026.1'),
+    ('ipv4-version', 'IPv4 v2.1'), ('date-dmy', '31.10.2026'), ('date-iso', '2026-10-31'),
 )
 PHRASES = tuple((key + '-standalone', text) for key, text in REVIEW_ENTITIES) + tuple(
     (key + '-sentence', f'Сегодня мы обсуждаем {text}. Расскажи об этом подробнее.')

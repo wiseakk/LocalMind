@@ -1,6 +1,105 @@
 # Silero bilingual repair — 31 October 2026
 
-## Pronunciation regression repair (current checkout, 31 October)
+## Roman numerals, numbers/years and ampersands: current repair
+
+This section supersedes the franchise-specific numeral and digit-by-digit rules
+described below. Implementation and synthesis checks pass; **audible and browser
+playback sign-off remains open**. Older WAVs do not validate this repair.
+
+`cleaned_text` now retains numeric spelling/separators and Latin spelling after
+display cleanup. Context is resolved before ordinary word pronunciation in
+`pronunciation_text`; `tts_input` is the exact worker input. `original_text`, the
+displayed answer, history, filenames and action data are preserved.
+
+- Roman recognition uses a separate canonical Roman token after an ordinary
+  Latin word of at least two letters, independent of title vocabulary and case.
+  `StarCraft II/III`, `Diablo IV`, and unseen `Zephyr XLII` become cardinal
+  numerals. A title cue cannot itself be a known initialism or canonical Roman
+  token; explicit multi-letter initialisms such as CLI also take precedence in
+  the numeral position. Single I always remains the English pronoun; V following
+  a title cue is a numeral, otherwise its existing letter-name rule applies.
+  Embedded/version suffixes (`IIIx`, `IV2`, `IV.2`, `IV+`) and noncanonical IIV
+  are excluded. Ambiguous `Civil IV` is classified as a title by this syntax;
+  this is intentionally a deterministic convention, not semantic English parsing.
+- Ordinary signed integers become Russian cardinals, with thousands/millions/
+  billions agreement. Bare 2014 stays cardinal. Explicit `год/года/году/годом`
+  selects the last ordinal component and its ending; 2000 has the exceptional
+  `двухтысячном` form. Existing filename `за … год` speech uses the same ordinal
+  renderer and remains idempotent. Explicit suffixes such as `42-й` and `21-я`
+  are also supported. This does not infer case/gender for arbitrary surrounding
+  nouns. Integer conversion is bounded to twelve digits; years/explicit ordinals
+  to four. Leading-zero identifiers and larger tokens retain digit speech and
+  the existing 2400-character worker expansion limit still applies.
+- Technical prefixes IPv/v, explicit `version/версия/версии [ПО]`, multi-dot
+  identifiers and date structures are consumed before year matching. IP/version
+  components retain existing digit/`запятая` speech, including exactly
+  `IPv4 v2.1` → `ай пи ви четыре ви два запятая один`. Dates speak numeric
+  components with `точка`, `дефис` or `дробь`; they do not become inflected years.
+  Otherwise dot/comma numeric pairs are decimal fractions: `3.14` and `3,14`
+  become `три целых четырнадцать сотых`. Up to six fractional places use Russian
+  denominators; longer fractions fall back to spoken digits after `запятая`.
+- Ampersands between adjacent original Latin tokens use `энд`; other contexts
+  use `и`. Single Latin letters next to & use letter names, giving `C&C` →
+  `си энд си`, `R&D` → `ар энд ди`. Spaced/unspaced forms share the rule;
+  neighboring names still use their existing pronunciation.
+
+The browser protects generic title/numeral pairs, ampersand expressions, numeric
+tokens and year phrases, including partial deltas. It holds a trailing unfinished
+token until context or final flush arrives. Pronunciation stays in Python; no
+second browser numeral converter or franchise list was added. The voice remains
+Silero v5_6_ru / xenia / CPU / four threads / 24 kHz / accent and ё enabled.
+
+### Current verification and reproduction
+
+After installing assets, start with one command:
+
+```powershell
+.\.venv\Scripts\python.exe start.py
+```
+
+Offline synthesis and listening worksheet, without needing Ollama:
+
+```powershell
+.\.voice-envs\silero\Scripts\python.exe scripts/eval_bilingual.py --retain-audio --current-only --iterations 1 --output .test-artifacts/numeric-ampersand
+```
+
+Open `.test-artifacts/numeric-ampersand/listen.html` and record observations for
+names, numerals, conjunctions, stress and pauses in `evaluation.json`. The current
+run produced **76 actual xenia WAVs, zero synthesis errors**, on Windows/Python
+3.12.10/PyTorch 2.6.0+cpu. The existing model was copied locally, packages reused
+read-only, and no model or package download occurred. Its SHA256 is unchanged.
+
+An isolated current-checkout server on 8879 also synthesized **33 real HTTP
+requests**, including 23 standalone cases and ten production-chunker clauses
+from **119 real local Ollama deltas** (qwen3.5:9b). The complete generated answer
+retained the requested original spelling. Each request's original/cleaned/
+pronunciation/exact TTS input matched its opt-in stderr diagnostic, correlated
+by generation ID and unique request ID. Retired-generation rejection, successor
+synthesis and stale-cancel isolation passed through the actual API/worker.
+This used the real JavaScript chunker with queue-only execution; it was **not a
+browser playback test**. No audible observations were recorded. The owned test
+server was stopped; the pre-existing app was not changed or stopped.
+
+See [current aggregate evidence](evidence/silero-normalization-20261031.json).
+Final automated checks: 172 focused Python tests; 678 full-suite tests and 35
+subtests; 38 DOM, ten attachment-context and seven history checks; JavaScript
+syntax, 76 asset references and `git diff --check`. There is no separate build,
+typecheck or Python lint configuration in this repository.
+
+**Remaining required gate:** live UI streaming with pause/resume, stop, mute,
+immediate successor responses, and human listening. The browser access host is
+unavailable; Playwright fails before tests with `spawn EPERM`; automatic approval
+review rejected Zen inspection because Computer Use was not approved to use Zen.
+DOM playback doubles and successful synthesis do not close this gate. Windows
+microphone and GPU were not tested.
+
+Troubleshooting: use [VOICE.md](VOICE.md) for missing local Silero assets (503),
+shorter clauses for expansion errors (422), and a free `LOCALMIND_PORT` for an
+isolated server. Opt-in `$env:LOCALMIND_TTS_DIAGNOSTICS='1'` logs synthetic test
+text; disable it after review. No default text/audio retention was added. See
+[DEFENSE_QA.md](DEFENSE_QA.md) for more than twenty defense questions and answers.
+
+## Previous pronunciation regression repair (historical, 31 October)
 
 The implementation below supersedes the earlier letter-spelling fallback. The
 older benchmark and Obsidian notes further down are historical evidence, not

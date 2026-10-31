@@ -49,8 +49,8 @@ def test_paths_hashes_and_metadata_are_not_spoken():
 
 
 def test_versions_decimals_and_misleading_extensions_do_not_become_years_or_pdf_labels():
-    assert 'за две тысячи' not in pronounce_filename('Python_v2026.1.pdf')
-    assert 'запятая' in pronounce_filename('Python_v3.14.pdf')
+    assert pronounce_filename('Python_v2026.1.pdf') == 'Пайтон v два ноль два шесть запятая один'
+    assert pronounce_filename('Python_v3.14.pdf') == 'Пайтон v три запятая один четыре'
     assert not filename_description('report.pdf.exe').startswith('PDF-файл')
     assert not filename_description('report.pdf.backup').startswith('PDF-файл')
 

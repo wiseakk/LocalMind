@@ -79,7 +79,9 @@ function makeCanvasDom(){
     try{
       const w=dom.window;
       const names=['Warcraft II','Warcraft III','Diablo Immortal','Diablo IV','Blizzard Entertainment',
-        'warcraft iii','DIABLO IMMORTAL','Blizzard   Entertainment'];
+        'warcraft iii','DIABLO IMMORTAL','Blizzard   Entertainment','StarCraft II','StarCraft III',
+        'Zephyr XLII','Command & Conquer','Command&Conquer','C&C','R & D','труд & отдых',
+        '1977 году','2014 году','2002 году','3.14','3,14','192.168.1.1','v2026.1','2026-10-31'];
       for(const name of names)for(let start=216;start<=244;start++)for(let split=0;split<=name.length;split++){
         const prefix='слово '.repeat(Math.floor(start/6))+'а'.repeat(start%6)+' ';
         const original=prefix+name+'. Затем продолжаем разговор.';
@@ -99,7 +101,7 @@ function makeCanvasDom(){
       for(const name of names){
         const speech=new w.LocalMindSpeech({enabled:()=>true,report:message=>{throw Error(message)}});
         speech.pump=()=>{};speech.start();speech.feed('слово '.repeat(39)+name.slice(0,5),true);
-        assert.equal(speech.session.texts.map(item=>item.text).join(' '),'слово '.repeat(39).trim()+' '+name.slice(0,5));
+        assert.equal(speech.session.texts.map(item=>item.text).join(' '),('слово '.repeat(39).trim()+' '+name.slice(0,5)).trim());
         assert.equal(speech.session.buffer.trim(),'');speech.cancel();
       }
     }finally{dom.window.close()}

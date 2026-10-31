@@ -4,9 +4,22 @@
 // boundary, including a partially received name at the end of a text delta.
 const speechNames=['World of Warcraft','Arthas Menethil','Reign of Chaos','The Frozen Throne','Heroes of the Storm',
   'Diablo Immortal','Blizzard Entertainment','Visual Studio Code','C++','C#',
-  ...['Warcraft','Diablo'].flatMap(title=>['II','III','IV','V','VI','VII','VIII','IX','X'].map(number=>`${title} ${number}`))];
+];
 const speechNamePatterns=speechNames.map(name=>new RegExp('^'+name.split(/\s+/).map(word=>word.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s+')+'(?![\\p{L}\\p{N}_])','iu'));
 function nameSafeCut(buffer,cut) {
+  // Protect syntactic context, not franchises. Do not interpret/pronounce here;
+  // the server remains the sole normalization authority. Supersets are safe.
+  const contexts=[/[A-Za-z]{2,}\s+[IVXLCDM]+(?![\p{L}\p{N}_+#])/giu,
+    /[\p{L}]+\s*&\s*[\p{L}]*/gu,
+    /[0-9]+\s+г(?:о(?:д(?:у|а|ом)?)?)?(?![\p{L}\p{N}_])/giu,
+    /[^\s]+/gu];
+  for(const pattern of contexts)for(const match of buffer.matchAll(pattern)) {
+    if(match.index<cut && match.index+match[0].length>cut)cut=match.index;
+  }
+  // A trailing token may acquire a numeral, ampersand, year suffix or decimal
+  // continuation in the next delta. Hold it until context or final flush arrives.
+  const pending=/[\p{L}\p{N}_]+(?:[.,-][0-9]+)*\s*$/u.exec(buffer);
+  if(pending && pending.index<cut)cut=pending.index;
   // Scan token starts rather than a fixed character window: repeated whitespace
   // can make an entity longer than its canonical spelling. Buffer is bounded.
   for(let start=0;start<cut;start++) {
