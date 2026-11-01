@@ -1,5 +1,49 @@
 ﻿# DevCrew — проверяемый статус LocalMind 1.0
 
+## 2026-10-31 — contextual TTS fixes; listening and browser playback pending
+
+Implemented speech-only Apple/Node.js mappings, coordinated four-digit years
+with shared году/годах, software version components and IPv4 «точка» separators.
+Mathematical decimals, fractions, dates, legacy filename speech, displayed text
+and Silero v5_6_ru / xenia settings are preserved. Streaming retains complete
+and partial expressions through product/version whitespace and year-list commas.
+
+Verified in this checkout using the installed project environments (dependencies
+reused locally, model copied from the original checkout; no model download):
+
+- Focused Python command: **215 passed**. Full Python: **716 passed, 35 subtests
+  passed**. Both report the existing pytest-cache Windows ACL warning.
+- DOM: **39 checks passed**, including every delta split near the chunk boundary,
+  character deltas, unchanged displayed text, pause/resume, stop, mute and
+  successor behavior. These use DOM/audio doubles, not real browser playback.
+- All seven JavaScript syntax checks and final diff whitespace checks pass.
+- Real local CPU xenia evaluation: **90 samples, zero synthesis errors**, with
+  v5_6_ru, four threads, mono PCM16 24 kHz, accent/ё enabled. All required rows
+  and franchise regressions are in the listening worksheet.
+- Real supervised worker: **12 exact literal / diagnostic tts_input / outgoing
+  worker-frame correlations**, one resident worker reused. Retired generation
+  rejected before dispatch; successor synthesis succeeds. Twelve loopback HTTP
+  TTS requests return **200** with valid nonempty 24 kHz WAVs.
+- Independent Reviewer/Security inspection found no blocking code issues.
+
+Private evidence: `.test-artifacts/contextual-tts/listen.html`, `evaluation.json`,
+`worker-correlation.json`, `http.json` and WAVs. All human-listening fields remain
+unrated. No human listening report has been received for this build; audible
+quality has **not** passed. Windows microphone and GPU were not tested.
+
+The checkout server started with `start_windows.ps1` on isolated loopback port
+8896. Direct script invocation is disabled by the Windows execution policy;
+the test used a process-only PowerShell invocation, without persistent policy
+changes. The focused Playwright test was attempted but cannot start its worker
+(`spawn EPERM`). Browser access host is unavailable; automatic approval review
+rejected native Zen inspection because Zen is not approved for Computer Use.
+Real playback, pause/resume/stop/mute and successor playback remain unverified
+in a browser. Do not treat generated WAVs or DOM doubles as audible approval.
+
+Reproduction, offline demo, troubleshooting and the remaining listening protocol
+are in [BILINGUAL_SILERO.md](BILINGUAL_SILERO.md). Existing explanatory defense
+questions are in [DEFENSE_QA.md](DEFENSE_QA.md). No publication or deployment.
+
 ## 2026-10-30 — Focused regression implementation; browser gate pending
 
 Provisioned Python 3.14.5 reproduced the exact file overwrite regression. The

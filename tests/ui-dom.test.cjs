@@ -81,7 +81,11 @@ function makeCanvasDom(){
       const names=['Warcraft II','Warcraft III','Diablo Immortal','Diablo IV','Blizzard Entertainment',
         'warcraft iii','DIABLO IMMORTAL','Blizzard   Entertainment','StarCraft II','StarCraft III',
         'Zephyr XLII','Command & Conquer','Command&Conquer','C&C','R & D','труд & отдых',
-        '1977 году','2014 году','2002 году','3.14','3,14','192.168.1.1','v2026.1','2026-10-31'];
+        '1977 году','2014 году','2002 году','3.14','3,14','192.168.1.1','v2026.1','2026-10-31',
+        'Apple II','Node.js','Python 3.14','Python   3.14','Версия Node.js 24.19.0',
+        'Версия   Node.js   24.19.0','Версия Python v3.14','Версия ПО 31.10.2026',
+        '1997 и 2002 годах','1997, 2000 и 2003 годах','1997, 2000, и 2003 году',
+        '1997   и   2002   годах','2000 или 2003 годах'];
       for(const name of names)for(let start=216;start<=244;start++)for(let split=0;split<=name.length;split++){
         const prefix='слово '.repeat(Math.floor(start/6))+'а'.repeat(start%6)+' ';
         const original=prefix+name+'. Затем продолжаем разговор.';
@@ -105,6 +109,35 @@ function makeCanvasDom(){
         assert.equal(speech.session.buffer.trim(),'');speech.cancel();
       }
     }finally{dom.window.close()}
+  });
+  await run('contextual expressions survive character deltas and keep displayed text unchanged',async()=>{
+    const answer='Apple II. В 1977 году. Вышли в 1997 и 2002 годах. В 2026 году. Python 3.14. Версия Node.js 24.19.0. Число пи примерно равно 3.14. IP-адрес 192.168.1.1.';
+    const tts=[];
+    const dom=makeDom(async(url,options)=>{
+      if(url==='/api/info')return Response.json({server_instance:'test',demo:true,devices:[],voice:{}});
+      if(url==='/api/tts'){tts.push(JSON.parse(options.body).text);return new Response(new Blob(['RIFFmock']));}
+      if(url==='/api/tts/cancel')return Response.json({ok:true});
+      if(url==='/api/chat/stream'){
+        const events=[{type:'status',data:{action_results:[]}},
+          ...Array.from(answer,(text,index)=>({type:'delta',sequence:index+1,text})),
+          {type:'final',data:{answer,engine:'ollama',action_results:[]}}];
+        return new Response(events.map(event=>JSON.stringify(event)).join('\n')+'\n');
+      }
+      throw Error('unexpected '+url);
+    });
+    const w=dom.window,d=w.document;
+    w.URL.createObjectURL=()=> 'blob:contextual';w.URL.revokeObjectURL=()=>{};
+    w.Audio=class {async play(){setTimeout(()=>this.onended?.(),0)}pause(){}};
+    try{
+      await pause(10);d.querySelector('#speak').checked=true;
+      await w.sendText('Прочитай примеры');
+      for(let i=0;i<100&&tts.length<7;i++)await pause(5);
+      assert.deepEqual(tts,['Apple II. В 1977 году.','Вышли в 1997 и 2002 годах.',
+        'В 2026 году.','Python 3.14.','Версия Node.js 24.19.0.',
+        'Число пи примерно равно 3.14.','IP-адрес 192.168.1.1.']);
+      assert.equal(d.querySelector('.rendered-message').textContent.trim(),answer);
+      assert.ok(!d.querySelector('.rendered-message').textContent.includes('Пайтон'));
+    }finally{w.stopSpeech();dom.window.close()}
   });
   await run('mismatched info and conversation instances reject valid PNG before any upload',async()=>{
     const calls=[];

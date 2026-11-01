@@ -32,6 +32,7 @@ SILERO_NAMES = {
     'Linux': 'Линукс', 'Docker': 'Докер', 'ChatGPT': 'Чат джи пи ти',
     'OpenAI': 'Оупен эй ай', 'NVIDIA': 'Энвидиа', 'Wi-Fi': 'вай фай',
     'NASA': 'НАСА', 'NATO': 'НАТО',
+    'Apple': 'Эппл', 'Node.js': 'Нод джей эс',
 }
 # Explicit initialisms, never inferred just from uppercase spelling.
 INITIALISMS = {
@@ -180,7 +181,7 @@ def speech_preparation(text: str, voice: str) -> SpeechPreparation:
     if voice != 'silero-v5_6-ru':
         spoken = _pronounce_terms(_numbers(cleaned), TERMS)
     else:
-        spoken = _numbers(_ampersands(_title_numbers(cleaned)))
+        spoken = _numbers(_ampersands(_title_numbers(cleaned)), contextual=True)
         # Whole phrases precede individual words, across any normalized whitespace.
         spoken = _pronounce_terms(spoken, SILERO_NAMES)
         spoken = re.sub(r"[A-Za-z]+(?:['’][A-Za-z]+)*",
@@ -327,7 +328,22 @@ _NUMBER = re.compile(
     r'|(?P<integer>[-−]?[0-9]+)', re.I)
 
 
-def _numbers(text: str) -> str:
+# Silero-only contexts, recognized while product spelling is still intact.
+# Keep the compatibility renderer above for filenames and other voices.
+_SOFTWARE = r'(?:Python|Node\.js|JavaScript|Windows|LocalMind|Ollama|Docker|Chrome|Firefox|Obsidian|Steam|Linux)'
+_VERSION_VALUE = r'[0-9]+(?:\.[0-9]+)+(?!\w|\.[0-9])'
+_CONTEXT_NUMBER = re.compile(
+    r'(?P<software>(?<![\w.])(?:'
+    r'(?:version|верси[яию]|версией)(?:\s+ПО)?(?:\s+[A-Za-z][\w+#]*(?:\.[A-Za-z][\w+#]*)*)?'
+    r'|' + _SOFTWARE + r')\s+(?:v\s*)?' + _VERSION_VALUE + r')'
+    r'|(?P<ipv4>(?<![\w.])[0-9]{1,3}(?:\.[0-9]{1,3}){3}(?!\w|\.[0-9]))'
+    r'|(?P<years>(?<![\w.+,−-])[1-9][0-9]{3}'
+    r'(?:(?:\s*,\s+(?:(?:и|или)\s+)?|\s+(?:и|или)\s+)[1-9][0-9]{3})*'
+    r'\s+(?:году|годах)\b)'
+    + '|' + _NUMBER.pattern, re.I)
+
+
+def _numbers(text: str, *, contextual: bool = False) -> str:
     # Symbols are rendered after title recognition so IV+2 cannot become IV.
     text = re.sub(r'\^\s*2\b', ' в квадрате ', text)
     text = re.sub(r'\^\s*3\b', ' в кубе ', text)
@@ -339,16 +355,32 @@ def _numbers(text: str) -> str:
 
     def render(match):
         token, kind = match[0], match.lastgroup
+        if kind == 'software':
+            # Only the final version value is numeric. Product spelling (Node.js)
+            # and its punctuation are left for whole-name pronunciation mapping.
+            token = re.sub(r'(?i)\bv(?=[0-9])', 'v ', token)
+            return re.sub(r'[0-9]+(?:\.[0-9]+)+$',
+                          lambda m: ' точка '.join(_integer(part) for part in m[0].split('.')), token)
+        if kind == 'ipv4':
+            if all(int(part) <= 255 for part in token.split('.')):
+                return ' точка '.join(_digits(part) for part in token.split('.'))
+            # An invalid address is still a dotted identifier, never a year.
+            return ' точка '.join(_integer(part) for part in token.split('.'))
+        if kind == 'years':
+            return re.sub(r'[0-9]{4}', lambda m: _ordinal(int(m[0]), 'ом'), token)
         if kind in ('technical', 'version', 'dotted'):
-            # Preserve established version/IP digit speech, including IPv4 v2.1.
+            # Legacy filename helpers retain their original digit/comma speech.
             token = re.sub(r'(?i)^(IPv|v)(?=[0-9])', r'\1 ', token)
+            if contextual:
+                return re.sub(r'[0-9]+', lambda m: _integer(m[0]),
+                              token.replace('.', ' точка ').replace(',', ' точка '))
             return re.sub(r'[0-9]+', lambda m: _digits(m[0]), token.replace('.', ' запятая ').replace(',', ' запятая '))
         if kind == 'date':
             separator = ' дефис ' if '-' in token else ' дробь ' if '/' in token else ' точка '
             return separator.join(_integer(part) for part in re.split(r'[-./]', token))
         if kind == 'year':
             value, noun = token.split()
-            ending = {'году': 'ом', 'годом': 'ым', 'года': 'ого', 'год': 'й'}[noun.lower()]
+            ending = {'году': 'ом', 'годах': 'ом', 'годом': 'ым', 'года': 'ого', 'год': 'й'}[noun.lower()]
             return _ordinal(int(value), ending) + ' ' + noun
         if kind == 'ordinal':
             value, ending = token.split('-')
@@ -366,7 +398,7 @@ def _numbers(text: str) -> str:
                     + _plural(int(whole), ('целая', 'целых', 'целых')) + ' '
                     + _cardinal(count, True) + ' ' + (unit if singular else unit[:-2] + 'ых'))
         return ('минус ' if token.startswith(('-', '−')) else '') + _integer(token.lstrip('-−'))
-    text = _NUMBER.sub(render, text)
+    text = (_CONTEXT_NUMBER if contextual else _NUMBER).sub(render, text)
     text = re.sub(r'(?<=\w)\s*/\s*(?=\w)', ' разделить на ', text)
     return re.sub(r'\s+', ' ', text).strip()
 

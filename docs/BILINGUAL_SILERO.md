@@ -1,6 +1,94 @@
 # Silero bilingual repair — 31 October 2026
 
-## Roman numerals, numbers/years and ampersands: current repair
+## Final contextual fixes: implementation verified, human listening pending
+
+The latest policy supersedes the old IP/version comma speech below for Silero
+only. The compatibility filename renderer keeps its legacy outputs. The new
+reviewed, whole-token spellings are `Apple` → `Эппл` and `Node.js` → `Нод джей эс`.
+They are case-insensitive and do not match inside longer words.
+
+Before Latin adaptation, software cues (`Python`, `Node.js`, other reviewed
+software names, or explicit `version/версия` with optional product) select cardinal
+version components separated by `точка`. Software cues precede date/IP matching,
+so `Версия Node.js 31.10.2026` is a version. Existing v-prefixed and multi-dot
+identifiers also use cardinal components and `точка`. Valid IPv4 octets instead
+use individual digits and `точка`; invalid octets remain dotted identifiers.
+Uncued `31.10.2026`, `2026-10-31`, `31/10/2026` retain date separators. Uncued
+`3.14`, `3,14`, negative decimals and fractions retain mathematical speech.
+No general language parser or global punctuation replacement is involved.
+
+Four-digit year lists sharing `году/годах` inflect every year with the existing
+ordinal renderer. Comma lists, и/или, repeated whitespace and three or more years
+are supported, including `2000` → `двухтысячном` and `2003` → `две тысячи третьем`.
+A list comma requires following whitespace to distinguish it from a decimal.
+Lists do not cross unrelated words, decimals, technical tokens or clause endings.
+Streaming holds complete/partial products, versions, year lists and shared nouns
+across character deltas and cuts; Python alone determines pronunciation.
+
+Required listening worksheet rows (plus sentence-context variants):
+
+| Input | Exact speech text |
+| --- | --- |
+| Apple II | Эппл два |
+| В 1977 году | В тысяча девятьсот семьдесят седьмом году |
+| Вышли в 1997 и 2002 годах | Вышли в тысяча девятьсот девяносто седьмом и две тысячи втором годах |
+| В 2026 году | В две тысячи двадцать шестом году |
+| Python 3.14 | Пайтон три точка четырнадцать |
+| Версия Node.js 24.19.0 | Версия Нод джей эс двадцать четыре точка девятнадцать точка ноль |
+| Число пи примерно равно 3.14 | Число пи примерно равно три целых четырнадцать сотых |
+| IP-адрес 192.168.1.1 | ай пи-адрес один девять два точка один шесть восемь точка один точка один |
+| Warcraft II | Варкрафт два |
+| StarCraft II | стар крафт два |
+| Diablo IV | Диабло четыре |
+| Command & Conquer | комманд энд конквер |
+
+Current checkout evidence: **215 focused Python tests**, **716 full Python tests
+and 35 subtests**, **39 DOM checks**, seven JS syntax checks and `git diff --check`
+pass. The existing pytest-cache ACL warning remains. Real CPU xenia generated
+**90 worksheet WAVs without errors**. Model SHA256:
+`04cc9b1d08ce38bcaa9d02c488d80d3e6806d17f7eaa7c95982f36a3cbf50b2e`.
+Twelve real supervised-worker calls matched independent expected literals,
+diagnostic `tts_input` and outgoing framed text exactly, reusing one worker.
+A retired generation was refused before dispatch; successor synthesis worked.
+Twelve real HTTP requests returned valid nonempty mono PCM16 24 kHz WAVs. Model,
+speaker, CPU/four threads, rate, accent/ё, queues and cancellation are unchanged.
+Independent Reviewer/Security inspection found no blocking issues.
+
+After setup, one-command start and offline demo (no LLM needed for the worksheet):
+
+```powershell
+.\start_windows.ps1
+.\.voice-envs\silero\Scripts\python.exe scripts/eval_bilingual.py --retain-audio --current-only --iterations 1 --output .test-artifacts/contextual-tts
+```
+
+Open `.test-artifacts/contextual-tts/listen.html` locally and listen to every row
+above and the franchise regressions. Record reviewer, observations and WAV hash
+in `evaluation.json`; do not populate listening fields from synthesis success.
+The worksheet, `worker-correlation.json`, `http.json` and WAVs are private ignored
+artifacts. Assets were reused from the installed checkout, with no download.
+Offline inference flags were used; physical network disconnection was not tested.
+
+For browser checking, set `LOCALMIND_TTS_DIAGNOSTICS=1` only in the verification
+session and compare each correlated text with worker input. Stream splits near
+240 characters around Node.js, product/version whitespace and the shared noun;
+exercise pause/resume, stop, mute and a successor reply while checking unchanged
+displayed text. DOM checks cover these controls with doubles, not audible playback.
+
+**Human listening and real browser playback remain unverified.** Playwright's
+focused speech test stops at `spawn EPERM`; the browser access host is unavailable
+and automatic approval review rejected Zen inspection as not approved for Computer
+Use. No human listening report has been received. Windows microphone and GPU
+were not tested. These are still open sign-off gates.
+
+Troubleshooting: if PowerShell blocks `.ps1` execution, run
+`.\.venv\Scripts\python.exe start.py`; no permanent execution-policy change is
+needed. If a local voice environment/model is missing, use [VOICE.md](VOICE.md)
+setup first; the evaluation never downloads models. A 422 after expansion requires
+shorter clauses. Keep an occupied port intact and choose `LOCALMIND_PORT` for an
+isolated server (this verification used 8896). Defense explanations remain in
+[DEFENSE_QA.md](DEFENSE_QA.md).
+
+## Roman numerals, numbers/years and ampersands: preceding repair
 
 This section supersedes the franchise-specific numeral and digit-by-digit rules
 described below. Implementation and synthesis checks pass; **audible and browser

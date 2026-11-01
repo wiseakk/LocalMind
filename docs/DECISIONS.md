@@ -468,3 +468,29 @@ playback. Current listening fields remain null. Browser host unavailable,
 Playwright spawn EPERM and rejected Zen Computer Use inspection prevent the
 required UI/listening gate. Keep the repair unapproved for audible quality.
 See BILINGUAL_SILERO.md and evidence/silero-normalization-20261031.json.
+
+## 2026-10-31 — final contextual normalization policy
+
+Apply the new numeric contexts only to the Silero synthesis copy. Preserve
+the shared filename/legacy renderer's digit/comma behavior. Recognize software
+cues before Latin pronunciation and before dates/IPs: reviewed software names,
+explicit version/версия cues with an optional product, and existing v-prefixed
+or multi-dot identifiers. Speak version components as bounded cardinals joined
+by «точка». An explicit software cue resolves date-shaped version ambiguity.
+Valid IPv4 octets use digit speech joined by «точка»; dates retain their existing
+separators. Uncued two-component decimals, negative decimals and fractions retain
+their mathematical rendering. No global period or number replacement is added.
+
+Recognize four-digit coordinated year lists sharing году/годах before ordinary
+numbers. Inflect every year with the existing ordinal renderer, including 2000
+and 2003 exceptions, preserving conjunctions, commas and the shared noun. Require
+whitespace after a list comma so a decimal such as 1997,2002 stays a decimal.
+Do not cross intervening words or clause punctuation. Single-year behavior stays.
+
+Add whole-token, case-insensitive Apple → Эппл and Node.js → Нод джей эс mappings.
+The browser only preserves complete/partial software expressions and year lists
+across deltas; Python remains the pronunciation authority. Display/history,
+engine/speaker/settings, queues, cancellation and permissions are unchanged.
+Exact independent text literals and captured worker inputs establish the text
+contract; generated audio cannot establish audible quality. Human listening
+and real browser playback remain separate gates, recorded in STATUS.md.

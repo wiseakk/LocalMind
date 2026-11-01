@@ -3,7 +3,7 @@
 // Match speech_text.SILERO_NAMES phrases. Keep names together at the length
 // boundary, including a partially received name at the end of a text delta.
 const speechNames=['World of Warcraft','Arthas Menethil','Reign of Chaos','The Frozen Throne','Heroes of the Storm',
-  'Diablo Immortal','Blizzard Entertainment','Visual Studio Code','C++','C#',
+  'Diablo Immortal','Blizzard Entertainment','Visual Studio Code','C++','C#','Node.js',
 ];
 const speechNamePatterns=speechNames.map(name=>new RegExp('^'+name.split(/\s+/).map(word=>word.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\s+')+'(?![\\p{L}\\p{N}_])','iu'));
 function nameSafeCut(buffer,cut) {
@@ -11,6 +11,13 @@ function nameSafeCut(buffer,cut) {
   // the server remains the sole normalization authority. Supersets are safe.
   const contexts=[/[A-Za-z]{2,}\s+[IVXLCDM]+(?![\p{L}\p{N}_+#])/giu,
     /[\p{L}]+\s*&\s*[\p{L}]*/gu,
+    // Supersets of the server's software cues; include incomplete values and
+    // a pending product after "Версия". Periods inside Node.js stay intact.
+    /(?<![\p{L}\p{N}_.])(?:(?:version|верси[яию]|версией)(?:\s+ПО)?(?:\s+[A-Za-z][\w+#]*(?:\.[A-Za-z][\w+#]*)*\.?)?(?:\s+(?:v\s*)?[0-9]*(?:\.[0-9]*)*)?|(?:Python|Node\.js|JavaScript|Windows|LocalMind|Ollama|Docker|Chrome|Firefox|Obsidian|Steam|Linux)\s+(?:v\s*)?[0-9]*(?:\.[0-9]*)*)/giu,
+    // Shared noun and partial noun; do not cut at a comma within the year list.
+    /(?<![\p{L}\p{N}_.+−-])[1-9][0-9]{3}(?:(?:\s*,\s*(?:(?:и|или)\s+)?|\s+(?:и|или)\s+)[1-9][0-9]{3})*\s+г(?:о(?:д(?:у|а(?:х)?|ом)?)?)?(?![\p{L}\p{N}_])/giu,
+    // A delta may end before the next year or before the shared noun arrives.
+    /(?<![\p{L}\p{N}_.+−-])[1-9][0-9]{3}(?:(?:\s*,\s*(?:(?:и|или)\s+)?|\s+(?:и|или)\s+)[1-9][0-9]{0,3})*(?:\s*,\s*(?:и|ил(?:и)?)?\s*|\s+(?:и|ил(?:и)?)?)?\s*$/giu,
     /[0-9]+\s+г(?:о(?:д(?:у|а|ом)?)?)?(?![\p{L}\p{N}_])/giu,
     /[^\s]+/gu];
   for(const pattern of contexts)for(const match of buffer.matchAll(pattern)) {
