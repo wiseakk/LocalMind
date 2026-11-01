@@ -230,7 +230,8 @@ def test_qwen3_empty_think_prefill_is_request_local():
     assert original == [{'role': 'user', 'content': 'test'}]
     configuration.model = 'other-model:latest'
     fake_client.__enter__.return_value.get.return_value.json.return_value = {'models': [{'name': configuration.model, 'size': 100}]}
-    with mock.patch.object(agent, 'settings', configuration), \
+    with mock.patch.object(agent, 'defaults', return_value=agent.GenerationSettings(configuration.model)), \
+         mock.patch.object(agent, 'settings', configuration), \
          mock.patch.object(agent.httpx, 'Client', return_value=fake_client):
         agent.ollama_chat(original, [])
     assert fake_client.__enter__.return_value.stream.call_args.kwargs['json']['messages'] == original

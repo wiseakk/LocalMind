@@ -494,3 +494,62 @@ engine/speaker/settings, queues, cancellation and permissions are unchanged.
 Exact independent text literals and captured worker inputs establish the text
 contract; generated audio cannot establish audible quality. Human listening
 and real browser playback remain separate gates, recorded in STATUS.md.
+
+## 2026-11-01 - model management contract before implementation
+
+Extend the existing BLACKSITE model tab; retain loopback, authentication, CSP and action gateway. Selected model is atomically persisted in results/private, separate from loaded models and response identity. Request replay identity uses the original wire payload; immutable generation settings remain in the first accepted closure. Never unload another workload. Optional NVML/psutil telemetry reports unknown per missing field. Placement uses only Ollama ps sizes, never memory estimates.
+
+API facts checked against official Ollama chat/ps/API and Hugging Face Hub API/Ollama docs on 2026-11-01: response durations are nanoseconds, final response has model identity; GGUF references accept explicit quantization. Sources: https://docs.ollama.com/api/chat , https://docs.ollama.com/api/ps , https://github.com/ollama/ollama/blob/main/docs/api.md , https://huggingface.co/docs/hub/ollama , https://huggingface.co/docs/hub/api , https://docs.nvidia.com/deploy/nvml-api/index.html . Installed runtime observed: Ollama 0.40.13.
+
+## 2026-11-01 - catalog milestone decisions
+
+Use bounded unauthenticated Hub REST metadata requests, never HTML, repository
+scripts or downloaded code. Only conservative text GGUF architecture/version
+pairs and explicit quantizations can form hf.co references. Unknown architectures,
+shards, ambiguous quantizations, mmproj, private/gated and missing licenses block.
+No external metadata URL is followed. Source benchmarks are unavailable for the
+listed quantized variants; never copy full-precision claims as their accuracy.
+The curated registry is dated and sourced; all pre-install compatibility is an
+estimate. Static config KV metadata sources:
+https://huggingface.co/Qwen/Qwen3-4B/blob/main/config.json and
+https://huggingface.co/Qwen/Qwen3-8B/blob/main/config.json .
+
+Pull starts only after explicit license/disk acknowledgement and server-side
+revalidation. One bounded task, no automatic switch/resume/retry. Cancellation
+disconnects the stream and is honestly labelled daemon-stop-unverified. Disk free
+is unknown until the operator confirms the actual daemon store via environment;
+never substitute the repository volume. Runtime errors remain sanitized.
+
+## 2026-11-01 - benchmark milestone and final review
+
+Use a versioned fixed 12-case deterministic screening protocol with an explicit
+JSON answer envelope for non-tool cases, a separate structured schema, exact
+text/JSON and AST comparisons. No eval/exec/subprocess or action gateway is used.
+Same system/user/assistant-prefill, seed/context/budget/think settings for both
+models; no active selection change or unloading. Persist hash, digest before/after,
+quant, actual response identity, raw synthetic visible content, checks and timings.
+Native tools unsupported means N/A. Errors/truncated responses mean incomplete;
+manual ratings are separate and atomically persisted. A rejected busy chat never
+reserves its ID; accepted replays retain their initial immutable settings.
+
+Real Windows tests found sticky CPU placement in qwen3:4b even with num_gpu -1
+after explicit num_gpu 0 fallback. Do not infer GPU placement from the setting.
+Record actual post-run ps placement and warn against speed comparisons across
+different/unknown modes. No overall quality score or popularity benchmark.
+The preliminary unconstrained protocol is superseded by the versioned JSON
+envelope protocol and is not reused as current evidence.
+
+Final skeptical/security review covered auth/Origin/Host/peer inheritance, source
+allowlists, malformed metadata, raw exception redaction, request replay, selection
+atomicity, cancellation terminal races, checkpoint failures, bounded jobs/streams,
+output non-execution and metadata XSS. Fixed an old model-select change listener
+that could still overwrite the actual-response badge; the new regression test
+dispatches change explicitly. No unresolved critical/high security issue found
+in the changed scope; real browser and download gates remain unverified.
+
+Bind download acknowledgement to a fingerprint of source/revision/license/quant/
+size/architecture/context metadata; re-fetch and reject stale acknowledgement
+before starting a pull. A changed repository must not silently substitute another
+license or artifact. Tests verify stale rejection, explicit retry and thread-start
+rollback. CPU/RAM and NVIDIA bindings are included in new installations, remain
+optional at runtime, and degrade to unavailable when the vendor driver is absent.

@@ -6,8 +6,8 @@
   "scripts": {
     "vendor-ui": "node scripts/vendor_ui.mjs",
     "test:ui": "playwright test",
-    "check:ui": "node --check static/assets/app.js && node --check static/assets/localmind-rich.js && node --check static/assets/icons.js && node --check static/assets/constellation.js && node --check static/assets/attachments.js && node --check static/assets/interface.js && node --check static/assets/speech.js",
-    "test:dom": "node tests/ui-dom.test.cjs && node tests/attachments-context.test.cjs && node tests/history.test.cjs",
+    "check:ui": "node --check static/assets/models.js && node --check static/assets/app.js && node --check static/assets/localmind-rich.js && node --check static/assets/icons.js && node --check static/assets/constellation.js && node --check static/assets/attachments.js && node --check static/assets/interface.js && node --check static/assets/speech.js",
+    "test:dom": "node tests/ui-dom.test.cjs && node tests/attachments-context.test.cjs && node tests/history.test.cjs && node tests/models-dom.test.cjs",
     "check:assets": "node scripts/verify_ui_assets.mjs"
   },
   "dependencies": {

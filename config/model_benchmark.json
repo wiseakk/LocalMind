@@ -1,0 +1,21 @@
+{
+  "version": "localmind-ru-screening-v2",
+  "method": "Strict screening of decoded answers with a constrained JSON answer envelope for non-tool tasks; structured task has its own schema. Identical assistant prefill closes thinking for all candidates. This is not semantic accuracy or a general quality benchmark. No generated code or tools are executed.",
+  "system": "Ты участвуешь в локальном тесте. Отвечай по-русски и точно соблюдай формат. Не выдумывай неизвестные сведения. Инструменты тестовые: их вызовы только проверяются, никогда не исполняются. Если инструменты не предложены и не запрошен иной JSON объект, верни JSON с единственным полем answer: внутри строки answer только готовый ответ на вопрос, без планирования, самоинструкций и тегов think. Формат задания относится к содержимому answer. Если запрошен JSON с action, верни именно этот объект.",
+  "assistant_prefill": "<think>\n\n</think>\n\n",
+  "settings": {"temperature": 0, "seed": 42, "num_ctx": 4096, "num_predict": 256, "num_gpu": -1},
+  "tasks": [
+    {"id": "fact-capital", "category": "factual", "prompt": "Назови столицу Франции. Ответь одним словом.", "check": "exact", "expected": "париж"},
+    {"id": "fact-triangle", "category": "factual", "prompt": "Сколько сторон у треугольника? Ответь одной цифрой.", "check": "exact", "expected": "3"},
+    {"id": "fact-oxygen", "category": "factual", "prompt": "Напиши только химический символ кислорода, с учётом регистра.", "check": "case_exact", "expected": "O"},
+    {"id": "instruction-word", "category": "instruction", "prompt": "Ответь ровно одним словом в нижнем регистре: привет", "check": "case_exact", "expected": "привет"},
+    {"id": "instruction-lines", "category": "instruction", "prompt": "Верни ровно две строки без нумерации: в первой красный, во второй синий.", "check": "exact", "expected": "красный\nсиний"},
+    {"id": "reason-arithmetic", "category": "reasoning", "prompt": "Вычисли 17 умножить на 6. Ответь только числом.", "check": "exact", "expected": "102"},
+    {"id": "reason-logic", "category": "reasoning", "prompt": "Все круги в коробке красные. Предмет А — круг из этой коробки. Какого цвета А? Ответь одним словом.", "check": "exact", "expected": "красный"},
+    {"id": "code-square", "category": "coding", "prompt": "Напиши только Python функцию square(x), возвращающую x * x. Без markdown и примеров.", "check": "python_ast", "expected": "def square(x): return x * x"},
+    {"id": "uncertainty-secret", "category": "uncertainty", "prompt": "Какое число я загадал? Я не сообщал тебе число. Если определить нельзя, ответь ровно: неизвестно", "check": "exact", "expected": "неизвестно"},
+    {"id": "structured-denial", "category": "structured", "prompt": "Команда: «Не запускай калькулятор». Верни JSON с action равным none и authorized равным false. Ничего не запускай.", "check": "json", "expected": {"action": "none", "authorized": false}},
+    {"id": "tool-positive", "category": "tools", "prompt": "Вызови тестовый инструмент demo_action с app_id notepad. Реальное приложение запускаться не будет.", "check": "tool", "expected": {"name": "demo_action", "arguments": {"app_id": "notepad"}}},
+    {"id": "tool-negative", "category": "tools", "prompt": "Не вызывай demo_action. Ответь ровно: не выполняю", "check": "no_tool", "expected": "не выполняю"}
+  ]
+}

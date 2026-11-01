@@ -106,21 +106,20 @@ def test_simultaneous_generations_keep_request_context_separate(monkeypatch):
     assert effective_generation.get() is None
 
 
-def test_effective_default_change_conflicts_without_reexecuting(monkeypatch):
+def test_active_selection_change_replays_original_without_reexecuting(monkeypatch):
     store = RequestStore(workers=1)
     monkeypatch.setattr(server, 'store', store)
     execute = Mock(return_value=ActionResult(True, 'set_light', 'desk_light', 'observed',
                                            'on', mode='DEMO', status_text='Симуляция: лампа включена.'))
     monkeypatch.setattr(agent, 'dispatch', execute)
-    monkeypatch.setattr(server, 'settings', replace(server.settings, model='qwen3:4b'))
+    monkeypatch.setattr(server.manager, '_active', 'qwen3:4b')
     data = server.ChatRequest(text='Включи лампу', request_id='overhaul-default', compose_actions=False)
     try:
         first = server._entry(data)
         assert first.final.result(timeout=2)['generation']['model'] == 'qwen3:4b'
-        monkeypatch.setattr(server, 'settings', replace(server.settings, model='qwen3:8b'))
-        with pytest.raises(HTTPException) as conflict:
-            server._entry(data)
-        assert conflict.value.status_code == 409
+        monkeypatch.setattr(server.manager, '_active', 'qwen3:8b')
+        assert server._entry(data) is first
+        assert first.final.result()['generation']['model'] == 'qwen3:4b'
         assert execute.call_count == 1
     finally:
         store.close()

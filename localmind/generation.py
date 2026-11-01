@@ -4,9 +4,6 @@ from dataclasses import asdict, dataclass
 import re
 import time
 
-from .settings import settings
-
-
 @dataclass(frozen=True)
 class GenerationSettings:
     model: str
@@ -16,7 +13,7 @@ class GenerationSettings:
     keep_alive_seconds: int = 300
 
     def __post_init__(self):
-        if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,99}', self.model) or 'cloud' in self.model.casefold():
+        if not isinstance(self.model, str) or not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,239}', self.model) or 'cloud' in self.model.casefold():
             raise ValueError('Выберите установленную локальную модель.')
         if self.reasoning not in ('off', 'on', 'auto'):
             raise ValueError('Неизвестный режим рассуждения.')
@@ -43,7 +40,8 @@ def check_cancelled():
 
 
 def defaults():
-    return GenerationSettings(settings.model)
+    from .model_manager import manager
+    return GenerationSettings(manager.active)
 
 
 def json_answer_prefix(content: str) -> str:

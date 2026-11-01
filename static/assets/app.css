@@ -2253,3 +2253,5 @@ input:not([type=checkbox]),select {
   #send {order:1}
   .model-pill {max-width:75px}
 }
+
+.model-card {white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--line, #444);border-radius:12px;padding:12px;max-width:100%} #modelTelemetry {white-space:pre-wrap;overflow-wrap:anywhere} #settings-model button {margin:4px 4px 8px 0}

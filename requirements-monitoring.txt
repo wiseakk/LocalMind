@@ -1,0 +1,4 @@
+# Optional upgrade for existing installations; also included in requirements.txt.
+# Application reports unavailable when bindings or the NVIDIA driver are absent.
+psutil>=7,<8
+nvidia-ml-py>=13,<14

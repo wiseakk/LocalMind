@@ -469,7 +469,7 @@ def ollama_chat(messages: list, tools: list, *, response_format: dict | None = N
     check_cancelled()
     global _resident_model
     base_url = _local_ollama_url()
-    config = effective_generation.get() or GenerationSettings(settings.model)
+    config = effective_generation.get() or defaults()
     callback = text_delta.get()
     messages = list(messages)
     reasoning = config.reasoning == 'on'
@@ -492,8 +492,7 @@ def ollama_chat(messages: list, tools: list, *, response_format: dict | None = N
     }
     if response_format is not None:
         body['format'] = response_format
-    # Serialize inference, including model switches. Never keep two application-
-    # selected large models resident; do not change Ollama or CUDA configuration.
+    # Serialize inference; Ollama schedules placement. Never unload other workloads.
     with _inference_slot(), httpx.Client(timeout=httpx.Timeout(30, connect=3), trust_env=False) as client:
         tags = client.get(f'{base_url}/api/tags')
         tags.raise_for_status()
@@ -507,16 +506,15 @@ def ollama_chat(messages: list, tools: list, *, response_format: dict | None = N
             raise ValueError('Cloud inference disabled')
         if any(m.get('images') for m in messages) and 'vision' not in details.get('capabilities', []):
             raise VisionUnavailable('Выбранная локальная модель не поддерживает изображения. Выбери установленную модель с vision, например qwen3.5:9b.')
-        if _resident_model is not None and _resident_model != config.model:
-            unloaded = client.post(f'{base_url}/api/generate', json={'model': _resident_model, 'keep_alive': 0})
-            unloaded.raise_for_status()
-        _resident_model = config.model
         if callback is None:
             with client.stream('POST', f'{base_url}/api/chat', json=body) as response:
                 response.raise_for_status()
                 data = json.loads(b''.join(_bounded_bytes(response, maximum=131072)))
                 if data.get('error'):
                     raise ValueError('Model generation failed')
+                from .model_manager import observe
+                observe(data)
+                _resident_model = config.model
                 return data['message']
         content, emitted, done = '', '', False
         with client.stream('POST', f'{base_url}/api/chat', json=body) as response:
@@ -548,6 +546,9 @@ def ollama_chat(messages: list, tools: list, *, response_format: dict | None = N
                         callback(prefix[len(emitted):])
                         emitted = prefix
                 if chunk.get('done'):
+                    from .model_manager import observe
+                    observe(chunk)
+                    _resident_model = config.model
                     done = True
                     break
         if not done:
@@ -1092,9 +1093,16 @@ def complete_reply(prepared: PreparedReply) -> dict:
     config_token = effective_generation.set(prepared.generation or defaults())
     delta_token = text_delta.set(prepared.on_delta if prepared.dialogue else None)
     style_token = _response_style.set(prepared.response_length)
+    from .model_manager import observation, record_last
+    metric_token = observation.set(None)
     try:
-        return _complete_reply(prepared)
+        result = _complete_reply(prepared)
+        result['metrics'] = observation.get()
+        result['actual_model'] = (result['metrics'] or {}).get('actual_model')
+        record_last(result)
+        return result
     finally:
+        observation.reset(metric_token)
         _response_style.reset(style_token)
         text_delta.reset(delta_token)
         effective_generation.reset(config_token)

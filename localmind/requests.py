@@ -67,7 +67,7 @@ class RequestStore:
         self._lock = Lock()
         self._pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix='localmind-chat')
 
-    def begin(self, request_id: str | None, fingerprint: str, prepare, complete) -> RequestEntry:
+    def begin(self, request_id: str | None, fingerprint: str, prepare, complete, *, admit=None) -> RequestEntry:
         key = request_id or uuid.uuid4().hex
         with self._lock:
             now = time.monotonic()
@@ -89,6 +89,8 @@ class RequestStore:
                 raise RequestBusy('Кэш запросов заполнен. Подожди несколько минут.')
             if sum(v.finished is None for v in self._entries.values()) >= self.workers:
                 raise RequestBusy('Все обработчики заняты. Подожди завершения ответа.')
+            if admit is not None:
+                admit()  # Rejected busy requests never reserve their retry ID.
             entry = self._entries[key] = RequestEntry(fingerprint)
             self._pool.submit(self._run, entry, prepare, complete)
             return entry

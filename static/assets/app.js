@@ -120,7 +120,7 @@ async function sendText(value) {
   const request = retry?.request || {request_id: crypto.randomUUID(), server_instance:serverInstance, conversation_id:conversationId, text, history: history.slice(-8), actions_authorized:true,
     attachment_ids:ids,local_retrieval:Boolean($('useLocalSources')?.checked),
     response_length:$('responseLength').value, compose_actions:$('composeActions').checked,
-    model:$('modelSelect').value || null, reasoning:$('reasoning').value,
+    model:null, reasoning:$('reasoning').value,
     context_tokens:Number($('contextTokens').value),response_tokens:Number($('responseTokens').value),keep_alive_seconds:Number($('keepAlive').value)};
   const attachmentSnapshot=window.localmindAttachments?.beginSubmission(request)||[];
   const turn={request_id:request.request_id,server_instance:request.server_instance,cancelled:false,controller:null};inFlight=turn;
@@ -156,7 +156,7 @@ async function sendText(value) {
             el.querySelector('.pending')?.remove();
             renderLocalMindMessage(el.querySelector('.rendered-message'), deltaText); state('Отвечаю…'); scrollEnd();
           }
-          if (item.type === 'final') { finalValue = item.data; if(item.data.conversation_id){conversationId=item.data.conversation_id;window.localmindAttachments?.adoptConversation(conversationId);} renderStatus(el, item.data);
+          if (item.type === 'final') { window.localmindModels?.observe(item.data); finalValue = item.data; if(item.data.conversation_id){conversationId=item.data.conversation_id;window.localmindAttachments?.adoptConversation(conversationId);} renderStatus(el, item.data);
             if(window.localmindAttachments?.acknowledge(item.data,request)){userMessage.attachments=attachmentSnapshot;renderSentAttachments(userBubble,attachmentSnapshot);}
           }
         }
@@ -217,7 +217,7 @@ async function refresh() {
     }
     serverInstance=info.server_instance;
     window.localmindScene?.observeInfo(info);
-    $('status').textContent='Сервер подключён'; $('connectionDot').classList.add('online'); $('model').textContent=$('modelSelect').value || info.model;
+    $('status').textContent='Сервер подключён'; $('connectionDot').classList.add('online'); $('model').textContent=window.localmindModels?.lastModel || 'Модель ещё не использовалась';
     $('mode').textContent=info.demo?'DEMO':'REAL · HA';
     $('mode').classList.toggle('real',!info.demo);
     $('lampSuggestionCaption').textContent=info.demo?'Настольная лампа · DEMO / симуляция':'Настольная лампа · реальное устройство HA';
@@ -236,23 +236,7 @@ async function refresh() {
     if (voice.setup) $('voiceStatus').textContent += '\n'+voice.setup;
   } catch (error) { $('status').textContent=error.message; $('connectionDot').classList.remove('online'); }
 }
-async function loadModels() {
-  const select=$('modelSelect'), selected=select.value;
-  try {
-    const data=await(await checked(await fetch('/api/models',{headers:headers()}))).json();
-    select.replaceChildren();
-    for(const model of data.models || []) {
-      const option=document.createElement('option'); option.value=model.name; option.textContent=model.name; select.append(option);
-    }
-    const wanted=selected || data.default;
-    if ([...select.options].some(o=>o.value===wanted)) select.value=wanted;
-    else {
-      const missing=document.createElement('option');missing.value='';missing.textContent='Модель по умолчанию недоступна — выберите локальную';missing.selected=true;select.prepend(missing);
-    }
-    $('modelStatus').textContent='Только установленные локальные модели. Первый ответ включает загрузку; следующие обычно быстрее. При смене предыдущая модель выгружается. Изменения применяются к следующему запросу.';
-    $('model').textContent=select.value || data.default;
-  } catch(error) {$('modelStatus').textContent=error.message;}
-}
+async function loadModels() { await window.localmindModels?.refresh(); }
 const speech = new LocalMindSpeech({
   request:async(text,voice,signal,generation_id)=>{
     // A cancelled native worker needs a short bounded teardown. Retrying speech
@@ -351,7 +335,6 @@ $('message').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.
 for(const b of document.querySelectorAll('[data-example]'))b.addEventListener('click',()=>sendText(b.dataset.example));
 for(const b of document.querySelectorAll('[data-close]'))b.addEventListener('click',()=>$(b.dataset.close).close());
 $('settingsOpen').addEventListener('click',()=>{$('settingsDialog').showModal();refresh();loadModels();loadLocalSources()});
-$('modelSelect').addEventListener('change',()=>{$('model').textContent=$('modelSelect').value || 'Локальная модель'});
 $('appsOpen').addEventListener('click',()=>{$('appsDialog').showModal();loadApps();loadFilePermissions()});
 $('rescan').addEventListener('click',()=>loadApps(true));
 $('key').addEventListener('change',()=>{refresh();loadApps();});

@@ -151,6 +151,14 @@ DOM/browser проверок. DOM-тесты выполняют настоящи
   commit — `5a140c6`, новых коммитов не заявлено. Diff сохранён, push/merge не выполнялись.
 
 Архитектура: [ARCHITECTURE](docs/ARCHITECTURE.md), [HOW_IT_WORKS](docs/HOW_IT_WORKS.md).
-Для защиты: [40 объяснённых вопросов](docs/DEFENSE_QA.md),
+Для защиты: [50 объяснённых вопросов](docs/DEFENSE_QA.md),
 [измерения и реальные ошибки](docs/EXPERIMENTS.md), [ограничения](docs/KNOWN_LIMITATIONS.md),
 [изменения](docs/CHANGELOG.md), [решения](docs/DECISIONS.md).
+
+Модели ИИ: в существующих настройках доступны установленные модели, проверяемый
+серверный выбор, фактическая модель ответа и метрики, NVML/CPU/RAM, curated Ollama
+и поиск GGUF на Hugging Face, явные pull-задачи и фиксированный русский screening
+для одной/двух моделей. Запуск: `python start.py` в настроенном окружении.
+[Инструкция, offline demo, troubleshooting и русские QA-сценарии](docs/MODEL_MANAGER_QA.md).
+Реальные загрузка/отмена, микрофон и визуальная проверка остаются неподтверждёнными;
+не считать весь feature принятым только по автотестам.

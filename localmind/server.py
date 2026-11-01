@@ -24,6 +24,8 @@ from .devices import device_catalog
 from .apps import catalog, AppError
 from .requests import RequestStore, RequestBusy, RequestConflict
 from .generation import GenerationSettings
+from .model_manager import manager
+from .hardware import hardware_status
 from .conversations import conversations, ConversationError
 from .file_access import file_access, FileAccessError
 from .attachments import (AttachmentError, MAX_FILE_BYTES, add_document,
@@ -39,6 +41,10 @@ async def lifespan(app):
     try:
         yield
     finally:
+        from .model_catalog import downloads
+        from .model_benchmark import benchmarks
+        downloads.stop_all()
+        benchmarks.stop_all()
         await asyncio.to_thread(shutdown_tts)
         await asyncio.to_thread(shutdown_stt)
         warm_task.cancel()
@@ -47,6 +53,8 @@ async def lifespan(app):
 
 app = FastAPI(title='LocalMind', version='1.0.0', docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 app.mount('/assets', StaticFiles(directory=ROOT / 'static' / 'assets'), name='assets')
+from .model_routes import router as model_router
+app.include_router(model_router)
 store = RequestStore()
 LOCAL_HOSTS = frozenset(('127.0.0.1', 'localhost', '::1'))
 SERVER_INSTANCE = uuid.uuid4().hex
@@ -65,7 +73,7 @@ class ChatRequest(BaseModel):
     response_length: Literal['brief', 'normal', 'detailed'] = 'normal'
     compose_actions: bool = True
     server_instance: str | None = Field(default=None, max_length=32)
-    model: str | None = Field(default=None, min_length=1, max_length=100, pattern=r'^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$')
+    model: str | None = Field(default=None, min_length=1, max_length=240, pattern=r'^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$')
     reasoning: Literal['off', 'on', 'auto'] = 'off'
     context_tokens: int = Field(default=4096, ge=1024, le=8192)
     response_tokens: int = Field(default=768, ge=64, le=2048)
@@ -218,7 +226,7 @@ def home():
 def info(x_localmind_key: Annotated[str | None, Header()] = None):
     authorize(x_localmind_key)
     voice = voice_status()
-    return {'name':'LocalMind', 'version':'1.0.0', 'demo':settings.demo, 'model':settings.model,
+    return {'name':'LocalMind', 'version':'1.0.0', 'demo':settings.demo, 'model':manager.active,
             'server_instance':SERVER_INSTANCE,
             'devices':device_catalog(), 'voice_available':voice['stt_installed'], 'voice':voice}
 
@@ -227,12 +235,12 @@ def _entry(data: ChatRequest):
         raise HTTPException(409,'Сервер перезапущен. Автоматическое повторение действия отменено; проверьте его состояние вручную.')
     payload=data.model_dump()
     try:
-        generation = GenerationSettings(data.model or settings.model, data.reasoning, data.context_tokens,
+        generation = GenerationSettings(data.model or manager.active, data.reasoning, data.context_tokens,
                                         data.response_tokens, data.keep_alive_seconds)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    # Snapshot effective defaults as well as explicit settings in replay identity.
-    payload['generation'] = generation.to_dict()
+    # Wire identity is stable across a server selection change. The first
+    # accepted closure captures immutable effective settings for all replays.
     payload.pop('request_id')
     fingerprint=hashlib.sha256(json.dumps(payload,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
     def prepare_turn():
@@ -259,9 +267,13 @@ def _entry(data: ChatRequest):
             conversations.release(conversation)
             raise
     try:
+        def admit():
+            from .model_benchmark import benchmarks
+            if benchmarks.running():
+                raise RequestBusy('Локальный тест моделей занимает inference. Дождитесь его завершения или прервите тест.')
         return store.begin(data.request_id, fingerprint,
             prepare_turn,
-            complete_reply)
+            complete_reply, admit=admit)
     except RequestConflict as exc:
         raise HTTPException(409,str(exc)) from exc
     except RequestBusy as exc:
@@ -537,18 +549,28 @@ def chat_stream(data:ChatRequest, x_localmind_key: Annotated[str | None, Header(
 @app.get('/api/models')
 def models(x_localmind_key: Annotated[str | None, Header()] = None):
     authorize(x_localmind_key)
-    from .agent import _local_ollama_url
     try:
-        with httpx.Client(timeout=3, trust_env=False) as client:
-            response = client.get(_local_ollama_url() + '/api/tags')
-            response.raise_for_status()
-            installed = [{'name': m['name'], 'size': m.get('size'), 'details': m.get('details', {})}
-                         for m in response.json().get('models', [])
-                         if isinstance(m.get('name'), str) and 'cloud' not in m['name'].casefold()
-                         and m.get('size', 0) > 0 and not m.get('remote_host') and not m.get('remote_model')]
-        return {'models': installed, 'default': settings.model, 'local_only': True}
+        return manager.inventory()
     except (httpx.HTTPError, ValueError, KeyError, TypeError):
-        raise HTTPException(503, 'Локальный Ollama недоступен. Проверьте его запуск; облачная замена отключена.')
+        raise HTTPException(503, 'Локальный Ollama недоступен. Проверьте его запуск.')
+
+
+class ModelSelection(BaseModel):
+    model: str = Field(min_length=1, max_length=240)
+
+
+@app.post('/api/models/select')
+def select_model(data: ModelSelection):
+    try:
+        return manager.select(data.model)
+    except (httpx.HTTPError, ValueError, OSError, TypeError):
+        raise HTTPException(409, 'Проверка модели не пройдена или Ollama занят. Предыдущий выбор сохранён.')
+
+
+@app.get('/api/models/hardware')
+def model_hardware():
+    return hardware_status()
+
 
 @app.post('/api/transcribe')
 async def transcribe(audio:Annotated[UploadFile,File()], profile:Annotated[str,Form()]='balanced',
@@ -611,7 +633,7 @@ def diagnostics(x_localmind_key:Annotated[str | None,Header()]=None):
         with httpx.Client(timeout=3,trust_env=False) as client:
             result=client.get(url+'/api/tags');result.raise_for_status()
             status['ollama_reachable']=True
-            status['model_installed']=any(m.get('name')==settings.model for m in result.json().get('models',[]))
+            status['model_installed']=any(m.get('name')==manager.active for m in result.json().get('models',[]))
             version=client.get(url+'/api/version');version.raise_for_status()
             status['ollama_version']=version.json().get('version')
             resident=client.get(url+'/api/ps');resident.raise_for_status()

@@ -770,3 +770,62 @@ inspection because Computer Use was not approved to use Zen. No acoustic rating
 is inferred from successful WAVs/HTTP or DOM doubles. Windows microphone and GPU
 remain untested. Current commands, offline listening worksheet, troubleshooting
 and the existing defense-question document are linked in BILINGUAL_SILERO.md.
+
+## 2026-11-01 — installed models milestone
+
+Implemented transactional active model, installed metadata, real request-owned metrics and optional NVML/psutil hardware telemetry inside existing settings. Removed automatic unloading of other workloads. Replay after selection change retains original accepted generation and side effects execute once.
+
+Verification: focused 13 passed; full 725 passed, 4 skipped; JS syntax, 39 DOM checks plus attachment/history checks and 77 asset audit passed. Playwright attempted: worker spawn EPERM, no browser assertions executed. Real Windows Ollama 0.40.13: qwen3:4b health, JSON and streamed agent response identity/metrics passed; NVML detected RTX 4070 and real VRAM/utilization. API placement matches `ollama ps` 100% GPU at context 4096. Real CPU fallback, microphone, simultaneous ASR, listening and visual scale QA NOT tested. No complete-product claim. See MODEL_MANAGER_QA.md for exact Russian prompts, troubleshooting and evidence.
+
+Focused commit attempted but blocked: this worktree's Git index is in
+`C:/Users/ExampleUser/Desktop/LocalMind_MVP_01/.git/worktrees/...`, outside the writable
+workspace. Git add/commit both fail creating index.lock (Permission denied).
+No commit was created; no attempt to bypass the filesystem boundary. Continue
+independent implementation in this checkout, keeping milestone evidence separate.
+
+## 2026-11-01 - catalog milestone
+
+Implemented curated Ollama registry, bounded HF REST search and GGUF variants, strict reference/quantization validation, architecture/version estimates, conservative memory/KV assumptions, honest unknown disk capacity, explicit license/disk acknowledgements and bounded pull jobs with digest progress and manual retry. Cancellation closes the HTTP stream and explicitly does not claim daemon-stop verification. No automatic download, model switch or restart resume.
+
+Focused tests: 44 passed across manager/catalog. Full: 756 passed, 4 skipped. UI syntax, DOM including focused model/XSS/no-silent-download checks, asset audit and diff whitespace passed. Playwright attempted again: spawn EPERM before execution. Real HF API search and five explicit quantized variants passed on Windows; no model assets downloaded, no real cancellation/retry/disk-exhaustion claim. Regression prompts and actual limits recorded in MODEL_MANAGER_QA.md. Focused commit remains blocked by external Git index write permission; no commit exists.
+
+## 2026-11-01 - benchmark milestone and final verification
+
+Implemented a fixed 12-task Russian screening protocol, identical one/two-model
+inputs/settings, inert native tools, non-executing AST check, separate factual,
+instruction/reasoning/coding/uncertainty/structured/tool checks and performance.
+Persist suite version/hash, requested/actual identity, model digest/quant, answers,
+errors, metrics, post-run placement, checkpoints and separate manual ratings.
+Unknown/unsupported stays unknown/N/A; incomplete runs do not become comparisons.
+Busy admission precedes request ID reservation; accepted retries keep their settings.
+
+Final tests: 68 focused passed; full pytest 780 passed, 4 skipped, one TestClient
+deprecation warning. JS syntax, all DOM suites (39 primary plus attachment/history/
+model checks), 77 local assets, compileall and diff whitespace passed. New browser
+scenario included; Playwright discovers 36 but cannot spawn worker (EPERM), zero
+browser assertions executed. No separate configured typechecker or build exists.
+
+Real Windows/Ollama 0.40.13: CPU fallback qwen3:4b has size_vram 0; earlier GPU
+run matched ollama ps 100% GPU / context 4096. Completed current v2 comparison
+qwen3:4b vs qwen3.5:9b, 24 tasks, active selection unchanged. Both: fixed factual
+3/3, instructions 2/2, reasoning 2/2, code 1/1, uncertainty 1/1, structured 1/1,
+native tools 0/2. Different actual placements CPU/GPU prohibit a speed winner;
+these are narrow deterministic screening counts, not general quality/accuracy.
+Real HTTP start.py on owned port 8879: benchmark 200, busy chat 429, same-ID retry
+after completion 200, actual model/metrics in JSON and NDJSON. Final bounded helper
+inventory/health and real HF fingerprints also passed. Evidence:
+docs/evidence/model-manager-20261101.json; exact prompts and per-milestone manual
+results in MODEL_MANAGER_QA.md; defense questions expanded from 40 to 50.
+
+Final review fixes: selection badge could still be changed by a legacy event
+listener; removed and tested. Downloads now require a metadata/license/artifact
+fingerprint and explicit acknowledgements. Fixed terminal cancellation race,
+ghost jobs on thread/save failures, bounded streams/caches and safe optional
+telemetry. No unresolved critical/high security issue identified in changed scope.
+
+NOT accepted as a complete feature: real model pull/cancel/retry, simultaneous
+GPU ASR, microphone, audible xenia, physically offline and visual scale QA remain
+unverified. Automatic approval review rejected Zen window inspection because
+Computer Use was not approved for Zen. No bypass attempted. Three focused commits
+cannot be created because Git index metadata is outside writable workspace.
+Source changes and evidence remain in this checkout; no push/publish/deploy/merge.

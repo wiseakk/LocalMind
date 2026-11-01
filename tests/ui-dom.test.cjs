@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const {JSDOM} = require('jsdom');
 const html=fs.readFileSync('static/index.html','utf8').replace(/^\uFEFF/,'');
-const scripts=['marked.umd.js','purify.min.js','katex.min.js','localmind-rich.js','icons.js','constellation.js','attachments.js','speech.js','app.js','interface.js'];
+const scripts=['marked.umd.js','purify.min.js','katex.min.js','localmind-rich.js','icons.js','constellation.js','attachments.js','speech.js','models.js','app.js','interface.js'];
 let passed=0;
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 function makeDom(fetcher,setup) {
@@ -368,14 +368,17 @@ function makeCanvasDom(){
     const w=dom.window,d=w.document;
     try{
       await pause(10);d.querySelector('#settingsOpen').click();await pause(10);
-      d.querySelector('#modelSelect').value='qwen3:8b';d.querySelector('#reasoning').value='on';
+      const observedModel=d.querySelector('#model').textContent;
+      d.querySelector('#modelSelect').value='qwen3:8b';d.querySelector('#modelSelect').dispatchEvent(new w.Event('change'));
+      assert.equal(d.querySelector('#model').textContent,observedModel,'selection must not fabricate response identity');
+      d.querySelector('#reasoning').value='on';
       d.querySelector('#responseTokens').value='1536';d.querySelector('#settingsDialog').close();
       const sending=w.sendText('Объясни формулу');await pause(20);
-      assert.equal(submitted.model,'qwen3:8b');assert.equal(submitted.reasoning,'on');assert.equal(submitted.response_tokens,1536);
+      assert.equal(submitted.model,null);assert.equal(submitted.reasoning,'on');assert.equal(submitted.response_tokens,1536);
       assert.ok(d.querySelector('.rendered-message strong'));assert.equal(d.querySelectorAll('.rendered-message .katex').length,1);
       assert.equal(d.querySelector('.pending'),null);assert.equal(d.querySelector('#send').disabled,true);
       d.querySelector('#modelSelect').value='qwen3:4b';release();await sending;
-      assert.equal(submitted.model,'qwen3:8b');assert.equal(d.querySelector('.message-diagnostics').open,false);
+      assert.equal(submitted.model,null);assert.equal(d.querySelector('.message-diagnostics').open,false);
       assert.ok(d.querySelector('.rendered-message').textContent.includes('Конец.'));
     }finally{dom.window.close()}
   });
