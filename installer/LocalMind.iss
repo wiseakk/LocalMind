@@ -1,10 +1,13 @@
 #ifndef Payload
   #define Payload "..\dist\LocalMind"
 #endif
+#ifndef ReleaseVersion
+  #define ReleaseVersion "1.0.0-rc1"
+#endif
 [Setup]
 AppId={{E51E0AD1-BB08-4EC7-95B8-0A50D0543A88}
 AppName=LocalMind
-AppVersion=1.0.0
+AppVersion={#ReleaseVersion}
 DefaultDirName={localappdata}\Programs\LocalMind
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
@@ -12,9 +15,9 @@ ArchitecturesInstallIn64BitMode=x64compatible
 DefaultGroupName=LocalMind
 OutputDir=..\dist
 #ifdef OfflineBundle
-OutputBaseFilename=LocalMind-Offline-Setup
+OutputBaseFilename=LocalMind-{#ReleaseVersion}-Offline-Setup
 #else
-OutputBaseFilename=LocalMind-Setup
+OutputBaseFilename=LocalMind-{#ReleaseVersion}-Setup
 #endif
 Compression=lzma2/fast
 SolidCompression=yes

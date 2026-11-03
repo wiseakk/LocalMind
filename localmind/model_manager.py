@@ -10,7 +10,7 @@ from threading import Lock
 
 import httpx
 from .generation import GenerationSettings
-from .paths import PRIVATE
+from .paths import PRIVATE, atomic_json, ordinary_tree
 from .settings import ROOT, settings
 
 observation = ContextVar('ollama_observation', default=None)
@@ -109,10 +109,23 @@ class ModelManager:
         self._lock = Lock()
         self._active = settings.model
         self._capabilities = {}
+        self._generation = {}
         try:
-            name = json.loads(self.path.read_text(encoding='utf-8'))['model']
+            ordinary_tree(self.path)
+            saved = json.loads(self.path.read_text(encoding='utf-8'))
+            name = saved['model']
             GenerationSettings(name)
             self._active = name
+            controls = saved.get('generation', {})
+            if isinstance(controls, dict):
+                for key, values in controls.items():
+                    if not isinstance(values, dict):
+                        continue
+                    try:
+                        validated = GenerationSettings(key, **values)
+                        self._generation[key] = {k: v for k, v in validated.to_dict().items() if k != 'model'}
+                    except (TypeError, ValueError):
+                        continue
         except (OSError, ValueError, KeyError, TypeError):
             pass
 
@@ -121,15 +134,34 @@ class ModelManager:
         with self._lock:
             return self._active
 
+    def generation(self, name=None):
+        with self._lock:
+            name = name or self._active
+            values = self._generation.get(name)
+            return GenerationSettings(name, **values).to_dict() if values else None
+
+    def save_generation(self, values, expected_model=None):
+        from .agent import _inference_slot
+        with _inference_slot(), self._lock:
+            if expected_model is not None and expected_model != self._active:
+                raise ValueError('Модель изменилась. Обновите настройки перед сохранением.')
+            config = GenerationSettings(self._active, **values)
+            generation = dict(self._generation)
+            generation[self._active] = {k: v for k, v in config.to_dict().items() if k != 'model'}
+            atomic_json(self.path, {'model': self._active, 'generation': generation})
+            self._generation = generation
+            return config.to_dict()
+
     def select(self, name):
         from . import agent
+        from .model_memory import memory
         # Same inference lock as chat; concurrent switches serialize and failure
         # leaves both the in-memory and durable selection unchanged.
-        with agent._inference_slot():
+        with agent._inference_slot(), memory.test_model(name):
+            previous = self.active
             expected = installed_detail(name)
-            data = ollama_json('POST', 'chat', {'model': name, 'stream': False, 'think': False,
-                'messages': [{'role': 'user', 'content': 'Ответь одним словом: привет'}],
-                'options': {'num_ctx': 4096, 'num_predict': 16, 'temperature': 0}, 'keep_alive': 300}, timeout=60)
+            with memory.using(name):
+                data = self._probe(name)
             actual = data.get('model')
             if not actual or not data.get('message', {}).get('content', '').strip() or data.get('done') is not True:
                 raise ValueError('Проверка генерации не пройдена. Предыдущий выбор сохранён.')
@@ -137,21 +169,24 @@ class ModelManager:
             actual_detail = installed_detail(actual)
             if expected.get('digest') and expected.get('digest') != actual_detail.get('digest'):
                 raise ValueError('Ollama ответил другой моделью; выбор сохранён.')
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = self.path.with_suffix('.tmp')
-            try:
-                temporary.write_text(json.dumps({'model': name}), encoding='utf-8')
-                os.replace(temporary, self.path)
-            finally:
-                temporary.unlink(missing_ok=True)
+            atomic_json(self.path, {'model': name, 'generation': self._generation})
             with self._lock:
                 self._active = name
                 self._capabilities[name] = expected.get('capabilities', [])
             agent._resident_model = name
-            return {'active': name, 'health': response_metrics(data)}
+            cleanup = memory._cleanup_locked(previous, reason='switch') if previous != name else None
+            return {'active': name, 'health': response_metrics(data), 'cleanup': cleanup}
+
+    def _probe(self, name):
+        from .model_memory import memory
+        return ollama_json('POST', 'chat', {'model': name, 'stream': False, 'think': False,
+            'messages': [{'role': 'user', 'content': 'Ответь одним словом: привет'}],
+            'options': {'num_ctx': 4096, 'num_predict': 16, 'temperature': 0},
+            'keep_alive': memory.policy.keep_alive_seconds}, timeout=60)
 
     def inventory(self):
         rows = []
+        active = self.active
         tags = ollama_json('GET', 'tags')
         if not isinstance(tags.get('models'), list):
             raise ValueError('Некорректный список моделей.')
@@ -176,14 +211,19 @@ class ModelManager:
             row.update(placement=placement(running) if running else 'unknown' if loaded is None else 'unloaded',
                        size_vram=running.get('size_vram') if running else None,
                        context_length=running.get('context_length') if running else None)
+            from .model_memory import memory
+            with memory.lock:
+                row.update(loaded=bool(running) if loaded is not None else None,
+                           active=row['name'] == active, inactive=row['name'] != active,
+                           being_used=memory.uses.get(row['name'], 0) > 0)
             raw_details = row.get('details') if isinstance(row.get('details'), dict) else {}
             row['details'] = {k: raw_details.get(k) for k in
                               ('family', 'parameter_size', 'quantization_level', 'format')}
             rows.append(row)
         with _last_lock:
             last = dict(_last) if _last else None
-        active = self.active
         return {'models': rows, 'default': active, 'active': active,
+                'generation': self.generation(),
                 'last_response': last, 'local_only': True, 'placement_source': 'Ollama /api/ps'}
 
     def native_tools_supported(self, name):

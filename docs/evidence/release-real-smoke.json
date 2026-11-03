@@ -1,0 +1,158 @@
+{
+  "gemma-real-smoke": {
+    "date": "2026-11-03",
+    "kind": "real local Ollama dialog; text input; no microphone/TTS",
+    "question": "Что такое RSA-шифрование?",
+    "fresh_dialog": true,
+    "digest": "6114515d63c17436a7c0417d82820ac65ad643e2806c5a3c89cb62846436ed0b",
+    "settings": {
+      "model": "gemma4:12b",
+      "reasoning": "off",
+      "context_tokens": 4096,
+      "response_tokens": 384,
+      "keep_alive_seconds": 300,
+      "temperature": 0.2
+    },
+    "latency_ms": 5557.13,
+    "result": {
+      "answer": "RSA — это асимметричный алгоритм шифрования, основанный на сложности факторизации больших целых чисел на простые множители. Он использует пару ключей: публичный для шифрования данных и приватный для их расшифрования. Этот метод широко применяется для безопасной передачи ключей и создания цифровых подписей. Безопасность алгоритма обеспечивается тем, что умножение двух больших простых чисел легко, а обратный процесс — вычислительно сложен.",
+      "engine": "ollama",
+      "actions": [],
+      "action_results": [],
+      "latency_ms": 5556,
+      "action_ms": 0,
+      "llm_ms": 5556,
+      "commentary": null,
+      "generation": {
+        "model": "gemma4:12b",
+        "reasoning": "off",
+        "context_tokens": 4096,
+        "response_tokens": 384,
+        "keep_alive_seconds": 300,
+        "temperature": 0.2
+      },
+      "display_text": "RSA — это асимметричный алгоритм шифрования, основанный на сложности факторизации больших целых чисел на простые множители. Он использует пару ключей: публичный для шифрования данных и приватный для их расшифрования. Этот метод широко применяется для безопасной передачи ключей и создания цифровых подписей. Безопасность алгоритма обеспечивается тем, что умножение двух больших простых чисел легко, а обратный процесс — вычислительно сложен.",
+      "speech_text": "RSA — это асимметричный алгоритм шифрования, основанный на сложности факторизации больших целых чисел на простые множители. Он использует пару ключей: публичный для шифрования данных и приватный для их расшифрования. Этот метод широко применяется для безопасной передачи ключей и создания цифровых подписей. Безопасность алгоритма обеспечивается тем, что умножение двух больших простых чисел легко, а обратный процесс — вычислительно сложен.",
+      "structured_result": {
+        "actions": []
+      },
+      "context_budget": {
+        "method": "conservative_utf8_estimate",
+        "estimated_input_tokens": 1370,
+        "input_allowance": 3456,
+        "dropped_history_messages": 0,
+        "shortened_sources": 0,
+        "truncated": false
+      },
+      "metrics": {
+        "actual_model": "gemma4:12b",
+        "tokens_per_second": 98.022,
+        "eval_count": 105,
+        "load_ms": 4046.5,
+        "ollama_ms": 5368.5
+      },
+      "actual_model": "gemma4:12b"
+    },
+    "memory": {
+      "source": "Ollama /api/ps after answer, not peak",
+      "value": {
+        "models": [
+          {
+            "name": "gemma4:12b",
+            "model": "gemma4:12b",
+            "size": 1145716079,
+            "digest": "6114515d63c17436a7c0417d82820ac65ad643e2806c5a3c89cb62846436ed0b",
+            "details": {
+              "parent_model": "",
+              "format": "gguf",
+              "family": "gemma4",
+              "families": [
+                "gemma4"
+              ],
+              "parameter_size": "11.9B",
+              "quantization_level": "Q4_K_M"
+            },
+            "expires_at": "2026-11-03T21:00:44.2685621+03:00",
+            "size_vram": 1145716079,
+            "context_length": 4096,
+            "runner": "llamacpp"
+          }
+        ]
+      }
+    },
+    "comparison": "NOT TESTED: ministral-3:8b not installed"
+  },
+  "notepad-real-smoke": {
+    "date": "2026-11-03",
+    "kind": "real Windows Python Notepad adapter; no EXE test",
+    "target": "C:\\Windows\\System32\\notepad.exe",
+    "before": {
+      "state": "absent",
+      "processes": [],
+      "windows": 0
+    },
+    "open": {
+      "success": true,
+      "action": "open_app",
+      "resolved_target": "notepad",
+      "execution_status": "process_created",
+      "observed_state": null,
+      "error": null,
+      "mode": "REAL",
+      "duration_ms": 4,
+      "status_text": "Запуск notepad начат; появление окна пока не подтверждено.",
+      "data": null
+    },
+    "elapsed_ms": 6.417,
+    "after": {
+      "state": "unavailable",
+      "processes": [
+        [
+          6804,
+          134382021808850030
+        ]
+      ],
+      "windows": 0
+    },
+    "safe_close": {
+      "success": false,
+      "action": "apps.close_window_safely",
+      "resolved_target": "notepad",
+      "execution_status": "unsupported_safe_close",
+      "observed_state": null,
+      "error": "Не могу гарантировать сохранность данных при автоматическом закрытии этого приложения. Закрой его вручную; диалоги сохранения останутся под твоим контролем.",
+      "mode": "REAL",
+      "duration_ms": 0,
+      "status_text": "Не могу гарантировать сохранность данных при автоматическом закрытии этого приложения. Закрой его вручную; диалоги сохранения останутся под твоим контролем.",
+      "data": null
+    },
+    "after_delayed": {
+      "state": "visible_window",
+      "processes": [
+        [
+          6804,
+          134382021808850030
+        ]
+      ],
+      "windows": 3
+    },
+    "activation": {
+      "success": false,
+      "action": "apps.focus_window",
+      "resolved_target": "notepad",
+      "execution_status": "activation_denied",
+      "observed_state": null,
+      "error": "Windows не разрешила вывести окно на передний план. Выбери его через панель задач.",
+      "mode": "REAL",
+      "duration_ms": 0,
+      "status_text": "Windows не разрешила вывести окно на передний план. Выбери его через панель задач.",
+      "data": {
+        "window_id": "win-798a449d5f9c4d80b44d5ed724e48213",
+        "app_id": "notepad",
+        "application": "notepad",
+        "close_supported": false
+      }
+    },
+    "safe_close_note": "Safe refusal; no close or force kill performed. New blank Notepad remains open."
+  }
+}

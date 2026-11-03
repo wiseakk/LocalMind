@@ -4,9 +4,11 @@ import json
 from .paths import APP_ROOT, MODELS, ordinary_tree
 
 
-def verify_resources(kind):
+def verify_resources(kind, model='small'):
     manifest = json.loads((APP_ROOT / 'config/voice_resources.json').read_text(encoding='utf-8'))
-    prefix = 'whisper/' if kind == 'asr' else 'silero/'
+    if kind == 'asr' and model not in ('base', 'small', 'medium'):
+        raise ValueError('Неизвестная модель распознавания.')
+    prefix = 'whisper/' + model + '/' if kind == 'asr' else 'silero/'
     for asset in manifest['assets']:
         if not asset['path'].startswith(prefix):
             continue

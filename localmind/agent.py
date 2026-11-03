@@ -494,12 +494,13 @@ def ollama_chat(messages: list, tools: list, *, response_format: dict | None = N
         'stream': callback is not None,
         'think': reasoning,
         'keep_alive': config.keep_alive_seconds,
-        'options': {'temperature': 0.2, 'num_predict': config.response_tokens, 'num_ctx': config.context_tokens},
+        'options': {'temperature': config.temperature, 'num_predict': config.response_tokens, 'num_ctx': config.context_tokens},
     }
     if response_format is not None:
         body['format'] = response_format
     # Serialize inference; Ollama schedules placement. Never unload other workloads.
-    with _inference_slot(), httpx.Client(timeout=httpx.Timeout(30, connect=3), trust_env=False) as client:
+    from .model_memory import memory
+    with _inference_slot(), memory.using(config.model), httpx.Client(timeout=httpx.Timeout(30, connect=3), trust_env=False) as client:
         tags = client.get(f'{base_url}/api/tags')
         tags.raise_for_status()
         installed = next((m for m in tags.json().get('models', []) if m.get('name') == config.model), None)
@@ -541,7 +542,7 @@ def ollama_chat(messages: list, tools: list, *, response_format: dict | None = N
                 prefix = json_answer_prefix(content)
                 # Inspect the opening before exposing any conversational text.
                 # Thinking is a separate field and is deliberately never emitted.
-                if re.search(r'<\s*/?\s*think\b|^\s*(?:хорошо[,!.]?\s+)?(?:мне\s+нужно|я\s+(?:должен|должна|буду)|нужно\s+(?:объяснить|ответить)|начну\s+с)', prefix, re.I):
+                if re.search(r'<\s*/?\s*think\b|<\|(?:channel|think)\b|<channel\|>|^\s*(?:хорошо[,!.]?\s+)?(?:мне\s+нужно|я\s+(?:должен|должна|буду)|нужно\s+(?:объяснить|ответить)|начну\s+с)', prefix, re.I):
                     raise ValueError('Self-instructions in dialogue')
                 limit = LENGTHS.get(_response_style.get(), LENGTHS['normal'])[1]
                 prefix = prefix[:limit]
@@ -1052,7 +1053,7 @@ def _dialogue_answer(prepared: PreparedReply) -> str:
         raise ValueError('Missing dialogue answer')
     answer = data['answer'].strip()
     answer.encode('utf-8', errors='strict')
-    if re.search(r'<\s*/?\s*think\b|^\s*(?:хорошо[,!.]?\s+)?(?:мне\s+нужно|я\s+(?:должен|должна|буду)|нужно\s+(?:объяснить|ответить)|начну\s+с)', answer, re.I):
+    if re.search(r'<\s*/?\s*think\b|<\|(?:channel|think)\b|<channel\|>|^\s*(?:хорошо[,!.]?\s+)?(?:мне\s+нужно|я\s+(?:должен|должна|буду)|нужно\s+(?:объяснить|ответить)|начну\s+с)', answer, re.I):
         raise ValueError('Dialogue contains self-instructions')
     return _trim_answer(answer, LENGTHS[prepared.response_length][1])
 

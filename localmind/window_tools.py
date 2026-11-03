@@ -314,7 +314,15 @@ class WindowTools:
             return launcher(app_id)
         window_id, error = self.select_app_window(app_id)
         if window_id:
-            return self.focus_window(window_id)
+            focused = self.focus_window(window_id)
+            if focused.execution_status not in ('observed', 'activation_denied', 'restore_pending'):
+                return focused
+            return replace(focused, success=True, action='apps.open', execution_status='already_running',
+                observed_state='foreground_window' if focused.success else 'visible_window', error=None,
+                status_text=focused.status_text if focused.success else 'Приложение уже открыто. ' + focused.status_text,
+                data={**(focused.data or {}), 'process_created': False, 'process_running': True,
+                      'window_found': True, 'window_activated': focused.success,
+                      'activation_status': focused.execution_status, 'activation_error': focused.error})
         if error.execution_status != 'window_pending':
             return error
         check_cancelled()
@@ -323,8 +331,21 @@ class WindowTools:
             return launched
         check_cancelled()
         focused = self.focus_app(app_id, timeout=10.0, expected_target=original)
-        return replace(focused, action='apps.open',
-                       data={**(focused.data or {}), 'launch_status': launched.execution_status})
+        # Launch and foreground activation are independent outcomes. A denied
+        # SetForegroundWindow must never erase a successful CreateProcess or
+        # suggest a retry that starts another instance. Revalidation failures
+        # still prevent focus and remain visible in the activation diagnostics.
+        found = True if focused.data and focused.data.get('window_id') else None
+        if focused.execution_status == 'window_timeout':
+            found = False
+        return replace(launched, action='apps.open',
+            observed_state='foreground_window' if focused.success else 'visible_window' if found else launched.observed_state,
+            status_text=focused.status_text if focused.success else launched.status_text + ' ' + focused.status_text,
+            data={**(launched.data or {}), **(focused.data or {}), 'launch_status': launched.execution_status,
+                  'process_created': launched.execution_status == 'process_created',
+                  'process_running': True if focused.success or found or launched.observed_state in ('visible_window', 'background') else None,
+                  'window_found': True if focused.success else found, 'window_activated': focused.success,
+                  'activation_status': focused.execution_status, 'activation_error': focused.error})
 
     def focus_app(self, app_id, timeout=4.0, *, expected_target=None):
         """Discover after authorization; support delayed and existing-instance windows.
@@ -412,9 +433,10 @@ class WindowTools:
                                if state == 'foreground_denied' else
                                'Окно осталось свёрнутым после запроса восстановления. Открой его через панель задач.'
                                if state == 'restore_pending' else 'Windows отклонила запрос к выбранному окну.')
-                    return refused(action, app.id, message,
+                    return replace(refused(action, app.id, message,
                                    status='activation_denied' if state == 'foreground_denied' else
-                                   'restore_pending' if state == 'restore_pending' else 'inspection_unavailable')
+                                   'restore_pending' if state == 'restore_pending' else 'inspection_unavailable'),
+                                   data=facts)
             except (AppError, OSError, ValueError, AttributeError):
                 return refused(action, selection.app.id, 'Не удалось повторно проверить окно и разрешение. Действие отменено.', status='unavailable')
 

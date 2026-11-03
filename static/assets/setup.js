@@ -22,22 +22,28 @@
       const state=await api('');content.replaceChildren();
       for(const row of state.voice){
         const card=document.createElement('div');card.className='model-card';
-        const text=document.createElement('p');text.textContent=(row.kind==='asr'?'Распознавание речи':'Озвучка · Silero xenia')+' — '+(labels[row.state]||row.state);card.append(text);
+        const text=document.createElement('p');text.textContent=(row.kind==='asr'?'Распознавание речи · '+row.model:'Озвучка · Silero xenia')+' — '+(labels[row.state]||row.state);card.append(text);
         if(!['ready','dependency_missing'].includes(row.state)){
           const button=document.createElement('button');button.className='secondary';button.textContent='Подготовить '+(row.kind==='asr'?'распознавание':'озвучку');
-          button.onclick=async()=>{button.disabled=true;try{await api('/voice',{kind:row.kind});text.textContent='Подготовка началась. Прогресс — в разделе «Загрузки». Потребуется несколько минут.';}catch(e){text.textContent=e.message;}finally{button.disabled=false;}};card.append(button);
+          button.onclick=async()=>{button.disabled=true;try{await api('/voice',{kind:row.kind,...(row.profile?{profile:row.profile}:{})});text.textContent='Подготовка началась. Прогресс — в разделе «Загрузки». Потребуется несколько минут.';}catch(e){text.textContent=e.message;}finally{button.disabled=false;}};card.append(button);
         }content.append(card);
       }
       const llm=document.createElement('p');llm.textContent=state.ollama.state==='ready'?(state.ollama.active_installed?'Нейросеть готова: '+state.ollama.active:'Выберите и установите нейросеть в разделе «Модели».'):'Ollama не отвечает. Запустите его или повторите установку LocalMind с компонентом Ollama.';content.append(llm);
       if(state.offline_model){
         const card=document.createElement('div');card.className='model-card';
-        const text=document.createElement('p');text.textContent='Модель из офлайн-комплекта · '+state.offline_model.license+'. Активный выбор не изменится.';
+        const text=document.createElement('p');text.textContent=(state.offline_model.display_name||'Лёгкая резервная/тестовая модель · Qwen 2.5 0.5B')+' · '+state.offline_model.license+'. Для проверки и работы без основной модели. Активный выбор не изменится.';
         const label=document.createElement('label');label.className='check';const accept=document.createElement('input');accept.type='checkbox';label.append(accept,' Я проверил(а) лицензию и разрешаю локальный импорт этой модели');
         const install=document.createElement('button');install.className='secondary';install.textContent='Установить модель из комплекта';
-        install.onclick=async()=>{install.disabled=true;try{await api('/offline-model',{accept_license:accept.checked});text.textContent='Импорт начат. Следите за прогрессом в «Загрузках», затем выберите модель в «Моделях».';}catch(e){text.textContent=e.message;}finally{install.disabled=false;}};
-        card.append(text,label,install);content.append(card);
+        const diskLabel=document.createElement('label');diskLabel.className='check expert-only';
+        const diskAccept=document.createElement('input');diskAccept.type='checkbox';diskLabel.append(diskAccept,' Если диск Ollama неизвестен: разрешаю импорт без проверки места');
+        const diskNote=document.createElement('p');diskNote.className='mini';
+        const free=state.offline_disk?.free;
+        diskNote.textContent=free==null?'Место на диске Ollama неизвестно. Проверьте хранилище в дополнительных настройках.':
+          'Свободно '+(free/1073741824).toFixed(2)+' GiB · требуется около '+((state.offline_model.bytes*1.1+1073741824)/1073741824).toFixed(2)+' GiB';
+        install.onclick=async()=>{install.disabled=true;try{await api('/offline-model',{accept_license:accept.checked,acknowledge_unknown_disk:diskAccept.checked&&document.documentElement.dataset.expert==='true'});text.textContent='Импорт начат. Следите за прогрессом в «Загрузках», затем выберите модель в «Моделях».';window.localmindDownloads?.open();}catch(e){text.textContent=e.message;}finally{install.disabled=false;}};
+        card.append(text,label,diskNote);if(free==null)card.append(diskLabel);card.append(install);content.append(card);
       }
-      if(first&&(state.voice.some(v=>v.state!=='ready')||state.ollama.state!=='ready'||!state.ollama.active_installed))dialog.showModal();
+      if(first&&(state.voice.some(v=>v.required!==false&&v.state!=='ready')||state.ollama.state!=='ready'||!state.ollama.active_installed))dialog.showModal();
     }catch(e){content.textContent=e.message;}
   }
   update.onclick=()=>refresh();

@@ -16,7 +16,7 @@ class Settings:
     host: str = '127.0.0.1'
     port: int = int(os.getenv('LOCALMIND_PORT', '8765'))
     key: str = os.getenv('LOCALMIND_KEY', '')
-    model: str = os.getenv('OLLAMA_MODEL', 'qwen3:4b')
+    model: str = os.getenv('OLLAMA_MODEL', 'gemma4:12b')
     ollama_url: str = os.getenv('OLLAMA_URL', 'http://127.0.0.1:11434').rstrip('/')
     demo: bool = os.getenv('DEMO_MODE', 'true').strip().lower() in ('true', '1', 'yes')
     ha_url: str = os.getenv('HOME_ASSISTANT_URL', '').rstrip('/')

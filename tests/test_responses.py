@@ -222,7 +222,8 @@ def test_qwen3_empty_think_prefill_is_request_local():
     fake_client.__enter__.return_value.stream.return_value.__enter__.return_value.iter_bytes.return_value = [b'{"message":{"content":"{}"}}']
     configuration = SimpleNamespace(ollama_url='http://127.0.0.1:11434', model='qwen3:4b')
     original = [{'role': 'user', 'content': 'test'}]
-    with mock.patch.object(agent, 'settings', configuration), \
+    with mock.patch.object(agent, 'defaults', return_value=agent.GenerationSettings(configuration.model)), \
+         mock.patch.object(agent, 'settings', configuration), \
          mock.patch.object(agent.httpx, 'Client', return_value=fake_client):
         agent.ollama_chat(original, [])
     body = fake_client.__enter__.return_value.stream.call_args.kwargs['json']

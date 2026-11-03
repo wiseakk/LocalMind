@@ -3,7 +3,7 @@ import os
 import socket
 import sys
 import threading
-from .paths import APP_ROOT, DATA_ROOT, migrate_legacy
+from .paths import APP_ROOT, DATA_ROOT, migrate_legacy, legacy_preferences_plan
 
 
 def main():
@@ -15,8 +15,16 @@ def main():
     app = QApplication(sys.argv)
     app.setApplicationName('LocalMind')
     try:
-        migrate_legacy()
-        # Import preferences only after copying the old benign settings.
+        plan = legacy_preferences_plan()
+        if plan:
+            preview = '\n'.join(row['source'] + '\n→ ' + row['target'] for row in plan)
+            if QMessageBox.question(None, 'Перенос настроек',
+                    'Найдены старые настройки. Скопировать после просмотра плана?\n'
+                    'Существующие данные и исходники сохраняются. Модели переносятся отдельно.\n\n' + preview,
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+                migrate_legacy(consent=True, reviewed_plan=plan)
+        # Load preferences only after the optional reviewed import.
         from .settings import settings
         listener = socket.socket()
         if os.name == 'nt':

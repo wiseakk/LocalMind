@@ -86,7 +86,7 @@ def test_generation_snapshot_is_frozen_and_per_request():
     with pytest.raises(FrozenInstanceError):
         first.generation.model = 'other'
     assert first.initial['generation'] == {'model': 'qwen3:4b', 'reasoning': 'on',
-        'context_tokens': 2048, 'response_tokens': 128, 'keep_alive_seconds': 0}
+        'context_tokens': 2048, 'response_tokens': 128, 'keep_alive_seconds': 0, 'temperature': 0.2}
     assert second.generation.model == 'qwen3:8b'
 
 

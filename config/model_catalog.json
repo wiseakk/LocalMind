@@ -16,5 +16,13 @@
     "max_context": 40960, "capabilities": ["chat", "tools", "reasoning"],
     "kv_layers": 32, "kv_heads": 8, "head_dim": 128,
     "metadata_date": "2026-11-01", "minimum_ollama": "0.6.6", "benchmarks": []
+  },
+  {
+    "id": "ministral-3:8b", "name": "Ministral 3 8B — необязательный кандидат", "publisher": "Mistral AI",
+    "source": "ollama", "source_url": "https://ollama.com/library/ministral-3:8b",
+    "license": "Apache-2.0", "parameters": 8920000000, "quantization": "Q4_K_M",
+    "size": 6000000000, "size_is_estimate": true, "architecture": "mistral3",
+    "max_context": 262144, "capabilities": ["chat", "tools", "vision"],
+    "metadata_date": "2026-11-03", "minimum_ollama": "0.13.1", "benchmarks": []
   }
 ]

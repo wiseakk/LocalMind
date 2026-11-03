@@ -4,6 +4,7 @@ const $ = id => document.getElementById(id);
 const history = [];
 let busy = false, recording = null, recordingStartedAt = 0, recordingTimer = null;
 let voiceBusy = false;
+let sttProfiles=[],sttDefaultApplied=false;
 let serverInstance = null;
 let conversationId = null;
 let inFlight = null;
@@ -20,7 +21,18 @@ function showError(message) { $('errorText').textContent = message; if (!$('erro
 async function checked(response) {
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
-    try { const data = await response.json(); if (typeof data.detail === 'string') message = data.detail; } catch (_) { /* bounded generic error */ }
+    try {
+      const data = await response.json();
+      if (typeof data.detail === 'string') message = data.detail;
+      else if (Array.isArray(data.detail)) {
+        const details = data.detail.slice(0, 5).filter(item => item && typeof item.msg === 'string').map(item => {
+          const location = (Array.isArray(item.loc) ? item.loc : []).slice(0, 6)
+            .filter(part => typeof part === 'string' || typeof part === 'number').map(part => String(part).slice(0, 60)).join('.');
+          return (location ? location + ': ' : '') + item.msg.slice(0, 240);
+        });
+        if (details.length) message = details.join('; ');
+      }
+    } catch (_) { /* bounded generic error */ }
     const error=Error(message);error.status=response.status;throw error;
   }
   return response;
@@ -63,7 +75,7 @@ function renderStatus(el, value) {
   for (const result of value.action_results || []) {
     const chip = document.createElement('div'); chip.className = 'action-chip' + (result.success ? '' : ' error');
     const states = {process_created:'Запуск начат; ожидаем окно', already_running:result.observed_state==='visible_window'?'Окно приложения уже открыто':'Приложение уже работает в фоне', launch_pending:'Приложение ещё запускается', observed:'Состояние подтверждено', request_accepted:'Команда принята; состояние пока не подтверждено'};
-    const target=result.resolved_target || result.requested_target || result.target || result.data?.application || result.data?.device_id || result.action || 'Действие';
+    const target=result.resolved_target || result.requested_target || result.target || result.data?.application || (result.action?.startsWith('devices.')?'Устройство':'Действие');
     const observed={on:'включено',off:'выключено',visible_window:'видимое окно',running:'процесс работает',unknown:'неизвестно'};
     const actual=result.observed_state&&result.execution_status!=='request_accepted'?' · Наблюдение: '+(observed[result.observed_state] || result.observed_state):'';
     chip.textContent = (result.mode==='DEMO'?'ДЕМО · симуляция · ':'') + target + ' · ' + (result.success ? states[result.execution_status] || result.status_text || 'Проверка завершена' : result.error || result.status_text || 'Действие не выполнено')+actual;
@@ -87,7 +99,7 @@ function renderStatus(el, value) {
       }catch(e){showError(e.message)}});chip.append(choose);
     }
   }
-  if ((value.action_results || []).length) state('Результат получен. Ожидаем комментарий…');
+  if ((value.action_results || []).length) state('Готовлю ответ…');
   $('trace').textContent = JSON.stringify(value, null, 2); scrollEnd();
 }
 function lock(value) {
@@ -115,12 +127,12 @@ async function sendText(value) {
   const userBubble=retry?.userBubble || bubble(text, 'me'); $('message').value = '';
   const el=retry?.el || bubble('', 'assistant');
   if(retry){const index=currentConversation.messages.indexOf(retry.errorMessage);if(index>=0)currentConversation.messages.splice(index,1);el.querySelector('.rendered-message').textContent='';}
-  pending(el); state('Проверка намерения и разрешений…');
+  pending(el); state('Готовлю ответ…');
   // A retry after transport loss keeps this ID, so the server never repeats the action.
   const request = retry?.request || {request_id: crypto.randomUUID(), server_instance:serverInstance, conversation_id:conversationId, text, history: history.slice(-8), actions_authorized:true,
     attachment_ids:ids,local_retrieval:Boolean($('useLocalSources')?.checked),
     response_length:$('responseLength').value, compose_actions:$('composeActions').checked,
-    model:null, reasoning:$('reasoning').value,
+    model:null, reasoning:$('reasoning').value, temperature:Number($('temperature').value),
     context_tokens:Number($('contextTokens').value),response_tokens:Number($('responseTokens').value),keep_alive_seconds:Number($('keepAlive').value)};
   const attachmentSnapshot=window.localmindAttachments?.beginSubmission(request)||[];
   const turn={request_id:request.request_id,server_instance:request.server_instance,cancelled:false,controller:null};inFlight=turn;
@@ -231,10 +243,18 @@ async function refresh() {
     }
     renderDevices(info);
     const voice=info.voice || {};
+    sttProfiles=voice.profiles||[];
+    if(!sttDefaultApplied){
+      try{const saved=localStorage.getItem('localmind.sttProfile.v1');if(sttProfiles.some(p=>p.id===saved))$('voiceProfile').value=saved;else if(voice.default_profile)$('voiceProfile').value=voice.default_profile;}catch(_){if(voice.default_profile)$('voiceProfile').value=voice.default_profile;}
+      sttDefaultApplied=true;
+    }
     for(const option of $('voiceProfile').options){
       const profile=voice.profiles?.find(p=>p.id===option.value);
-      option.disabled=option.value!=='balanced' && profile?.ready!==true;
+      option.disabled=false;
+      option.dataset.baseLabel??=option.textContent;
+      option.textContent=(profile?.label||option.dataset.baseLabel)+(profile?.ready===true?'':' · требуется подготовка');
     }
+    showSTTProfile();
     const selectedVoice=voice.voices?.find(v=>v.id===($('ttsVoice').value || 'silero-v5_6-ru'));
     $('voiceStatus').textContent=selectedVoice?.ready ? 'Ресурсы выбранного голоса найдены. Синтез выполняется локально; облачная замена отключена.' : 'Выбранный голос пока недоступен. Нажмите «Подготовить голос / восстановить». Основной голос — Silero xenia. Облачная озвучка не используется.';
     if (voice.setup) $('voiceStatus').textContent += '\n'+voice.setup;
@@ -291,6 +311,14 @@ function stageTranscript(r) {
   if(feedback.length)$('rawTranscript').textContent+='\n'+feedback.join(' ');
   $('draftReview').hidden=false; state('Текст НЕ отправлен. Проверьте и исправьте расшифровку.'); $('message').focus();
 }
+function showSTTProfile(){
+  const profile=sttProfiles.find(p=>p.id===$('voiceProfile').value);
+  if($('sttProfileDescription'))$('sttProfileDescription').textContent=profile?.description||'';
+  const measured=profile?.measurement;
+  const mib=value=>Number.isFinite(value)?(value/1048576).toFixed(0)+' МиБ':'неизвестно';
+  if($('sttProfileMeasurement'))$('sttProfileMeasurement').textContent=measured?`Последний замер worker (${measured.device}/${measured.compute_type}): RAM ${mib(measured.resources?.rss_bytes)}, VRAM ${mib(measured.resources?.vram_bytes)}, inference ${measured.inference_ms??'—'} мс. ${measured.resources?.gpu||measured.resources?.cpu||'Оборудование неизвестно'}. Замер после запроса, не пик; включает весь worker.`:'RAM, VRAM и задержка: ещё не измерены на этом компьютере.';
+}
+$('voiceProfile').addEventListener('change',()=>{try{localStorage.setItem('localmind.sttProfile.v1',$('voiceProfile').value);}catch(_){}showSTTProfile();});
 $('mic').addEventListener('click',async()=>{
   if (recording) {recording.stop(); return;}
   if (busy || voiceBusy || resetting) return;
@@ -304,6 +332,9 @@ $('mic').addEventListener('click',async()=>{
     const type=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'].find(t=>MediaRecorder.isTypeSupported(t));
     if(!type)throw Error('Нет поддерживаемого аудиоформата');
     const mr=new MediaRecorder(stream,{mimeType:type}),chunks=[];let bytes=0;
+    const settings=stream.getAudioTracks?.()[0]?.getSettings?.()||{};
+    // Only technical capture settings: no device IDs, labels or retained audio.
+    const capture={container_codec:mr.mimeType||type,requested_constraints:'audio:true (browser defaults)',...Object.fromEntries(['sampleRate','channelCount','echoCancellation','noiseSuppression','autoGainControl','latency'].filter(k=>settings[k]!==undefined).map(k=>[k,settings[k]]))};
     recording=mr;recordingStartedAt=performance.now();$('mic').classList.add('active');window.localmindIcon?.($('mic'),'stop');$('mic').setAttribute('aria-pressed','true');$('mic').setAttribute('aria-label','Остановить запись');$('send').disabled=true;
     voiceBusy=false;$('mic').disabled=false;
     state('Слушаю… Нажмите ■, чтобы закончить. Максимум 30 секунд.');
@@ -322,7 +353,8 @@ $('mic').addEventListener('click',async()=>{
         state('Обрабатываю русскую речь на компьютере…');window.localmindScene?.setActivity('transcribing');
         const r=await(await checked(await fetch('/api/transcribe',{method:'POST',headers:headers(),body:form,signal:controller.signal}))).json();
         if(pageClosing||captureEpoch!==voiceEpoch)return;
-        stageTranscript(r); $('trace').textContent=JSON.stringify({stt:r},null,2);
+        stageTranscript(r); $('trace').textContent=JSON.stringify({stt:r,capture},null,2);
+        if(r.resources){const profile=sttProfiles.find(p=>p.id===r.profile);if(profile)profile.measurement=r;showSTTProfile();}
       }catch(error){if(!pageClosing&&captureEpoch===voiceEpoch){state('Распознавание недоступно. Используйте текстовый ввод.');showError(error.message)}}
       finally{clearTimeout(timeout);if(transcriptController===controller)transcriptController=null;voiceBusy=false;$('mic').disabled=busy||resetting;$('send').disabled=busy||resetting;window.localmindScene?.setActivity(busy?'generating':'idle');}
     };
@@ -413,6 +445,7 @@ resetConversation.addEventListener('click',async()=>{
     window.localmindAttachments?.clearConversation(conversationId || currentConversation.id);
     window.localmindAttachments?.setConversation(currentConversation.id);
     conversationId=null;history.length=0;currentConversation.messages=[];currentConversation.draft='';currentConversation.serverId=null;currentConversation.transcript='';currentConversation.archived=false;
+    currentConversation.results=[];currentConversation.sources=[];currentConversation.retryTurn=null;
     window.localmindScene?.reset();$('draftReview').hidden=true;$('message').value='';$('rawTranscript').textContent='';$('thread').replaceChildren();$('welcome').hidden=false;updateConversationTitle();saveConversation();state('Новый разговор');
   }catch(error){showError(error.message);}
   finally{resetting=false;resetConversation.disabled=false;$('send').disabled=busy||voiceBusy||Boolean(recording);$('mic').disabled=busy||voiceBusy;}

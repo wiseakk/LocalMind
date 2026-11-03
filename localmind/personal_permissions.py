@@ -49,11 +49,12 @@ def local_user_identity():
 
 def ordinary_path(path):
     """Exclude secrets by components even when the owner approves a whole drive."""
-    from .paths import APP_ROOT, DATA_ROOT
+    from .paths import APP_ROOT, DATA_ROOT, DEFAULT_ROOT
+    from .storage import protected_roots
     candidate = Path(path)
     # An approved parent (even the whole user profile) must never let an LLM
     # rewrite its own grants, HA connection, model manifest, runtime or UI.
-    protected = (DATA_ROOT, *(APP_ROOT / name for name in
+    protected = (DATA_ROOT, DEFAULT_ROOT.resolve(), *protected_roots(), *(APP_ROOT / name for name in
         ('localmind', 'config', 'static', 'runtime', 'models', '.voice-envs',
          'offline-assets', 'offline-llm', 'results/private')))
     if any(candidate == root or root in candidate.parents for root in protected):

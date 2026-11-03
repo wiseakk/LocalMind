@@ -7,10 +7,14 @@ test('first-run repair and the common download queue are explicit and survive a 
     const request=route.request(),path=new URL(request.url()).pathname;
     if(request.method()==='POST')mutations.push(path);
     const json=data=>route.fulfill({json:data});
-    if(path==='/api/setup')return json({voice:[{kind:'asr',state:'model_missing'},{kind:'tts',state:'model_missing'}],ollama:{state:'ready',active_installed:true}});
+    if(path==='/api/setup')return json({voice:[
+      {kind:'asr',profile:'cpu-fast',model:'base',required:false,state:'model_missing'},
+      {kind:'asr',profile:'balanced',model:'small',required:true,state:'model_missing'},
+      {kind:'asr',profile:'gpu-quality',model:'medium',required:false,state:'model_missing'},
+      {kind:'tts',model:'Silero · xenia',required:true,state:'model_missing'}],ollama:{state:'ready',active_installed:true}});
     if(path==='/api/setup/voice'){
-      expect(request.postDataJSON()).toEqual({kind:'asr'});
-      job={id:'a'.repeat(32),kind:'asr',model:'Русская речь · small',status:'downloading',completed:25,total:100};return json(job);
+      expect(request.postDataJSON()).toEqual({kind:'asr',profile:'balanced'});
+      job={id:'a'.repeat(32),kind:'asr',profile:'balanced',model:'Русская речь · small',destination:'C:/LocalMind/models/whisper/small',status:'downloading',completed:25,total:100};return json(job);
     }
     if(path==='/api/downloads')return json({jobs:job?[job]:[]});
     if(path.endsWith('/cancel')){job.status='cancelled';return json(job);}
@@ -20,7 +24,7 @@ test('first-run repair and the common download queue are explicit and survive a 
     return json({apps:[],sources:[],folder:{allowed:false},jobs:[]});
   });
   await page.goto('/');await expect(page.locator('#setupDialog')).toBeVisible();expect(mutations).toEqual([]);
-  await page.getByRole('button',{name:'Подготовить распознавание',exact:true}).click();
+  await page.locator('#setupDialog .model-card').filter({hasText:'Распознавание речи · small'}).getByRole('button',{name:'Подготовить распознавание',exact:true}).click();
   expect(mutations).toEqual(['/api/setup/voice']);
   await page.getByRole('button',{name:'Продолжить в приложении'}).click();
   await page.locator('#downloadsOpen').click();await expect(page.locator('#downloadsList progress')).toHaveJSProperty('value',25);

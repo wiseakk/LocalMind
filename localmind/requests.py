@@ -148,5 +148,10 @@ class RequestStore:
             entry.cancelled.set()
             return True
 
+    def running(self):
+        with self._lock:
+            # finish_turn can persist settings/audit after final.set_result.
+            return any(entry.finished is None for entry in self._entries.values())
+
     def close(self):
         self._pool.shutdown(wait=True)

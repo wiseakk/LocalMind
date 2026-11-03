@@ -91,6 +91,7 @@ class ChatRequest(BaseModel):
     server_instance: str | None = Field(default=None, max_length=32)
     model: str | None = Field(default=None, min_length=1, max_length=240, pattern=r'^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$')
     reasoning: Literal['off', 'on', 'auto'] = 'off'
+    temperature: float = Field(default=0.2, ge=0, le=2, allow_inf_nan=False)
     context_tokens: int = Field(default=4096, ge=1024, le=8192)
     response_tokens: int = Field(default=768, ge=64, le=2048)
     keep_alive_seconds: int = Field(default=300, ge=0, le=900)
@@ -226,7 +227,18 @@ async def local_boundary(request: Request, call_next):
             return JSONResponse({'detail':'Превышено время загрузки запроса'},status_code=408)
         finally:
             _body_slots.release()
-    response = await call_next(request)
+    from . import storage
+    mutating = request.method in ('POST', 'PUT', 'PATCH', 'DELETE') and request.url.path != '/api/setup/storage/apply'
+    if mutating:
+        try:
+            storage.begin_mutation()
+        except ValueError as exc:
+            return JSONResponse({'detail': str(exc)}, status_code=409)
+    try:
+        response = await call_next(request)
+    finally:
+        if mutating:
+            storage.end_mutation()
     response.headers['Content-Security-Policy'] = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'none'; connect-src 'self'; media-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
     response.headers['X-Content-Type-Options']='nosniff'
     response.headers['Referrer-Policy']='no-referrer'
@@ -250,14 +262,21 @@ def _entry(data: ChatRequest):
     if data.server_instance is not None and data.server_instance != SERVER_INSTANCE:
         raise HTTPException(409,'Сервер перезапущен. Автоматическое повторение действия отменено; проверьте его состояние вручную.')
     payload=data.model_dump()
+    controls = {'reasoning', 'context_tokens', 'response_tokens', 'keep_alive_seconds', 'temperature'}
     try:
-        generation = GenerationSettings(data.model or manager.active, data.reasoning, data.context_tokens,
-                                        data.response_tokens, data.keep_alive_seconds)
+        model = data.model or manager.active
+        values = manager.generation(model) or GenerationSettings(model).to_dict()
+        for name in controls & data.model_fields_set:
+            values[name] = getattr(data, name)
+        generation = GenerationSettings(**values)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     # Wire identity is stable across a server selection change. The first
     # accepted closure captures immutable effective settings for all replays.
     payload.pop('request_id')
+    # Omitting a control uses the saved per-model value. Explicitly supplying
+    # its API default is a different request, even if model_dump is identical.
+    payload['generation_overrides'] = sorted(controls & data.model_fields_set)
     fingerprint=hashlib.sha256(json.dumps(payload,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
     def prepare_turn():
         # Client history remains accepted for wire compatibility, but is never
@@ -595,14 +614,15 @@ def model_hardware():
 
 
 @app.post('/api/transcribe')
-async def transcribe(audio:Annotated[UploadFile,File()], profile:Annotated[str,Form()]='balanced',
+async def transcribe(audio:Annotated[UploadFile,File()], profile:Annotated[str | None,Form()]=None,
                      x_localmind_key:Annotated[str | None,Header()]=None):
     authorize(x_localmind_key)
     from pathlib import Path
     try:
         data=await audio.read(MAX_UPLOAD_BYTES+1)
         result=await asyncio.to_thread(transcribe_audio,data,Path(audio.filename or '').suffix.lower(),profile)
-        return result
+        from .voice_diagnostics import normalize_stt_payload
+        return normalize_stt_payload(result)
     except VoiceError as exc:
         raise HTTPException(exc.status_code,exc.detail) from exc
     finally:
@@ -650,6 +670,8 @@ def diagnostics(x_localmind_key:Annotated[str | None,Header()]=None):
     from .agent import _local_ollama_url
     status={'ollama_reachable':False,'model_installed':False,'voice':voice_status(), 'demo':is_demo(),
             'gpu':'Не проверено: профиль GPU не означает наличие CUDA'}
+    from .asr_worker import worker as asr_worker
+    status['asr_worker'] = asr_worker.diagnostics()
     try:
         url=_local_ollama_url()
         with httpx.Client(timeout=3,trust_env=False) as client:

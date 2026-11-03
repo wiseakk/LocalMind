@@ -32,6 +32,7 @@
       }
       activeSelection = data.active || data.default || '';
       select.value = activeSelection;
+      window.dispatchEvent(new CustomEvent('localmind-model-selected',{detail:{...data.generation,model:activeSelection}}));
       for (const id of ['benchmarkModelA','benchmarkModelB']) {
         const chooser = $(id); if (!chooser) continue;
         const previous = chooser.value; chooser.replaceChildren();
@@ -55,9 +56,11 @@
         item.textContent = `${row.name}\nСемейство: ${unknown(row.details?.family)} · параметры: ${unknown(row.details?.parameter_size)} · ${unknown(row.details?.quantization_level)}\n` +
           `Размер: ${bytes(row.size)} · возможности: ${(row.capabilities || []).join(', ') || 'неизвестно'}\n` +
           `Контекст max / загружен: ${unknown(row.max_context)} / ${unknown(row.context_length)}\n` +
-          `Размещение /api/ps: ${unknown(row.placement)} · VRAM модели: ${bytes(row.size_vram)}${row.warning ? '\n' + row.warning : ''}`;
+          `Размещение /api/ps: ${unknown(row.placement)} · VRAM модели: ${bytes(row.size_vram)}\n` +
+          `Loaded: ${unknown(row.loaded)} · Active: ${unknown(row.active)} · Inactive: ${unknown(row.inactive)} · Используется запросом LocalMind: ${unknown(row.being_used)}${row.warning ? '\n' + row.warning : ''}`;
         const card=document.createElement('article');card.className='model-card';
-        const label=document.createElement('p');label.textContent=row.name+' · '+bytes(row.size)+(row.name===activeSelection?' · Активная':'');
+        const label=document.createElement('p');label.textContent=row.name+' · '+bytes(row.size)+(row.name===activeSelection?' · Активная':'')+
+          (row.name==='localmind-offline:1.0'||/^qwen2\.5:0\.5b(?:-|$)/i.test(row.name)?' · лёгкая резервная/тестовая модель':'');
         item.classList.add('expert-only');card.append(label,item);list.append(card);
       }
       if (data.last_response) observe(data.last_response);
@@ -124,40 +127,32 @@
       const accept = document.createElement('input'); accept.type = 'checkbox';
       consent.append(accept, document.createTextNode('Проверил(а) лицензию и разрешаю загрузить этот вариант'));
       const diskConsent = document.createElement('label'); diskConsent.className = 'check';
+      diskConsent.classList.add('expert-only');
       const diskAccept = document.createElement('input'); diskAccept.type = 'checkbox';
-      diskConsent.append(diskAccept, document.createTextNode('Свободное место не удалось проверить. Разрешаю начать загрузку с этим предупреждением'));
+      diskConsent.append(diskAccept, document.createTextNode('Место на диске неизвестно. Разрешаю начать загрузку'));
+      const diskNote=document.createElement('p');diskNote.className='mini';
+      diskNote.textContent=!row.size?'Размер модели неизвестен. Обновите карточку или выберите другой вариант.':row.disk?.free==null?'Место на диске не подтверждено. Настройте хранилище Ollama; ручное разрешение доступно в экспертном режиме.':'Свободно '+bytes(row.disk.free)+' · требуется около '+bytes(row.size*1.1+1073741824);
       const pull = document.createElement('button'); pull.className = 'secondary'; pull.textContent = 'Установить';
-      pull.disabled = row.compatibility === 'blocked';
+      pull.disabled = row.compatibility === 'blocked'||!row.size;
       pull.addEventListener('click', async () => {
         pull.disabled = true;
         try {
           await api('/downloads', {source: row.source, identity: row.id, quantization: row.quantization,
-            context: Number($('contextTokens').value), accept_license: accept.checked, acknowledge_unknown_disk: diskAccept.checked, fingerprint: row.fingerprint});
-          status.textContent = 'Загрузка начата. Активная модель сохранена.'; await loadJobs();
+            context: Number($('contextTokens').value), accept_license: accept.checked,
+            acknowledge_unknown_disk: diskAccept.checked&&document.documentElement.dataset.expert==='true', fingerprint: row.fingerprint});
+          status.textContent = 'Загрузка начата. Активная модель сохранена.'; await resumePolling();window.localmindDownloads?.open();
         } catch (error) { status.textContent = error.message; }
-        finally { pull.disabled = row.compatibility === 'blocked'; }
+        finally { pull.disabled = row.compatibility === 'blocked'||!row.size; }
       });
-      card.append(heading, source, info, consent, diskConsent, pull); output.append(card);
+      card.append(heading, source, info, consent, diskNote);
+      if(row.disk?.free==null&&row.size>0)card.append(diskConsent);
+      card.append(pull);output.append(card);
     }
   }
   async function loadJobs() {
     try {
-      const data = await api('/downloads'); jobs.replaceChildren();
-      for (const job of data.jobs || []) {
-        const item = document.createElement('div'); item.className = 'model-card mini';
-        const text = document.createElement('pre');
-        text.textContent = `${job.model} · ${job.status}\n` + Object.entries(job.layers || {}).map(([digest, layer]) =>
-          `${digest.slice(0, 20)}: ${bytes(layer.completed)} / ${bytes(layer.total)} (${(100 * layer.completed / layer.total).toFixed(1)}%)`).join('\n') +
-          (job.error ? '\n' + job.error : '') + '\nОтмена закрывает поток; остановка внутри Ollama может быть не подтверждена.';
-        item.append(text);
-        if (['starting','downloading','verifying'].includes(job.status)) {
-          const cancel = document.createElement('button'); cancel.textContent = 'Отменить поток'; cancel.className = 'secondary';
-          cancel.addEventListener('click', async () => { try { await api('/downloads/' + job.id + '/cancel', {}); await loadJobs(); } catch (e) { status.textContent = e.message; } });
-          item.append(cancel);
-        }
-        jobs.append(item);
-      }
-      return (data.jobs || []).some(j => ['starting','downloading','verifying','cancelling'].includes(j.status));
+      const data = await api('/downloads');
+      return window.localmindDownloads?.renderInto(jobs,data.jobs||[])||false;
     } catch (e) { status.textContent = e.message; return false; }
   }
   registry.addEventListener('click', async () => {
@@ -180,16 +175,42 @@
     } catch (e) { status.textContent = e.message; }
     finally { search.disabled = false; }
   });
-  refreshJobs.addEventListener('click', loadJobs);
-  // Poll local job status only while settings are visible, never discover or
-  // start/retry a download automatically. Stop timers with the dialog.
-  let pollTimer;
-  async function poll() {
-    if (!$('settingsDialog').open || document.hidden) return;
-    await loadJobs(); await refreshHardware(); pollTimer = setTimeout(poll, 2500);
+  // The catalog is moved into modelsDialog by product.js. Observe its actual
+  // containing dialog, including the legacy settings panel, rather than an opener.
+  let pollTimer=null, pendingJobs=null, pollGeneration=0;
+  const jobsVisible=()=>Boolean(root.closest('dialog')?.open)&&!document.hidden&&!root.closest('[hidden]')&&!$('downloadsDialog')?.open;
+  function stopPolling(){pollGeneration++;clearTimeout(pollTimer);pollTimer=null;}
+  async function poll(){
+    if(pendingJobs)return pendingJobs;
+    if(!jobsVisible())return;
+    clearTimeout(pollTimer);pollTimer=null;
+    const current=pollGeneration;
+    pendingJobs=(async()=>{
+      const active=await loadJobs();
+      if(active&&current===pollGeneration&&jobsVisible())await refreshHardware();
+      return active;
+    })();
+    try{
+      const active=await pendingJobs;
+      if(active&&current===pollGeneration&&jobsVisible())pollTimer=setTimeout(poll,2500);
+    }finally{pendingJobs=null;}
   }
-  $('settingsOpen').addEventListener('click', () => { clearTimeout(pollTimer); pollTimer = setTimeout(poll, 100); });
-  $('settingsDialog').addEventListener('close', () => clearTimeout(pollTimer));
+  async function resumePolling(){
+    stopPolling();const current=pollGeneration;
+    if(pendingJobs)await pendingJobs;
+    if(current===pollGeneration&&jobsVisible())return poll();
+  }
+  refreshJobs.addEventListener('click', resumePolling);
+  window.addEventListener('localmind-downloads-changed',()=>{if(jobsVisible())resumePolling();});
+  let wasVisible=false;
+  function updatePolling(){
+    const visible=jobsVisible();
+    if(visible===wasVisible)return;
+    wasVisible=visible;
+    if(visible)resumePolling();else stopPolling();
+  }
+  new MutationObserver(updatePolling).observe(document.body,{subtree:true,attributes:true,attributeFilter:['open','hidden']});
+  document.addEventListener('visibilitychange',updatePolling);
 
   const benchmarkRoot = document.createElement('section'); benchmarkRoot.className = 'side-section expert-only';
   const benchTitle = document.createElement('h3'); benchTitle.textContent = 'Локальный тест моделей';

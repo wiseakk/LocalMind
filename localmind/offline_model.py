@@ -3,6 +3,7 @@ import hashlib
 import json
 import re
 import threading
+import time
 import uuid
 import httpx
 from .paths import APP_ROOT, ordinary_tree
@@ -26,16 +27,33 @@ def manifest():
     return data
 
 
-def start(accept_license):
+def artifact_fingerprint(data):
+    return hashlib.sha256(json.dumps({key: data.get(key) for key in
+        ('model', 'bytes', 'sha256', 'license')}, sort_keys=True).encode()).hexdigest()
+
+
+def start(accept_license, *, expected_artifact=None, acknowledge_unknown_disk=False, retry=False):
     data = manifest()
     if not data or accept_license is not True:
         raise ValueError('Подтвердите лицензию модели из офлайн-комплекта.')
+    fingerprint = artifact_fingerprint(data)
+    if retry and fingerprint != expected_artifact:
+        raise ValueError('Комплект или лицензия изменились. Подтвердите актуальную карточку.')
+    from .model_catalog import disk_status, GIB
+    disk = disk_status()
+    if disk['free'] is None and not acknowledge_unknown_disk:
+        raise ValueError('Не удалось проверить диск Ollama. Подтверждение доступно в экспертном режиме.')
+    if disk['free'] is not None and disk['free'] < data['bytes'] * 1.1 + GIB:
+        raise ValueError('Недостаточно места в хранилище Ollama.')
     from .model_manager import manager
     if manager.active == data['model']:
         raise ValueError('Активная модель не перезаписывается импортом. Сначала выберите другую модель.')
     key, event = uuid.uuid4().hex, threading.Event()
     job = {'id': key, 'kind': 'llm_offline', 'model': data['model'], 'status': 'starting', 'layers': {},
-           'total': data['bytes'], 'completed': 0, 'error': None}
+           'display_name': data.get('display_name', 'Лёгкая резервная/тестовая модель · Qwen 2.5 0.5B'),
+           'destination': disk.get('path'), 'destination_source': disk.get('status'),
+           'accepted_artifact': fingerprint, 'acknowledge_unknown_disk': acknowledge_unknown_disk,
+           'created_at': time.time(), 'total': data['bytes'], 'completed': 0, 'error': None}
     with _lock:
         store.insert(job)
         _controls[key] = event
@@ -62,6 +80,8 @@ def _import(key, data, event):
     from .agent import _local_ollama_url
     from .model_manager import installed_detail
     try:
+        if event.is_set():
+            raise InterruptedError()
         source = ordinary_tree(APP_ROOT / 'offline-llm/model.gguf')
         with source.open('rb') as stream:
             if stream.read(4) != b'GGUF' or source.stat().st_size != data['bytes']:
@@ -69,6 +89,8 @@ def _import(key, data, event):
             stream.seek(0)
             if hashlib.file_digest(stream, 'sha256').hexdigest() != data['sha256']:
                 raise ValueError('Контрольная сумма GGUF не совпадает')
+            if event.is_set():
+                raise InterruptedError()
             stream.seek(0)
             def chunks():
                 sent = 0
@@ -93,8 +115,12 @@ def _import(key, data, event):
                 else:
                     check.raise_for_status()
                     store.update(key, completed=data['bytes'])
+                if event.is_set():
+                    raise InterruptedError()
                 store.update(key, status='verifying')
                 done, buffer, count = False, b'', 0
+                if event.is_set():
+                    raise InterruptedError()
                 with client.stream('POST', _local_ollama_url() + '/api/create', json={'model': data['model'],
                     'files': {'model.gguf': 'sha256:' + data['sha256']}, 'stream': True}) as result:
                     result.raise_for_status()
@@ -115,6 +141,8 @@ def _import(key, data, event):
                 if not done or buffer.strip():
                     raise ValueError('Interrupted creation stream')
         detail = installed_detail(data['model'])
+        if detail.get('weight_sha256') != data['sha256']:
+            raise ValueError('Файл несовместим: SHA-256 установленного GGUF не совпадает с офлайн-комплектом или не подтверждён Ollama.')
         with _lock:
             if event.is_set():
                 raise InterruptedError()

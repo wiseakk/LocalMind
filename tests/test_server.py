@@ -36,6 +36,39 @@ def test_remote_peer_cannot_use_forwarded_headers():
     client=TestClient(server.app,base_url='http://localhost',client=('192.168.1.2',50000))
     assert client.get('/api/info',headers={'X-Forwarded-For':'127.0.0.1','X-Forwarded-Host':'localhost'}).status_code==403
 
+
+def test_chat_uses_saved_model_controls_and_explicit_overrides(monkeypatch):
+    from localmind.generation import GenerationSettings
+    saved = GenerationSettings('gemma4:12b', reasoning='auto', context_tokens=2048,
+                               response_tokens=512, temperature=.7).to_dict()
+    monkeypatch.setattr(server.manager, 'generation', lambda model: dict(saved, model=model))
+    requests = RequestStore()
+    monkeypatch.setattr(server, 'store', requests)
+    captured = []
+
+    def prepare(*args, **kwargs):
+        captured.append(args[5])
+        return SimpleNamespace(initial={'answer': 'Ответ', 'action_results': []}, reference=None)
+
+    monkeypatch.setattr(server, 'prepare_reply', prepare)
+    monkeypatch.setattr(server, 'complete_reply', lambda prepared: dict(prepared.initial))
+    try:
+        server._entry(server.ChatRequest(text='Привет', model='gemma4:12b',
+                                        request_id='saved-controls')).final.result(timeout=2)
+        assert captured[-1].temperature == .7
+        assert captured[-1].reasoning == 'auto'
+        assert captured[-1].context_tokens == 2048
+        server._entry(server.ChatRequest(text='Привет', model='gemma4:12b',
+                                        temperature=.2)).final.result(timeout=2)
+        assert captured[-1].temperature == .2
+        assert captured[-1].context_tokens == 2048
+        with pytest.raises(HTTPException) as conflict:
+            server._entry(server.ChatRequest(text='Привет', model='gemma4:12b',
+                                            request_id='saved-controls', temperature=.2))
+        assert conflict.value.status_code == 409
+    finally:
+        requests.close()
+
 def test_same_origin_and_security_headers(client):
     response=client.get('/',headers={'Origin':'http://127.0.0.1'})
     assert response.status_code==200

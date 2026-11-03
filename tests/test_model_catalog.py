@@ -60,9 +60,18 @@ def test_malformed_lfs_metadata_is_a_domain_error(hub,monkeypatch):
 def test_disk_source_never_uses_project_drive(monkeypatch):
     monkeypatch.delenv('LOCALMIND_OLLAMA_STORAGE_VERIFIED', raising=False)
     monkeypatch.setenv('OLLAMA_MODELS', 'C:/fake')
+    monkeypatch.setattr('localmind.ollama_storage.storage_status', lambda: {
+        'confirmed': False, 'path': None, 'source': 'server environment unavailable'})
     with patch.object(cat.shutil, 'disk_usage') as disk:
         assert cat.disk_status()['free'] is None
         disk.assert_not_called()
+
+
+def test_disk_uses_confirmed_server_location(tmp_path, monkeypatch):
+    monkeypatch.setattr('localmind.ollama_storage.storage_status', lambda: {
+        'confirmed': True, 'path': str(tmp_path), 'source': 'server process environment'})
+    result = cat.disk_status()
+    assert result['path'] == str(tmp_path) and result['free'] > 0
 
 
 def test_disk_exhaustion_and_license_prevent_start(hub, monkeypatch):
@@ -147,6 +156,26 @@ def test_terminal_pull_cannot_become_permanently_cancelling():
     jobs.jobs[key]['status']='succeeded'
     with pytest.raises(ValueError): jobs.cancel(key)
     assert jobs.snapshot(key)['status']=='succeeded'
+
+
+def test_layer_events_are_replacements_and_new_cached_layers_do_not_invent_speed(monkeypatch):
+    a, b = 'sha256:'+'a'*64, 'sha256:'+'b'*64
+    events = [{'digest':a,'total':100},
+              {'digest':a,'total':100,'completed':50},
+              {'digest':a,'total':100,'completed':50},
+              {'digest':b,'total':200,'completed':200},
+              {'digest':a,'total':120,'completed':80}]
+    payload = b''.join(json.dumps(event).encode()+b'\n' for event in events)
+    original=httpx.AsyncClient
+    transport=httpx.MockTransport(lambda request:httpx.Response(200,content=payload))
+    monkeypatch.setattr(cat.httpx,'AsyncClient',lambda **kw:original(transport=transport,**kw))
+    jobs=cat.DownloadJobs(); key=prepare_job(jobs)
+    asyncio.run(jobs._pull(key,'qwen3:4b-q4_K_M'))
+    job=jobs.snapshot(key)
+    assert job['status']=='failed'  # Missing final success never installs.
+    assert job['completed']==280 and job['total']==320
+    assert job['layers'][a]=={'total':120,'completed':80}
+    assert job['bytes_per_second'] is None and job['eta_seconds'] is None
 
 
 @pytest.mark.parametrize('changes',[{'cardData':['bad']},{'gguf':['bad']},{'siblings':'bad'}])

@@ -12,7 +12,7 @@
     }
     advanced.append(item);item.classList.add('expert-only');
   }
-  for(const id of ['reasoning','contextTokens','responseTokens','keepAlive']){
+  for(const id of ['temperature','reasoning','contextTokens','responseTokens','keepAlive']){
     const label=$(id)?.closest('label');if(label){advanced.append(label);label.classList.add('expert-only');}
   }
   $('expertMode')?.addEventListener('change',event=>{document.documentElement.dataset.expert=String(event.target.checked);});

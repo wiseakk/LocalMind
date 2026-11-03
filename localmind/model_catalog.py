@@ -6,7 +6,6 @@ import asyncio
 import copy
 import hashlib
 import json
-import os
 from pathlib import Path
 import re
 import shutil
@@ -75,18 +74,23 @@ def search_hub(query):
 
 
 def disk_status():
-    # The local Ollama daemon may run as a different user or with another store.
-    # Never substitute this project's disk or assume the current user's home.
-    configured = os.getenv('OLLAMA_MODELS')
-    if os.getenv('LOCALMIND_OLLAMA_STORAGE_VERIFIED', '').lower() != 'true' or not configured:
-        return {'free': None, 'status': 'unknown: хранилище Ollama не подтверждено оператором'}
+    # A client environment variable cannot prove a running daemon's location.
+    from .ollama_storage import storage_status
+    storage = storage_status()
+    if not storage.get('confirmed') or not storage.get('path'):
+        return {'free': None, 'path': None, 'status': storage.get('source', 'unknown')}
     try:
-        path = Path(configured)
-        if not path.is_absolute() or not path.is_dir():
+        path = Path(storage['path'])
+        if not path.is_absolute():
             raise OSError()
-        return {'free': shutil.disk_usage(path).free, 'status': 'configured Ollama storage'}
+        existing = path
+        while not existing.exists() and existing != existing.parent:
+            existing = existing.parent
+        if not existing.is_dir():
+            raise OSError()
+        return {'free': shutil.disk_usage(existing).free, 'path': str(path), 'status': storage['source']}
     except OSError:
-        return {'free': None, 'status': 'unavailable'}
+        return {'free': None, 'path': storage['path'], 'status': 'unavailable'}
 
 
 def memory_estimate(row, context):
@@ -233,26 +237,22 @@ class DownloadJobs:
         if fingerprint != row['fingerprint']:
             raise ValueError('Метаданные, лицензия или вариант изменились. Откройте карточку заново и подтвердите актуальные сведения.')
         disk, size = row['disk'], row.get('size')
-        if (disk['free'] is None or not positive(size)) and not acknowledge_unknown_disk:
-            raise ValueError('Размер или свободное место неизвестны. Нужно явное подтверждение предупреждения.')
+        if not positive(size):
+            raise ValueError('Размер модели неизвестен. Обновите карточку или выберите вариант с указанным размером.')
+        if disk['free'] is None and not acknowledge_unknown_disk:
+            raise ValueError('Свободное место неизвестно. Настройте хранилище Ollama; ручное разрешение доступно в экспертном режиме.')
         if positive(size) and disk['free'] is not None and disk['free'] < size * 1.1 + GIB:
             raise ValueError('Недостаточно места в подтверждённом хранилище Ollama.')
         with self.lock:
-            if any(j['status'] in ('starting', 'downloading', 'verifying', 'cancelling') for j in self.jobs.values()):
-                raise ValueError('Другая загрузка ещё выполняется.')
-            if len(self.jobs) >= 32:
-                # Evict only completed jobs, never grow an unbounded task log.
-                self.jobs.pop(next(iter(self.jobs)))
             key = uuid.uuid4().hex
-            self.jobs[key] = {'id': key, 'kind': 'llm', 'model': reference, 'status': 'starting', 'layers': {},
+            job = {'id': key, 'kind': 'llm', 'model': reference, 'status': 'starting', 'layers': {},
                               'expected_sha256': row.get('artifact_sha256'),
                               'request': {'source': source, 'identity': identity, 'quantization': quant, 'context': context, 'fingerprint': fingerprint, 'accept_license': accept_license, 'acknowledge_unknown_disk': acknowledge_unknown_disk},
+                              'destination': row['disk'].get('path'), 'destination_source': row['disk'].get('status'),
+                              'display_name': row.get('name', reference), 'completed': 0, 'total': None,
+                              'progress_source': 'Ollama /api/pull', 'created_at': time.time(),
                               'error': None, 'cancel_supported': 'disconnect; daemon stop unverified'}
-            try:
-                self.journal.save()
-            except Exception:
-                self.jobs.pop(key, None)
-                raise
+            self.journal.insert(job)
             self.controls[key] = {'loop': None, 'task': None, 'cancel': False}
             try:
                 Thread(target=lambda: asyncio.run(self._pull(key, reference)), daemon=True, name='localmind-pull').start()
@@ -280,12 +280,11 @@ class DownloadJobs:
                 if key not in self.jobs:
                     raise ValueError('Задача недоступна после перезапуска или истечения срока.')
                 return copy.deepcopy(self.jobs[key])
-            return [copy.deepcopy(j) for j in self.jobs.values()]
+            return [copy.deepcopy(j) for j in self.jobs.values() if not j.get('dismissed')]
 
     def update(self, key, **fields):
         with self.lock:
-            self.jobs[key].update(fields)
-            self.journal.save()
+            self.journal.update(key, **fields)
 
     def cancel(self, key):
         with self.lock:
@@ -294,9 +293,8 @@ class DownloadJobs:
             if self.jobs[key]['status'] not in ('starting', 'downloading', 'verifying', 'cancelling'):
                 raise ValueError('Задача уже завершена.')
             control = self.controls[key]
+            self.update(key, status='cancelling')
             control['cancel'] = True
-            self.jobs[key]['status'] = 'cancelling'
-            self.journal.save()
             if control['loop'] and control['task']:
                 control['loop'].call_soon_threadsafe(control['task'].cancel)
         return self.snapshot(key)
@@ -325,18 +323,36 @@ class DownloadJobs:
                             if not line.strip():
                                 continue
                             event = json.loads(line)
+                            if not isinstance(event, dict):
+                                raise ValueError('Invalid progress record')
                             if event.get('error'):
                                 raise ValueError(str(event['error'])[:2000])
                             digest, total, completed = event.get('digest'), event.get('total'), event.get('completed')
                             if isinstance(digest, str) and re.fullmatch(r'sha256:[a-f0-9]{64}', digest):
-                                if positive(total) and positive(completed, zero=True) and completed <= total:
+                                if positive(total):
                                     with self.lock:
-                                        layers = self.jobs[key]['layers']
+                                        layers = copy.deepcopy(self.jobs[key]['layers'])
                                         if len(layers) >= 128 and digest not in layers:
                                             raise ValueError('Too many layers')
+                                        previous = layers.get(digest, {})
+                                        if completed is None:
+                                            # Ollama announces a total before receiving bytes.
+                                            completed = min(previous.get('completed', 0), total)
+                                        if not positive(completed, zero=True) or completed > total:
+                                            raise ValueError('Invalid layer progress')
+                                        if not previous or previous.get('total') != total:
+                                            self.journal._samples.pop(key, None)
+                                        # Duplicate/cached-layer events do not add bytes twice.
+                                        # A regressing count is a reset; suppress its rate sample.
+                                        if completed < previous.get('completed', 0):
+                                            self.journal._samples.pop(key, None)
                                         layers[digest] = {'total': total, 'completed': completed}
-                                        self.jobs[key].update(total=sum(x['total'] for x in layers.values()), completed=sum(x['completed'] for x in layers.values()))
-                                        self.journal.save()
+                                        self.update(key, total=sum(x['total'] for x in layers.values()),
+                                                    completed=sum(x['completed'] for x in layers.values()),
+                                                    layers=layers,
+                                                    total_source='Ollama: известные слои, объём может увеличиться')
+                            if event.get('status') in ('verifying sha256 digest', 'writing manifest'):
+                                self.update(key, status='verifying', stage='ollama_verification')
                             if event.get('status') == 'success':
                                 success = True
                     if buffer.strip():

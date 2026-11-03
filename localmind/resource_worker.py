@@ -10,8 +10,12 @@ def main():
         kind = sys.argv[1]
         if kind == 'asr':
             import numpy as np
-            from .voice import Recognizer, MODELS
-            model, _, _ = Recognizer().load(MODELS / 'whisper/small', 'cpu', 'int8')
+            from .voice import Recognizer, MODELS, PROFILES
+            profile = sys.argv[2] if len(sys.argv) > 2 else 'balanced'
+            config = PROFILES[profile]
+            # Readiness probe verifies CPU portability. GPU is only proven by
+            # an actual recognition request and reported by that worker.
+            model, _, _ = Recognizer().load(MODELS / 'whisper' / config['model'], 'cpu', 'int8')
             segments, _ = model.transcribe(np.zeros(16000, dtype=np.float32), language='ru', beam_size=1, vad_filter=False)
             list(segments)
         elif kind == 'tts':

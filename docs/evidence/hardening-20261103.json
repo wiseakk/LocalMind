@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-03",
+  "baseline_commit": "66f6c10",
+  "release_complete": false,
+  "git_commits_created": false,
+  "git_limitation": "index.lock denied in main checkout metadata outside writable worktree; no bypass attempted",
+  "automated": {
+    "python_full": {"passed": 906, "subtests_passed": 35},
+    "stt_focused": {"passed": 231},
+    "storage_focused": {"passed": 90},
+    "downloads_focused": {"passed": 63},
+    "ui_syntax": "passed",
+    "ui_dom": "passed including new download/storage scenarios",
+    "asset_references": {"passed": true, "assets": 83},
+    "compileall": "passed",
+    "pip_check": "passed",
+    "build_script_help": "passed; this is not a release build",
+    "diff_check": "passed",
+    "browser_suite": "could not start worker: spawn EPERM",
+    "browser_tool": "browser access host unavailable"
+  },
+  "live_http_isolated_data_root": {
+    "launch": ".venv/Scripts/python start.py",
+    "new_and_existing_get_routes": 5,
+    "calculator_negation": "passed without launching application",
+    "home_assistant_demo_lamp_and_negation": "passed",
+    "ollama": "intentionally unavailable for this smoke; no claim of LLM integration"
+  },
+  "live_read_only_observations": {
+    "ollama_version": "0.40.13",
+    "storage_source": "actual listener process environment",
+    "storage_path": "C:\\Users\\ExampleUser\\.ollama\\models",
+    "gemma4_12b": "installed; generation/settings regression not exercised on real model",
+    "gpu": "NVIDIA GeForce RTX 4070 detected; no new GPU STT/load benchmark",
+    "hf_repository": "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
+    "hf_variants": 6,
+    "hf_q4_k_m_bytes": 491400032,
+    "model_download_transfer": "not performed"
+  },
+  "unverified": [
+    "real Windows microphone regression and 30 phrases in three conditions",
+    "confirmed previous-build baseline and same recordings in EXE/Python",
+    "new EXE/installer build, install and uninstall",
+    "audible Silero xenia and Gemma generation/settings regression",
+    "GPU STT, CPU fallback under actual CUDA failure and combined Gemma/STT load",
+    "actual Ollama pull/cancel/retry/restart and user-store migration",
+    "real Windows application launch and physical offline demonstration",
+    "browser visual layout"
+  ],
+  "manual_qa": [
+    "docs/HARDENING_STT_QA.md",
+    "docs/HARDENING_STORAGE_QA.md",
+    "docs/HARDENING_DOWNLOAD_QA.md"
+  ]
+}

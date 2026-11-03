@@ -6,7 +6,7 @@ const html=fs.readFileSync('static/index.html','utf8');
   const dom=new JSDOM(html,{runScripts:'dangerously',url:'http://127.0.0.1:8765'}),w=dom.window,d=w.document,calls=[];
   const row={id:'Qwen/Test-GGUF',name:'<img src=x onerror=alert(1)>',publisher:'<script>bad()</script>',
     source:'huggingface',source_url:'https://huggingface.co/Qwen/Test-GGUF',quantization:'Q4_K_M',
-    compatibility:'estimated',license:'apache-2.0',fingerprint:'a'.repeat(64),memory:{},disk:{status:'unknown'},capabilities:{tools:'unknown'}};
+    compatibility:'estimated',license:'apache-2.0',size:1000000,fingerprint:'a'.repeat(64),memory:{},disk:{status:'unknown'},capabilities:{tools:'unknown'}};
   w.fetch=async(url,options)=>{
     calls.push({url,body:options.body&&JSON.parse(options.body)});
     if(url==='/api/models')return Response.json({active:'local:4b',models:[{name:'local:4b',selectable:true,details:{}}]});
@@ -28,7 +28,10 @@ const html=fs.readFileSync('static/index.html','utf8');
     d.querySelector('#openRegistry').click();await tick();assert.equal(d.querySelectorAll('#catalogModels img,#catalogModels script').length,0);
     assert.ok(d.querySelector('#catalogModels').textContent.includes(row.name));
     const card=d.querySelector('#catalogModels article'),pull=card.querySelector('button');
+    assert.equal(card.querySelectorAll('input')[0].checked,false,'license is never preaccepted');
+    assert.ok(card.querySelectorAll('input')[1].parentElement.classList.contains('expert-only'));
     pull.click();await tick();assert.match(d.querySelector('#catalogStatus').textContent,/лицензию/);
+    d.documentElement.dataset.expert='true';
     card.querySelectorAll('input')[0].checked=true;card.querySelectorAll('input')[1].checked=true;pull.click();await tick();
     const submitted=calls.filter(c=>c.body?.source).at(-1).body;
     assert.equal(submitted.quantization,'Q4_K_M');assert.equal(submitted.identity,'Qwen/Test-GGUF');

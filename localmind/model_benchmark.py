@@ -222,7 +222,9 @@ class BenchmarkJobs:
                         self.jobs[key]['progress']['completed'] = sum(len(m['results']) for m in self.jobs[key]['models']) + len(rows)
                         self.jobs[key]['current_model'] = {'requested_model': name, 'results': copy.deepcopy(rows)}
                         self._save(self.jobs[key])
-                result = evaluate_model(name, detail, cancelled=self.cancel_events[key], publish=publish, deadline=deadline)
+                from .model_memory import memory
+                with memory.using(name):
+                    result = evaluate_model(name, detail, cancelled=self.cancel_events[key], publish=publish, deadline=deadline)
                 # Revalidate artifact after the run. A changing tag cannot be
                 # presented as a reproducible completed comparison.
                 after = installed_detail(name)
@@ -252,7 +254,21 @@ class BenchmarkJobs:
                 except OSError:
                     self.jobs[key]['error'] = 'Не удалось сохранить результаты; они доступны только до перезапуска.'
         finally:
+            # Runs on success, cancellation and errors while the inference lock
+            # is still held. Shared Ollama workloads are preserved conservatively.
+            from .model_memory import memory
+            cleanup = []
+            for name, _ in pairs:
+                try:
+                    cleanup.append(memory._cleanup_locked(name, reason='temporary'))
+                except Exception:
+                    cleanup.append({'model': name, 'state': 'unverified', 'reason': 'Cleanup verification unavailable'})
             with self.lock:
+                self.jobs[key]['cleanup'] = cleanup
+                try:
+                    self._save(self.jobs[key])
+                except OSError:
+                    pass
                 self.cancel_events.pop(key, None)
             inference_lock.release()
 

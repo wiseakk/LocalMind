@@ -18,7 +18,18 @@ import re
 import sys
 import time
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+application_root = Path(__file__).resolve().parents[1]
+if __name__ == '__main__':
+    # Select the code under test BEFORE importing voice/paths. Merely choosing
+    # the packaged python.exe would otherwise still import this worktree.
+    bootstrap = argparse.ArgumentParser(add_help=False)
+    bootstrap.add_argument('--app-root', type=Path)
+    selection, _ = bootstrap.parse_known_args()
+    if selection.app_root:
+        application_root = selection.app_root.resolve(strict=True)
+        if not (application_root / 'localmind/voice.py').is_file():
+            bootstrap.error('--app-root must contain the LocalMind application code.')
+sys.path.insert(0, str(application_root))
 from localmind.voice import MAX_UPLOAD_BYTES, PROFILES, EVALUATION_PROFILES, DECODINGS, VoiceError, transcribe_audio, shutdown_stt
 
 TECHNICAL_TERMS = ('Downloads', 'Obsidian', 'PDF', 'Windows', 'Steam', 'Python', 'Warcraft', 'RSA', 'Visual Studio Code', 'Arthas Menethil', 'World of Warcraft')
@@ -105,6 +116,7 @@ def corpus_report(rows):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('manifest', type=Path)
+    parser.add_argument('--app-root', type=Path, help='Explicit installed/release code root; use with that release python.exe to compare EXE workers')
     parser.add_argument('--profile', choices=EVALUATION_PROFILES, default='balanced')
     parser.add_argument('--decoding', choices=DECODINGS, default='baseline')
     parser.add_argument('--matrix', action='store_true', help='Compare all model profiles and decodings; requires 30 distinct phrases and quiet/noisy/low-volume conditions')
@@ -135,7 +147,7 @@ def main():
             versions[package] = None
     print(json.dumps({'environment': {'os': platform.platform(), 'python': platform.python_version(),
         'processor': platform.processor(), 'logical_cpus': os.cpu_count(), 'packages': versions,
-        'hardware_note': args.hardware_note}, 'consent': True, 'local_only': True,
+        'hardware_note': args.hardware_note, 'application_root': str(application_root)}, 'consent': True, 'local_only': True,
         'manifest_sha256': hashlib.sha256(manifest.read_bytes()).hexdigest()}))
     print(json.dumps(corpus, ensure_ascii=False))
     failures = 0
@@ -195,7 +207,7 @@ def evaluate(rows, manifest, args, decoding, recording_hashes=None):
             print(json.dumps({'id': row['id'], 'profile': args.profile, 'decoding': decoding, **metrics, **technical, **private,
                 'latency_ms': duration, 'recording_sha256': digest, 'negation_preserved': negation_preserved,
                 'condition': row.get('condition', 'unspecified'), 'input_level': row.get('input_level', 'unspecified'),
-                **{k: result.get(k) for k in ('device', 'compute_type', 'requested_device', 'requested_compute_type', 'fallback', 'model_load_ms', 'model_reused', 'inference_ms', 'levels', 'quality', 'language', 'decoding_settings')}}, ensure_ascii=False))
+                **{k: result.get(k) for k in ('device', 'compute_type', 'requested_device', 'requested_compute_type', 'fallback', 'model_load_ms', 'model_reused', 'inference_ms', 'levels', 'quality', 'language', 'decoding_settings', 'resource', 'runtime', 'resources', 'audio_processing')}}, ensure_ascii=False))
         except (VoiceError, OSError) as exc:
             failures += 1
             # Failed transcriptions count as deletions; excluding them would reward failures.

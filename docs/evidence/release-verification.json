@@ -1,0 +1,58 @@
+{
+  "date": "2026-11-03",
+  "base_commit": "66f6c101b91596936721313840684501c75dad1a",
+  "release_commit": null,
+  "release_tag": null,
+  "installer": null,
+  "state": "uncommitted integration candidate; release blocked",
+  "checks": {
+    "python": {
+      "passed": 971,
+      "subtests_passed": 35,
+      "seconds": 12.31,
+      "python": "3.14.5",
+      "command": "C:/Users/ExampleUser/Desktop/LocalMind_MVP_01/.venv/Scripts/python.exe -m pytest -q -p no:cacheprovider"
+    },
+    "js_syntax": "PASS",
+    "dom": "PASS; 41 primary checks plus context/history/models/downloads/product/storage/polling suites",
+    "ui_assets": {
+      "status": "PASS",
+      "files": 83
+    },
+    "diff_check": "PASS",
+    "powershell_parser": "PASS",
+    "browser": "NOT TESTED: Playwright spawn EPERM before worker; CUA browser host unavailable",
+    "build": "BLOCKED: uncommitted sources and missing Inno Setup 6",
+    "python311_compileall": "PASS: localmind scripts start.py",
+    "csharp_launcher": {
+      "status": "PASS: actual .NET csc compilation only; no bundled runtime or installed EXE test",
+      "file": "build/recovery/LocalMind-launcher-smoke.exe",
+      "sha256": "90a905f96f51c5627a4596db16f005abdbd25b6cc347fdec41a2b7682172d526",
+      "file_version": "1.0.0.0",
+      "product_version": "1.0.0-rc1"
+    }
+  },
+  "not_tested": [
+    "microphone acceptance phrases",
+    "STT acoustic CPU and GPU acceptance",
+    "ten successive voice turns",
+    "Silero xenia playback",
+    "real restart persistence",
+    "real network download progress cancellation retry",
+    "clean Windows install restart uninstall",
+    "Python/EXE comparison",
+    "gemma4:12b vs ministral-3:8b"
+  ],
+  "snapshots": [
+    {
+      "file": "build/recovery/worktree-1.zip",
+      "files": 50,
+      "sha256": "16ed1e663732c3c2010c87b0f84d082aea434a529f0de6f58a44eeea137945f0"
+    },
+    {
+      "file": "build/recovery/worktree-2.zip",
+      "files": 16,
+      "sha256": "61a5a904fa00e2418bc680285ef939e4e629c64840f99aa91b9695490b91e74d"
+    }
+  ]
+}

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from fastapi.testclient import TestClient
+import pytest
 
 import start
 from localmind import agent, devices, server
@@ -13,6 +14,7 @@ from localmind.settings import settings
 from localmind.windows_state import LaunchCoordinator, ApplicationState
 
 
+@pytest.mark.usefixtures('offline_desktop_planner')
 class LocalMindTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -25,6 +27,12 @@ class LocalMindTests(unittest.TestCase):
         composer = mock.patch.object(agent, '_compose_action', side_effect=ValueError('fallback fixture'))
         composer.start()
         self.addCleanup(composer.stop)
+        # This deterministic legacy fixture must not depend on a developer's
+        # running Ollama daemon. Native planner behavior has its own suite.
+        from localmind import llm_planner
+        planner = mock.patch.object(llm_planner, 'choose', side_effect=ValueError('offline legacy fixture'))
+        planner.start()
+        self.addCleanup(planner.stop)
 
     def test_light_direct_rule_preserved(self):
         self.assertTrue(settings.demo)

@@ -74,6 +74,55 @@ def test_no_nvidia_does_not_break_start(monkeypatch):
     assert hardware_status()['gpu_status'] == 'unavailable'
 
 
+@pytest.mark.parametrize('value', [float('nan'), float('inf'), -float('inf'), -0.01, 2.01, True, '0.2', 10**1000])
+def test_generation_rejects_nonfinite_and_invalid_temperature(value):
+    with pytest.raises(ValueError):
+        GenerationSettings('gemma4:12b', temperature=value)
+
+
+def test_generation_preferences_are_independent_per_model_and_survive_restart(tmp_path, monkeypatch):
+    manager = mm.ModelManager(tmp_path / 'model.json')
+    monkeypatch.setattr(manager, '_active', 'gemma4:12b')
+    manager.save_generation({'temperature': 0.35, 'reasoning': 'off', 'context_tokens': 2048, 'response_tokens': 256})
+    monkeypatch.setattr(manager, '_active', 'ministral-3:8b')
+    manager.save_generation({'temperature': 0.15, 'reasoning': 'off', 'context_tokens': 4096, 'response_tokens': 512})
+    restored = mm.ModelManager(manager.path)
+    assert restored.active == 'ministral-3:8b'
+    assert restored.generation('gemma4:12b')['temperature'] == 0.35
+    assert restored.generation('gemma4:12b')['context_tokens'] == 2048
+    assert restored.generation()['temperature'] == 0.15
+    assert restored.generation()['response_tokens'] == 512
+
+
+def test_explicit_generation_controls_reach_actual_ollama_body(monkeypatch):
+    from test_overhaul import install_ollama_transport
+    calls = install_ollama_transport(monkeypatch, [{'model': 'gemma4:12b', 'message': {'thinking': 'private', 'content': '{"answer":"Привет"}'}, 'done': True}],
+        models=[{'name': 'gemma4:12b', 'size': 100}])
+    prepared = agent.prepare_reply('Привет', generation=GenerationSettings('gemma4:12b', reasoning='off', context_tokens=2048,
+        response_tokens=256, keep_alive_seconds=60, temperature=0.35))
+    result = agent.complete_reply(prepared)
+    body = next(value for path, value in calls if path == '/api/chat')
+    assert body['options'] == {'temperature': 0.35, 'num_ctx': 2048, 'num_predict': 256}
+    assert body['think'] is False and body['keep_alive'] == 60
+    assert body['messages'][0]['role'] == 'system'
+    assert result['answer'] == 'Привет' and 'private' not in str(result)
+
+
+@pytest.mark.parametrize('stream', [False, True])
+def test_gemma_thought_channel_never_reaches_main_answer(monkeypatch, stream):
+    from test_overhaul import install_ollama_transport
+    secret = '<|channel>thought\nprivate analysis<channel|>Ответ'
+    install_ollama_transport(monkeypatch, [{'model': 'gemma4:12b', 'message': {'content': json.dumps({'answer': secret})}, 'done': True}],
+        models=[{'name': 'gemma4:12b', 'size': 100}])
+    prepared = agent.prepare_reply('Привет', generation=GenerationSettings('gemma4:12b'))
+    emitted = []
+    if stream:
+        prepared.on_delta = emitted.append
+    result = agent.complete_reply(prepared)
+    assert result['engine'] == 'offline-error'
+    assert 'private analysis' not in str(result) + ''.join(emitted)
+
+
 def test_benchmark_busy_does_not_poison_retry_or_block_accepted_replay(monkeypatch):
     from localmind import server
     from localmind.model_benchmark import benchmarks

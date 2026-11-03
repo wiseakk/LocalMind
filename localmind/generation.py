@@ -2,6 +2,7 @@
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 import re
+import math
 import time
 
 @dataclass(frozen=True)
@@ -11,14 +12,20 @@ class GenerationSettings:
     context_tokens: int = 4096
     response_tokens: int = 768
     keep_alive_seconds: int = 300
+    temperature: float = 0.2
 
     def __post_init__(self):
         if not isinstance(self.model, str) or not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,239}', self.model) or 'cloud' in self.model.casefold():
             raise ValueError('Выберите установленную локальную модель.')
         if self.reasoning not in ('off', 'on', 'auto'):
             raise ValueError('Неизвестный режим рассуждения.')
-        if not 1024 <= self.context_tokens <= 8192 or not 64 <= self.response_tokens <= 2048 or not 0 <= self.keep_alive_seconds <= 900:
+        if (any(type(value) is not int for value in (self.context_tokens, self.response_tokens, self.keep_alive_seconds))
+                or not 1024 <= self.context_tokens <= 8192 or not 64 <= self.response_tokens <= 2048
+                or not 0 <= self.keep_alive_seconds <= 900):
             raise ValueError('Параметры генерации вне допустимых границ.')
+        if (isinstance(self.temperature, bool) or not isinstance(self.temperature, (int, float))
+                or not 0 <= self.temperature <= 2 or not math.isfinite(self.temperature)):
+            raise ValueError('Температура должна быть конечным числом от 0 до 2.')
 
     def to_dict(self):
         return asdict(self)
@@ -41,7 +48,9 @@ def check_cancelled():
 
 def defaults():
     from .model_manager import manager
-    return GenerationSettings(manager.active)
+    from .model_memory import memory
+    saved = manager.generation()
+    return GenerationSettings(**saved) if saved else GenerationSettings(manager.active, keep_alive_seconds=memory.policy.keep_alive_seconds)
 
 
 def json_answer_prefix(content: str) -> str:

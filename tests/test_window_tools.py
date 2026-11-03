@@ -289,13 +289,16 @@ def test_open_does_not_focus_changed_target_after_launch(tools, change):
             with pytest.raises(ValueError):
                 service.open_app('calculator', launch)
         else:
-            assert not service.open_app('calculator', launch).success
+            result = service.open_app('calculator', launch)
+            assert result.success and result.execution_status == 'process_created'
+            assert result.data['activation_status'] in ('permission_required', 'stale_target')
+            assert not result.data['window_activated']
     finally:
         cancellation.reset(token)
     assert 'focus' not in backend.operations
 
 
-def test_open_foreground_denial_is_failure_even_after_successful_launch(tools):
+def test_open_foreground_denial_preserves_successful_launch(tools):
     from localmind.results import ActionResult
     service, backend, _ = tools
     native = backend.windows.pop()
@@ -306,8 +309,35 @@ def test_open_foreground_denial_is_failure_even_after_successful_launch(tools):
         return ActionResult(True, 'open_app', 'Calculator', 'process_created')
 
     result = service.open_app('calculator', launch)
-    assert not result.success and result.execution_status == 'activation_denied'
+    assert result.success and result.execution_status == 'process_created'
     assert result.data['launch_status'] == 'process_created'
+    assert result.data['process_created'] and result.data['process_running']
+    assert result.data['window_found'] and not result.data['window_activated']
+    assert result.data['activation_status'] == 'activation_denied'
+    assert result.observed_state == 'visible_window' and 'панель задач' in result.status_text
+
+
+def test_open_existing_window_activation_denial_does_not_spawn(tools):
+    service, backend, _ = tools
+    backend.focus_allowed = False
+    launcher = Mock()
+    result = service.open_app('calculator', launcher)
+    launcher.assert_not_called()
+    assert result.success and result.execution_status == 'already_running'
+    assert result.observed_state == 'visible_window'
+    assert result.data['window_found'] and not result.data['window_activated']
+    assert result.data['process_created'] is False
+
+
+def test_open_window_timeout_preserves_launch_and_reports_unknown_process(tools, monkeypatch):
+    from localmind.results import ActionResult, refused
+    service, backend, _ = tools
+    backend.windows.clear()
+    monkeypatch.setattr(service, 'focus_app', lambda *a, **k: refused('apps.focus', 'calculator', 'Окно не найдено.', status='window_timeout'))
+    result = service.open_app('calculator', lambda app: ActionResult(True, 'open_app', app, 'process_created', status_text='Запуск начат.'))
+    assert result.success and result.execution_status == 'process_created'
+    assert result.data['process_created'] and result.data['window_found'] is False
+    assert result.data['process_running'] is None and not result.data['window_activated']
 
 
 def test_open_ambiguity_and_inspection_failure_never_launch(tools):

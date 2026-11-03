@@ -16,6 +16,18 @@ from .voice_diagnostics import MESSAGES, classify_voice_error
 MANIFEST = json.loads((APP_ROOT / 'config/voice_resources.json').read_text(encoding='utf-8'))
 _controls = {}
 _lock = threading.Lock()
+ASR_PROFILES = {'cpu-fast': 'base', 'balanced': 'small', 'gpu-quality': 'medium'}
+
+
+def assets_for(kind, profile='balanced'):
+    if kind not in ('asr', 'tts') or profile not in ASR_PROFILES:
+        raise ValueError('Неизвестный ресурс или профиль.')
+    prefix = 'whisper/' + ASR_PROFILES[profile] + '/' if kind == 'asr' else 'silero/'
+    return [a for a in MANIFEST['assets'] if a['path'].startswith(prefix)]
+
+
+def verification_key(kind, profile='balanced'):
+    return kind if kind != 'asr' or profile == 'balanced' else kind + '-' + profile
 
 
 def dependencies(kind):
@@ -27,9 +39,11 @@ def dependencies(kind):
 
 
 def status():
+    from .voice import default_stt_profile
     rows = []
-    for kind in ('asr', 'tts'):
-        assets = [a for a in MANIFEST['assets'] if a['path'].startswith('whisper/' if kind == 'asr' else 'silero/')]
+    for kind, profile in [('asr', p) for p in ASR_PROFILES] + [('tts', 'balanced')]:
+        assets = assets_for(kind, profile)
+        stamp_key = verification_key(kind, profile)
         state = 'dependency_missing' if not dependencies(kind) else 'unverified'
         if state != 'dependency_missing':
             try:
@@ -40,7 +54,7 @@ def status():
                     if path.stat().st_size != asset['bytes']:
                         state = 'resource_corrupt'; break
                 else:
-                    stamp = json.loads((PRIVATE / (kind + '-verified.json')).read_text(encoding='utf-8'))
+                    stamp = json.loads((PRIVATE / (stamp_key + '-verified.json')).read_text(encoding='utf-8'))
                     if stamp.get('manifest') == manifest_digest() and stamp.get('files') == signatures(assets):
                         state = 'ready'
             except FileNotFoundError:
@@ -49,12 +63,14 @@ def status():
                 state = 'path_invalid'
         if state == 'unverified':
             try:
-                failure = json.loads((PRIVATE / (kind + '-failure.json')).read_text(encoding='utf-8'))
+                failure = json.loads((PRIVATE / (stamp_key + '-failure.json')).read_text(encoding='utf-8'))
                 if failure.get('code') in MESSAGES:
                     state = failure['code']
             except (OSError, ValueError):
                 pass
-        rows.append({'kind': kind, 'state': state,
+        rows.append({'kind': kind, 'profile': profile if kind == 'asr' else None,
+                     'required': kind != 'asr' or profile == default_stt_profile(),
+                     'model': ASR_PROFILES[profile] if kind == 'asr' else 'Silero · xenia', 'state': state,
                      'action': 'Восстановить установку LocalMind' if state == 'dependency_missing' else 'Подготовить голос'})
     return rows
 
@@ -76,19 +92,26 @@ def file_digest(path):
     return h.hexdigest()
 
 
-def start(kind):
+def start(kind, profile='balanced'):
     if kind not in ('asr', 'tts'):
         raise ValueError('Неизвестный ресурс.')
+    assets_for(kind, profile)  # Validate before a job/thread or download is created.
     if not dependencies(kind):
         raise ValueError('Компоненты голоса отсутствуют. Восстановите LocalMind установщиком; Python и pip не нужны.')
     key, cancel = uuid.uuid4().hex, threading.Event()
-    job = {'id': key, 'kind': kind, 'model': 'Русская речь · small' if kind == 'asr' else 'Silero · xenia',
+    job = {'id': key, 'kind': kind, 'model': 'Русская речь · ' + ASR_PROFILES[profile] if kind == 'asr' else 'Silero · xenia',
+           'profile': profile if kind == 'asr' else None,
+           'destination': str(MODELS / 'whisper' / ASR_PROFILES[profile] if kind == 'asr' else MODELS / 'silero'),
            'status': 'starting', 'completed': 0, 'total': 0, 'error': None, 'layers': {}}
     with _lock:
+        if any(store.snapshot(existing).get('kind') == kind and
+               (kind != 'asr' or store.snapshot(existing).get('profile', 'balanced') == profile)
+               for existing in _controls):
+            raise ValueError('Подготовка этого ресурса уже выполняется. Смотрите «Загрузки».')
         store.insert(job)
         _controls[key] = cancel
         try:
-            threading.Thread(target=_prepare, args=(key, kind, cancel), daemon=True, name='localmind-assets').start()
+            threading.Thread(target=_prepare, args=(key, kind, cancel, profile), daemon=True, name='localmind-assets').start()
         except RuntimeError:
             _controls.pop(key, None)
             store.update(key, status='failed', error='Не удалось запустить подготовку. Повторите позже.')
@@ -106,9 +129,10 @@ def cancel(key):
     return store.snapshot(key)
 
 
-def _prepare(key, kind, cancel):
+def _prepare(key, kind, cancel, profile='balanced'):
+    stamp_key = verification_key(kind, profile)
     try:
-        assets = [a for a in MANIFEST['assets'] if a['path'].startswith('whisper/' if kind == 'asr' else 'silero/')]
+        assets = assets_for(kind, profile)
         total, completed = sum(a['bytes'] for a in assets), 0
         MODELS.mkdir(parents=True, exist_ok=True)
         if shutil.disk_usage(MODELS).free < total + 100 * 1048576:
@@ -153,7 +177,7 @@ def _prepare(key, kind, cancel):
             raise InterruptedError()
         store.update(key, status='verifying')
         # Always use private python.exe, never the frozen GUI launcher.
-        result = subprocess.run([str(python_runtime()), '-m', 'localmind.resource_worker', kind],
+        result = subprocess.run([str(python_runtime()), '-m', 'localmind.resource_worker', kind, profile],
                                 cwd=APP_ROOT, shell=False, capture_output=True, timeout=180,
                                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         if result.returncode:
@@ -165,8 +189,8 @@ def _prepare(key, kind, cancel):
         with _lock:
             if cancel.is_set():
                 raise InterruptedError()
-            atomic_json(PRIVATE / (kind + '-verified.json'), {'manifest': manifest_digest(), 'files': signatures(assets)})
-            ordinary_tree(PRIVATE / (kind + '-failure.json')).unlink(missing_ok=True)
+            atomic_json(PRIVATE / (stamp_key + '-verified.json'), {'manifest': manifest_digest(), 'files': signatures(assets)})
+            ordinary_tree(PRIVATE / (stamp_key + '-failure.json')).unlink(missing_ok=True)
             store.update(key, status='succeeded', ready=True)
     except InterruptedError:
         store.update(key, status='cancelled', error='Загрузка прервана. Можно повторить; проверенные файлы сохраняются.')
@@ -175,7 +199,7 @@ def _prepare(key, kind, cancel):
         error = record_download_error(exc, 'voice_setup')
         if str(exc) in MESSAGES:
             error.update(code=str(exc), message=MESSAGES[str(exc)])
-            atomic_json(PRIVATE / (kind + '-failure.json'), {'code': str(exc)})
+            atomic_json(PRIVATE / (stamp_key + '-failure.json'), {'code': str(exc)})
         store.update(key, status='failed', error=error['message'], diagnostic=error)
     finally:
         with _lock:

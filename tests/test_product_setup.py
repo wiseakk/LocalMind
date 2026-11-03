@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import pytest
-from localmind.paths import migrate_legacy, python_runtime
+from localmind.paths import migrate_legacy, legacy_preferences_plan, python_runtime
 from localmind.resource_setup import classify_voice_error
 
 
@@ -12,15 +12,43 @@ def test_migration_preserves_selection_without_copying_grants_or_secrets(tmp_pat
     (source / 'results/private/active-model.json').write_text('{"model":"gemma4:12b"}')
     (source / 'results/private/personal_mode.json').write_text('{"enabled":true}')
     model = source / 'models/whisper/small/model.bin'; model.parent.mkdir(parents=True); model.write_bytes(b'model')
-    migrate_legacy(source, dest)
+    plan = legacy_preferences_plan(source, dest)
+    migrate_legacy(source, dest, consent=True, reviewed_plan=plan)
     assert json.loads((dest / 'private/active-model.json').read_text())['model'] == 'gemma4:12b'
     assert 'secret' not in (dest / '.env').read_text()
     assert 'DEMO_MODE' not in (dest / '.env').read_text()
     assert not (dest / 'private/personal_mode.json').exists()
     (dest / 'private/active-model.json').write_text('{"model":"owner-choice"}')
-    migrate_legacy(source, dest)
+    migrate_legacy(source, dest, consent=True, reviewed_plan=legacy_preferences_plan(source, dest))
     assert 'owner-choice' in (dest / 'private/active-model.json').read_text()
     assert model.read_bytes() == b'model'
+
+
+def test_legacy_preferences_require_consent_and_unchanged_preview(tmp_path):
+    source, dest = tmp_path / 'old', tmp_path / 'new'
+    source.mkdir()
+    (source / '.env').write_text('OLLAMA_MODEL=gemma4:12b')
+    plan = legacy_preferences_plan(source, dest)
+    assert migrate_legacy(source, dest, reviewed_plan=plan) == []
+    assert not dest.exists()
+    (source / '.env').write_text('OLLAMA_MODEL=owner-choice')
+    with pytest.raises(ValueError, match='План'):
+        migrate_legacy(source, dest, consent=True, reviewed_plan=plan)
+    assert not dest.exists()
+
+
+def test_legacy_import_does_not_replace_file_created_during_publication(tmp_path, monkeypatch):
+    from localmind import paths
+    dest = tmp_path / '.env'
+    original = paths.os.link
+    def race(source, target):
+        target.write_text('owner-choice')
+        original(source, target)
+    monkeypatch.setattr(paths.os, 'link', race)
+    with pytest.raises(FileExistsError):
+        paths._publish_migrated(dest, 'old-choice')
+    assert dest.read_text() == 'owner-choice'
+    assert not list(tmp_path.glob('*.tmp'))
 
 
 def test_partial_legacy_resource_is_not_migrated(tmp_path):
@@ -39,3 +67,21 @@ def test_voice_failures_are_distinct(error, code):
 
 def test_worker_runtime_is_python_not_gui():
     assert python_runtime().name.lower() in ('python.exe', 'python', 'python3')
+
+
+@pytest.mark.parametrize('interactive,answer,expected', [(False, 'y', False), (True, 'n', False), (True, 'y', True)])
+def test_source_start_respects_reviewed_migration_consent(monkeypatch, interactive, answer, expected):
+    from types import SimpleNamespace
+    import start
+    from localmind import paths
+    plan = [{'source': 'old-settings', 'target': 'new-settings'}]
+    copied = []
+    monkeypatch.setattr(paths, 'legacy_preferences_plan', lambda: plan)
+    monkeypatch.setattr(paths, 'migrate_legacy', lambda **kw: copied.append(kw))
+    monkeypatch.setattr(start.sys, 'stdin', SimpleNamespace(isatty=lambda: interactive))
+    monkeypatch.setattr('builtins.input', lambda prompt: answer)
+    monkeypatch.setattr(start.uvicorn, 'run', lambda *a, **kw: None)
+    start.main()
+    assert bool(copied) is expected
+    if expected:
+        assert copied == [{'consent': True, 'reviewed_plan': plan}]

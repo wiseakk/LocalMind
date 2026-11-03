@@ -136,22 +136,32 @@ def rate_benchmark(job_id: str, data: RatingRequest):
 def retry_pull(job_id: str):
     try:
         job = catalog.downloads.snapshot(job_id)
-        if job['status'] in ('queued', 'starting', 'downloading', 'verifying', 'cancelling'):
-            raise ValueError('Дождитесь завершения текущей задачи.')
+        if job['status'] not in ('failed', 'interrupted', 'cancelled', 'cancelled_unverified'):
+            raise ValueError('Повтор доступен для прерванной или неудачной загрузки.')
         if job.get('kind') in ('asr', 'tts'):
             from .resource_setup import start
-            return start(job['kind'])
+            return start(job['kind'], **({'profile': job['profile']} if job.get('profile') else {}))
         if job.get('kind') == 'llm_offline':
             from .offline_model import start
-            return start(True)  # Exact same pinned installer artifact, explicit retry button.
+            return start(True, expected_artifact=job.get('accepted_artifact'),
+                         acknowledge_unknown_disk=job.get('acknowledge_unknown_disk', False), retry=True)
         request = PullRequest(**job['request'])
         return start_pull(request)
     except (ValueError, KeyError, OSError):
         raise HTTPException(409, 'Повтор недоступен. Откройте карточку модели и подтвердите актуальные сведения.')
 
 
+@router.post('/downloads/{job_id}/dismiss')
+def dismiss_pull(job_id: str):
+    try:
+        return catalog.downloads.journal.dismiss(job_id)
+    except (ValueError, KeyError, OSError):
+        raise HTTPException(409, 'Нельзя скрыть выполняющуюся или недоступную задачу.')
+
+
 unified_router = APIRouter(prefix='/api/downloads')
 unified_router.add_api_route('', list_pulls, methods=['GET'])
 unified_router.add_api_route('/{job_id}/cancel', cancel_pull, methods=['POST'])
 unified_router.add_api_route('/{job_id}/retry', retry_pull, methods=['POST'])
+unified_router.add_api_route('/{job_id}/dismiss', dismiss_pull, methods=['POST'])
 unified_router.add_api_route('/diagnostics', lambda: {'diagnostics': diagnostics()}, methods=['GET'])

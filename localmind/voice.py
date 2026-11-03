@@ -6,7 +6,7 @@ they never supply filesystem paths, URLs, subprocess arguments, or commands.
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict
+from dataclasses import asdict, is_dataclass
 import importlib.util
 import inspect
 import gc
@@ -25,6 +25,7 @@ import wave
 import uuid
 
 from .asr_worker import worker as _asr_worker
+from .voice_diagnostics import normalize_stt_payload
 from .settings import ROOT
 from .speech_text import speech_preparation
 from .speech_worker import worker as _speech_worker, SpeechWorkerError, CANDIDATES, candidate_ready
@@ -37,9 +38,12 @@ WORKER_TIMEOUT_SECONDS = 120
 SAMPLE_RATE = 16000
 SUPPORTED_SUFFIXES = frozenset(('.webm', '.ogg', '.mp4', '.wav', '.m4a'))
 PROFILES = {
-    'cpu-fast': {'model': 'base', 'device': 'cpu', 'compute_type': 'int8', 'label': 'CPU · быстро'},
-    'balanced': {'model': 'small', 'device': 'cpu', 'compute_type': 'int8', 'label': 'CPU · баланс'},
-    'gpu-quality': {'model': 'medium', 'device': 'cuda', 'compute_type': 'float16', 'label': 'GPU · точность'},
+    'cpu-fast': {'model': 'base', 'device': 'cpu', 'compute_type': 'int8', 'label': 'Fast · CPU / base',
+                 'description': 'Меньшая модель для быстрого отклика на CPU. Сложные слова требуют особенно внимательной проверки.'},
+    'balanced': {'model': 'small', 'device': 'cpu', 'compute_type': 'int8', 'label': 'Balanced · CPU / small',
+                 'description': 'Основной профиль: более крупная модель на CPU. Компромисс времени и качества проверяется на ваших записях.'},
+    'gpu-quality': {'model': 'medium', 'device': 'cuda', 'compute_type': 'float16', 'label': 'Quality · GPU / medium',
+                    'description': 'Более крупная модель; требует CUDA и памяти совместно с LLM. При ошибке GPU используется CPU int8. Превосходство качества ещё требует измерения.'},
 }
 # CLI evaluation only; preserve the three public profile IDs and their defaults.
 EVALUATION_PROFILES = {
@@ -109,6 +113,13 @@ def _tts_ready(voice: str) -> bool:
         return False
 
 
+def default_stt_profile():
+    # Legacy WHISPER_MODEL is a default only, never an arbitrary model/path.
+    # Explicit HTTP/CLI profile always takes precedence.
+    return {'base': 'cpu-fast', 'small': 'balanced', 'medium': 'gpu-quality'}.get(
+        os.environ.get('WHISPER_MODEL', ''), 'balanced')
+
+
 def voice_status() -> dict:
     stt_installed = _installed('faster_whisper') and _installed('av')
     ready = {key: _tts_ready(key) and (key in CANDIDATES or _installed('piper')) for key in VOICES}
@@ -116,10 +127,13 @@ def voice_status() -> dict:
         'stt_installed': stt_installed,
         'tts_installed': ready[DEFAULT_VOICE],
         'default_voice': DEFAULT_VOICE,
-        'default_profile': 'balanced',
+        'default_profile': default_stt_profile(),
+        'legacy_whisper_model': {'value': os.environ.get('WHISPER_MODEL'),
+                                'meaning': 'Default profile only: base→cpu-fast, small→balanced, medium→gpu-quality; explicit profile wins; other values ignored.'},
         'max_recording_seconds': MAX_RECORDING_SECONDS,
         'max_upload_bytes': MAX_UPLOAD_BYTES,
-        'profiles': [{'id': key, **value, 'ready': stt_installed and _stt_ready(key)} for key, value in PROFILES.items()],
+        'profiles': [{'id': key, **value, 'ready': stt_installed and _stt_ready(key),
+                      'measurement': _asr_worker.diagnostics()['measurements'].get(key)} for key, value in PROFILES.items()],
         'voices': [{'id': key, **value, 'ready': ready[key]} for key, value in VOICES.items()],
         'setup': 'Откройте Настройки → Голос → Подготовить голос / восстановить.',
         'local_only': True,
@@ -165,14 +179,15 @@ def _run_worker(kind: str, selection: str, data: bytes, suffix: str) -> tuple[di
                 return payload, audio.read_bytes()
             if not isinstance(payload.get('text'), str) or len(payload['text']) > 4000:
                 raise VoiceError(503, 'Голосовой модуль вернул некорректный текст.')
-            return payload, b''
+            return normalize_stt_payload(payload), b''
     except OSError as exc:
         raise VoiceError(503, 'Временное хранилище голосового модуля недоступно. Проверьте права ОС и свободное место.') from exc
     finally:
         _operation.release()
 
 
-def transcribe_audio(data: bytes, suffix: str, profile: str = 'balanced', decoding: str = 'baseline', *, evaluation: bool = False) -> dict:
+def transcribe_audio(data: bytes, suffix: str, profile: str | None = None, decoding: str = 'baseline', *, evaluation: bool = False) -> dict:
+    profile = default_stt_profile() if profile is None else profile
     if profile not in (EVALUATION_PROFILES if evaluation else PROFILES):
         raise VoiceError(422, 'Неизвестный профиль распознавания.')
     if decoding not in DECODINGS:
@@ -260,27 +275,30 @@ def _decode_bounded(source: Path, audio_data: bytes | None = None):
         raise VoiceError(415, 'Неподдерживаемый формат записи.')
     # A media upload is not a playlist. Forcing the declared container prevents
     # format sniffing from opening HLS/concat files containing network/file URLs.
-    with av.open(io.BytesIO(audio_data) if audio_data is not None else str(source), mode='r', format=demuxers[source.suffix.lower()],
-                 options={'protocol_whitelist': 'file', 'enable_drefs': '0', 'use_absolute_path': '0'}) as container:
-        if not container.streams.audio:
-            raise VoiceError(422, 'В файле нет звуковой дорожки.')
-        resampler = av.AudioResampler(format='s16', layout='mono', rate=SAMPLE_RATE)
-        for index, frame in enumerate(container.decode(audio=0)):
-            if index > 10000 or time.monotonic() - started > 15:
-                raise VoiceError(422, 'Превышен лимит декодирования записи.')
-            # Reject absurd decoder frames before converting to a numpy array.
-            if frame.samples > 192000 or (frame.sample_rate and frame.samples / frame.sample_rate > 2):
-                raise VoiceError(422, 'Некорректный звуковой кадр.')
-            for decoded in resampler.resample(frame):
+    try:
+        with av.open(io.BytesIO(audio_data) if audio_data is not None else str(source), mode='r', format=demuxers[source.suffix.lower()],
+                     options={'protocol_whitelist': 'file', 'enable_drefs': '0', 'use_absolute_path': '0'}) as container:
+            if not container.streams.audio:
+                raise VoiceError(422, 'В файле нет звуковой дорожки.')
+            resampler = av.AudioResampler(format='s16', layout='mono', rate=SAMPLE_RATE)
+            for index, frame in enumerate(container.decode(audio=0)):
+                if index > 10000 or time.monotonic() - started > 15:
+                    raise VoiceError(422, 'Превышен лимит декодирования записи.')
+                # Reject absurd decoder frames before converting to a numpy array.
+                if frame.samples > 192000 or (frame.sample_rate and frame.samples / frame.sample_rate > 2):
+                    raise VoiceError(422, 'Некорректный звуковой кадр.')
+                for decoded in resampler.resample(frame):
+                    samples += decoded.samples
+                    if samples > MAX_RECORDING_SECONDS * SAMPLE_RATE:
+                        raise VoiceError(413, 'Запись длиннее 30 секунд. Запишите более короткую фразу.')
+                    chunks.append(decoded.to_ndarray().reshape(-1))
+            for decoded in resampler.resample(None):
                 samples += decoded.samples
                 if samples > MAX_RECORDING_SECONDS * SAMPLE_RATE:
-                    raise VoiceError(413, 'Запись длиннее 30 секунд. Запишите более короткую фразу.')
+                    raise VoiceError(413, 'Запись длиннее 30 секунд.')
                 chunks.append(decoded.to_ndarray().reshape(-1))
-        for decoded in resampler.resample(None):
-            samples += decoded.samples
-            if samples > MAX_RECORDING_SECONDS * SAMPLE_RATE:
-                raise VoiceError(413, 'Запись длиннее 30 секунд.')
-            chunks.append(decoded.to_ndarray().reshape(-1))
+    except (av.error.InvalidDataError, av.error.EOFError, av.error.DecoderNotFoundError, ValueError) as exc:
+        raise VoiceError(422, 'Не удалось прочитать аудиозапись. Запишите фразу заново в поддерживаемом формате.') from exc
     if samples < SAMPLE_RATE // 5:
         raise VoiceError(422, 'Запись слишком короткая: говорите хотя бы секунду.')
     signal = np.concatenate(chunks).astype(np.float32) / 32768.0
@@ -312,10 +330,13 @@ class Recognizer:
         self.device = None
         self.compute_type = None
         self.fallback = False
+        self.resource = None
+        self.runtime = None
 
     def clear(self):
         self.model = None
         self.identity = None
+        self.resource = None
         gc.collect()
 
     def load(self, directory, device, compute_type):
@@ -324,14 +345,17 @@ class Recognizer:
         if self.model is not None and self.identity == identity:
             return self.model, 0, True
         self.clear()
-        if Path(directory) == MODELS / 'whisper/small' and (Path(directory) / 'model.bin').is_file():
+        if Path(directory).name in {p['model'] for p in PROFILES.values()} and (Path(directory) / 'model.bin').is_file():
             from .resource_integrity import verify_resources
-            verify_resources('asr')
+            verify_resources('asr', Path(directory).name)
         loading = time.monotonic()
         self.model = WhisperModel(str(directory), device=device, compute_type=compute_type,
                                   cpu_threads=4, num_workers=1, local_files_only=True)
         self.identity = identity
         self.device, self.compute_type = device, compute_type
+        from .voice_diagnostics import resource_identity, runtime_identity
+        self.resource = resource_identity(directory)
+        self.runtime = runtime_identity()
         return self.model, round((time.monotonic() - loading) * 1000), False
 
 
@@ -348,10 +372,11 @@ def _recognize(source: Path, profile: str, decoding: str = 'baseline', recognize
     model_load_ms = 0
     model_reused = False
     inference_ms = 0
+    vad_settings = None
     levels = signal_levels(signal)
 
     def run(selected_device, selected_compute):
-        nonlocal model_load_ms, model_reused, inference_ms
+        nonlocal model_load_ms, model_reused, inference_ms, vad_settings
         loading = time.monotonic()
         try:
             model, _, model_reused = recognizer.load(model_directory, selected_device, selected_compute)
@@ -363,6 +388,8 @@ def _recognize(source: Path, profile: str, decoding: str = 'baseline', recognize
         inference_started = time.monotonic()
         segments, info = model.transcribe(signal, vad_filter=True, beam_size=5,
                                          condition_on_previous_text=False, **options)
+        actual_vad = getattr(info, 'vad_options', None)
+        vad_settings = asdict(actual_vad) if is_dataclass(actual_vad) else None
         words, logprobs, no_speech = [], [], []
         for segment in segments:
             words.append(segment.text.strip())
@@ -372,9 +399,16 @@ def _recognize(source: Path, profile: str, decoding: str = 'baseline', recognize
                 no_speech.append(segment.no_speech_prob)
             if sum(map(len, words)) > 4000:
                 raise VoiceError(422, 'Слишком длинная расшифровка.')
-        quality = {'calibrated_confidence': None, 'mean_segment_logprob': sum(logprobs) / len(logprobs) if logprobs else None,
-                   'max_no_speech_probability': max(no_speech) if no_speech else None,
-                   'review_recommended': bool(levels['warnings'] or any(x < -1 for x in logprobs) or any(x > .6 for x in no_speech))}
+        # A partly contaminated aggregate must not look like a valid measurement.
+        # Preserve its offending result path for the boundary normalizer; never
+        # let optional diagnostics trigger model reload or GPU fallback.
+        bad_logprob = next((x for x in logprobs if not math.isfinite(x)), None)
+        bad_no_speech = next((x for x in no_speech if not math.isfinite(x)), None)
+        quality = {'calibrated_confidence': None, 'mean_segment_logprob': bad_logprob if bad_logprob is not None else sum(logprobs) / len(logprobs) if logprobs else None,
+                   'max_no_speech_probability': bad_no_speech if bad_no_speech is not None else max(no_speech) if no_speech else None,
+                   'review_recommended': bool(bad_logprob is not None or bad_no_speech is not None or levels['warnings'] or any(x < -1 for x in logprobs) or any(x > .6 for x in no_speech))}
+        if any(isinstance(value, float) and not math.isfinite(value) for value in quality.values()):
+            quality['review_recommended'] = True
         inference_ms += round((time.monotonic() - inference_started) * 1000)
         return ' '.join(words).strip(), quality, getattr(info, 'language', None)
 
@@ -396,12 +430,21 @@ def _recognize(source: Path, profile: str, decoding: str = 'baseline', recognize
     native_model = getattr(recognizer.model, 'model', None)
     actual_device = getattr(native_model, 'device', device)
     actual_compute = getattr(native_model, 'compute_type', compute_type)
-    return {'text': text, 'profile': profile, 'device': actual_device, 'fallback': fallback,
+    from .voice_diagnostics import resource_measurement
+    return normalize_stt_payload({'text': text, 'profile': profile, 'device': actual_device, 'fallback': fallback,
+            'resource': recognizer.resource, 'runtime': recognizer.runtime,
+            'resources': resource_measurement(),
             'model': config['model'], 'compute_type': actual_compute, 'decoding': decoding,
             'requested_device': config['device'], 'requested_compute_type': config['compute_type'],
             'language': language, 'levels': levels, 'quality': quality, 'final': True,
-            'model_load_ms': model_load_ms, 'model_reused': model_reused, 'inference_ms': inference_ms, 'decoding_settings': {**DECODINGS[decoding], 'beam_size': 5, 'vad_filter': True},
-            'recording_seconds': round(len(signal) / SAMPLE_RATE, 3)}
+            'model_load_ms': model_load_ms, 'model_reused': model_reused, 'inference_ms': inference_ms,
+            'audio_processing': {'sample_rate': SAMPLE_RATE, 'channels': 1, 'format': 'float32',
+                                 'resampler': 'PyAV AudioResampler s16 mono', 'trim_before_vad': False},
+            'decoding_settings': {**DECODINGS[decoding], 'beam_size': 5, 'vad_filter': True,
+                                  'condition_on_previous_text': False, 'vad_parameters': vad_settings,
+                                  'vad_defaults_source': 'faster-whisper worker package; null means not reported by runtime',
+                                  'cpu_threads': 4, 'num_workers': 1},
+            'recording_seconds': round(len(signal) / SAMPLE_RATE, 3)})
 
 
 def _synthesize(source: Path, voice: str, destination: Path) -> dict:
@@ -434,7 +477,9 @@ def _worker(kind: str, selection: str, source: Path, result: Path, destination: 
     except Exception:
         # Do not log user audio, transcripts, model paths, tokens, or native diagnostics.
         payload = {'error': 'Не удалось обработать голос. Проверьте файл, модель и зависимости в docs/VOICE.md.', 'status_code': 422}
-    result.write_text(json.dumps(payload, ensure_ascii=False), encoding='utf-8')
+    if kind == 'stt':
+        payload = normalize_stt_payload(payload)
+    result.write_text(json.dumps(payload, ensure_ascii=False, allow_nan=kind != 'stt'), encoding='utf-8')
 
 
 def main():

@@ -16,9 +16,9 @@ def main():
     profile = sys.argv[1] if len(sys.argv) == 2 else ''
     if profile not in EVALUATION_PROFILES:
         return
-    from .voice_diagnostics import MESSAGES, classify_voice_error
+    from .voice_diagnostics import MESSAGES, classify_voice_error, normalize_stt_payload
     recognizer = Recognizer()
-    protocol.write(json.dumps({'ready': True}) + '\n')
+    protocol.write(json.dumps({'ready': True}, allow_nan=False) + '\n')
     protocol.flush()
     while True:
         raw = sys.stdin.buffer.readline(MAX_FRAME + 1)
@@ -50,8 +50,24 @@ def main():
             recognizer.clear()
             code = classify_voice_error(exc)
             payload = {'error': MESSAGES[code], 'error_code': code, 'status_code': 503}
+        if 'error' in payload:
+            # An empty transcript or invalid next recording does not unload a
+            # warm model. Report its actual identity independently of success.
+            loaded = None
+            if recognizer.model is not None:
+                config = EVALUATION_PROFILES[profile]
+                native = getattr(recognizer.model, 'model', None)
+                loaded = {'profile': profile, 'model': config['model'],
+                          'resource': recognizer.resource, 'runtime': recognizer.runtime,
+                          'device': getattr(native, 'device', recognizer.device),
+                          'compute_type': getattr(native, 'compute_type', recognizer.compute_type),
+                          'requested_device': config['device'],
+                          'requested_compute_type': config['compute_type'],
+                          'fallback': recognizer.fallback, 'last_request_state': 'rejected'}
+            payload['loaded_diagnostics'] = loaded
         payload['id'] = request.get('id') if isinstance(request, dict) else None
-        protocol.write(json.dumps(payload, ensure_ascii=False) + '\n')
+        payload = normalize_stt_payload(payload)
+        protocol.write(json.dumps(payload, ensure_ascii=False, allow_nan=False) + '\n')
         protocol.flush()
         # The warm process may now wait indefinitely. Do not retain the last
         # upload, its base64 frame or transcript while awaiting another request.

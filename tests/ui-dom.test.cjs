@@ -353,6 +353,29 @@ function makeCanvasDom(){
       assert.ok(d.querySelector('#errorText').textContent.includes('test start failed'));
     }finally{dom.window.close()}
   });
+  await run('repeated final and status events retain one message pair and one action chip',async()=>{
+    const submitted=[];
+    const data={answer:'Готово',conversation_id:'same-session',engine:'test',action_results:[{success:true,action:'apps.open',resolved_target:'Блокнот',execution_status:'process_created'}]};
+    const dom=makeDom(async(url,options={})=>{
+      if(url==='/api/chat/stream'){
+        submitted.push(JSON.parse(options.body));
+        return new Response([
+          {type:'status',data},{type:'status',data},
+          {type:'final',data},{type:'final',data}
+        ].map(event=>JSON.stringify(event)+'\n').join(''));
+      }
+      return Response.json({server_instance:'test',devices:[],apps:[],voice:{}});
+    }),w=dom.window,d=w.document;
+    try{
+      await pause(10);await w.sendText('Открой блокнот');
+      assert.equal(d.querySelectorAll('.bubble.me').length,1);
+      assert.equal(d.querySelectorAll('.bubble.assistant').length,1);
+      assert.equal(d.querySelectorAll('.action-chip').length,1);
+      assert.equal(d.querySelectorAll('.message-diagnostics').length,1);
+      await w.sendText('Следующий вопрос');
+      assert.equal(submitted[1].history.length,2,'final is appended to context only once');
+    }finally{w.close();}
+  });
   await run('model controls snapshot settings; live Markdown deltas and collapsed diagnostics',async()=>{
     let submitted,release;
     const dom=makeDom(async(url,options)=>{
@@ -375,9 +398,10 @@ function makeCanvasDom(){
       d.querySelector('#modelSelect').value='qwen3:8b';d.querySelector('#modelSelect').dispatchEvent(new w.Event('change'));
       assert.equal(d.querySelector('#model').textContent,observedModel,'selection must not fabricate response identity');
       d.querySelector('#reasoning').value='on';
+      d.querySelector('#temperature').value='0.7';
       d.querySelector('#responseTokens').value='1536';d.querySelector('#settingsDialog').close();
       const sending=w.sendText('Объясни формулу');await pause(20);
-      assert.equal(submitted.model,null);assert.equal(submitted.reasoning,'on');assert.equal(submitted.response_tokens,1536);
+      assert.equal(submitted.model,null);assert.equal(submitted.reasoning,'on');assert.equal(submitted.temperature,0.7);assert.equal(submitted.response_tokens,1536);
       assert.ok(d.querySelector('.rendered-message strong'));assert.equal(d.querySelectorAll('.rendered-message .katex').length,1);
       assert.equal(d.querySelector('.pending'),null);assert.equal(d.querySelector('#send').disabled,true);
       d.querySelector('#modelSelect').value='qwen3:4b';release();await sending;
@@ -616,6 +640,33 @@ function makeCanvasDom(){
       reject=false;checkbox.click();await pause(10);assert.equal(checkbox.checked,true);assert.equal(allowed,true);
       checkbox.click();await pause(10);assert.equal(allowed,false);assert.equal(mutations[2].allowed,false);
     }finally{dom.window.close()}
+  });
+  await run('transcribe validation arrays show bounded messages without reflecting input or ctx and recover controls',async()=>{
+    let clock=0,attempt=0;
+    const dom=makeDom(async url=>{
+      if(url==='/api/transcribe')return attempt++===0
+        ? Response.json({detail:[{loc:['body','audio'],msg:'Field required',input:'private audio',ctx:{secret:'secret'}},
+          {loc:['body','<img src=x onerror=alert(1)>'],msg:'Invalid file'}]},{status:422})
+        : Response.json({text:'Не открывай Obsidian',final:true});
+      return Response.json({server_instance:'test',devices:[],apps:[],voice:{}});
+    }),w=dom.window,d=w.document;
+    w.performance.now=()=>clock;
+    Object.defineProperty(w.navigator,'mediaDevices',{value:{getUserMedia:async()=>({getTracks:()=>[{stop(){}}]})}});
+    w.MediaRecorder=class {static isTypeSupported(){return true}constructor(){this.state='inactive'}start(){this.state='recording'}stop(){this.state='inactive';this.ondataavailable({data:new w.Blob(['x'.repeat(2048)])});this.onstop()}};
+    try{
+      for(let i=0;i<2;i++){
+        d.querySelector('#mic').click();await pause(5);clock+=1000;d.querySelector('#mic').click();await pause(10);
+        assert.equal(d.querySelector('#mic').disabled,false);assert.equal(d.querySelector('#send').disabled,false);
+        if(i===0){
+          const error=d.querySelector('#errorText');assert.match(error.textContent,/body.audio: Field required/);
+          assert.ok(error.textContent.includes('<img'));assert.equal(error.querySelector('img'),null);
+          assert.ok(!/private audio|secret|ctx|input/.test(error.textContent));d.querySelector('#errorDialog').close();
+        }
+      }
+      assert.equal(d.querySelector('#message').value,'Не открывай Obsidian');
+      await assert.rejects(w.checked(Response.json({detail:'Речь не обнаружена'},{status:422})),/Речь не обнаружена/);
+      await assert.rejects(w.checked(Response.json({detail:Array.from({length:20},()=>({loc:['x'.repeat(1000)],msg:'z'.repeat(1000)}))},{status:422})),e=>e.message.length<=1530);
+    }finally{w.close();}
   });
   await run('microphone denial leaves text input usable and no false listening activity',async()=>{
     const dom=makeDom(),w=dom.window,d=w.document;
