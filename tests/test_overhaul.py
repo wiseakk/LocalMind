@@ -363,3 +363,8 @@ def test_nonstream_composition_response_is_bounded():
     response.iter_bytes.return_value = iter([b'x' * 131073])
     with pytest.raises(ValueError):
         list(agent._bounded_bytes(response, maximum=131072))
+
+
+# Exercise existing behavior when the local planner is unavailable.
+import pytest
+pytestmark = pytest.mark.usefixtures("offline_desktop_planner")

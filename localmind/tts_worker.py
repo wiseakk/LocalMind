@@ -12,7 +12,7 @@ import sys
 import time
 import wave
 
-ROOT = Path(__file__).resolve().parents[1]
+from .paths import DATA_ROOT as ROOT
 MAX_AUDIO_BYTES = 12 * 1024 * 1024
 
 
@@ -21,6 +21,8 @@ def load_engine(voice):
         from piper import PiperVoice
         return PiperVoice.load(str(ROOT / 'models' / 'piper' / (voice + '.onnx')), use_cuda=False)
     if voice == 'silero-v5_6-ru':
+        from .resource_integrity import verify_resources
+        verify_resources('tts')  # A torch package is executable code; check before loading.
         import torch
         torch.set_num_threads(4)
         model = torch.package.PackageImporter(str(ROOT / 'models/silero/v5_6_ru.pt')).load_pickle('tts_models', 'model')
@@ -71,9 +73,16 @@ def main():
     protocol = sys.stdout
     sys.stdout = sys.stderr  # Imported packages cannot contaminate protocol stdout.
     voice = sys.argv[1] if len(sys.argv) == 2 else ''
-    engine = load_engine(voice)
-    # Warm native inference once; warm-up audio is discarded and never played.
-    synthesize(engine, voice, 'Готов.')
+    from .voice_diagnostics import MESSAGES, classify_voice_error
+    try:
+        engine = load_engine(voice)
+        # Warm native inference once; warm-up audio is discarded and never played.
+        synthesize(engine, voice, 'Готов.')
+    except Exception as exc:
+        code = classify_voice_error(exc)
+        protocol.write(json.dumps({'error_code': code, 'error': MESSAGES[code]}) + '\n')
+        protocol.flush()
+        return
     protocol.write(json.dumps({'ready': True}) + '\n')
     protocol.flush()
     for raw in sys.stdin:
@@ -91,10 +100,12 @@ def main():
             result = synthesize(engine, voice, text)
             payload = {'id': request['id'], 'audio': base64.b64encode(result).decode('ascii'),
                        'duration_ms': round((time.monotonic() - started) * 1000)}
-        except Exception:
-            payload = {'id': request.get('id') if isinstance(request, dict) else None, 'error': 'Local speech synthesis failed'}
+        except Exception as exc:
+            code = classify_voice_error(exc)
+            payload = {'id': request.get('id') if isinstance(request, dict) else None, 'error_code': code, 'error': MESSAGES[code]}
         protocol.write(json.dumps(payload) + '\n')
         protocol.flush()
+        raw = request = text = result = payload = None
 
 
 if __name__ == '__main__':

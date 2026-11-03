@@ -1,7 +1,8 @@
 """One declaration/validation/adapter boundary for PC capabilities.
 
-Model planning can select a proposal, never create a grant. A user-text-derived
-exact envelope is checked again here before an adapter sees any argument.
+Model planning can select a tool, never create a grant. llm_planner validates
+operation/target grounding before this boundary; adapters independently recheck
+OS identity and permissions before every side effect.
 """
 from dataclasses import dataclass
 import os
@@ -81,18 +82,27 @@ def _light(args, owner):
 
 class CapabilityRegistry:
     def __init__(self):
+        from .desktop_tools import open_settings, open_bookmark, open_workspace, prepare_mutation
+        from .devices import list_enabled
         definitions = [
             Capability('apps.list_running', (), 'reviewed_request_and_app_grant', 'Список проверенных окон разрешённых приложений.', lambda a, o: _windows().list_running()),
             Capability('apps.open', ('app_id',), 'fingerprint_bound_app_grant', 'Запустить разрешённое приложение или выбрать его проверенное окно.', _open),
             Capability('apps.focus', ('app_id',), 'fingerprint_bound_app_grant', 'Найти окно разрешённого приложения и один раз вывести на передний план; без always-on-top.', lambda a, o: _windows().focus_app(a['app_id'])),
             Capability('apps.focus_window', ('window_id',), 'verified_window_and_app_grant', 'Перевести проверенное окно на передний план, если Windows разрешает.', lambda a, o: _windows().focus_window(a['window_id'])),
+            Capability('apps.minimize_window', ('window_id',), 'verified_window_and_app_grant', 'Свернуть проверенное окно.', lambda a, o: _windows().minimize_window(a['window_id'])),
+            Capability('apps.restore_window', ('window_id',), 'verified_window_and_app_grant', 'Восстановить проверенное окно.', lambda a, o: _windows().restore_window(a['window_id'])),
             Capability('apps.close_window_safely', ('window_id',), 'verified_window_and_safe_close_policy', 'Мягко закрыть безопасное окно; для документов объяснить ограничение.', lambda a, o: _windows().close_window_safely(a['window_id'])),
             Capability('files.find_latest_pdf_in_downloads', (), 'explicit_downloads_read_grant', 'Найти PDF по времени изменения, без вложенных папок.', _latest),
             Capability('files.open_selected_file', ('file_id',), 'separate_exact_pdf_open_grant', 'Открыть выбранный неизменённый PDF.', _file),
             Capability('files.search', ('query', 'extension', 'scope', 'sort_by', 'order'), 'approved_read_scope', 'Поиск обычных файлов с фильтрами и порядком сортировки.', _search),
             Capability('files.read_selected_file', ('file_id',), 'approved_read_scope', 'Прочитать фактическое содержимое выбранного файла.', _read),
             Capability('files.describe_selected_file', ('file_id',), 'approved_read_scope', 'Показать проверенное имя и путь выбранного файла.', _describe),
+            Capability('files.prepare_mutation', ('operation', 'scope', 'filename', 'content', 'destination'), 'extended_and_separate_exact_confirmation', 'Подготовить изменение обычного файла в выбранной папке. Само изменение требует отдельной кнопки подтверждения.', prepare_mutation),
+            Capability('system.open_settings', ('page_id',), 'extended_fixed_windows_page', 'Открыть страницу Экран или Звук; не изменяет настройки.', open_settings),
+            Capability('browser.open_bookmark', ('bookmark_id',), 'extended_fixed_bookmark', 'Открыть заранее объявленную закладку в браузере.', open_bookmark),
+            Capability('workspaces.open', ('workspace_id',), 'each_app_grant', 'Открыть окна рабочего пространства Учёба: Блокнот и Калькулятор.', open_workspace),
             Capability('set_light', ('device_id', 'state'), 'reviewed_request_and_configured_device', 'Включить или выключить разрешённую лампу; DEMO обозначается симуляцией.', _light),
+            Capability('devices.list_enabled', (), 'configured_device_allowlist', 'Проверить, какие разрешённые light/switch сейчас включены.', lambda a, o: list_enabled()),
         ]
         self.tools = {d.name: d for d in definitions}
 
@@ -107,16 +117,18 @@ class CapabilityRegistry:
                 return False
         return bool(tool and type(intent.arguments) is dict and set(intent.arguments) == set(tool.arguments)
                     and all(type(v) is str and (0 < len(v) <= 128 or
-                            intent.name == 'files.search' and k in ('query', 'extension') and v == '')
+                            intent.name == 'files.search' and k in ('query', 'extension') and v == '' or
+                            intent.name == 'files.prepare_mutation' and k in ('content', 'destination') and len(v) <= 128)
                             for k, v in intent.arguments.items()))
 
     def execute(self, intent, authorization, owner):
+        from .devices import DeviceError
         if not self.validate(intent) or intent != authorization or not owner:
             return refused('policy', None, 'Инструмент или точная цель не авторизованы проверенным запросом.')
         check_cancelled()
         try:
             result = self.tools[intent.name].adapter(intent.arguments, owner)
-        except (ValueError, OSError) as exc:
+        except (ValueError, OSError, DeviceError) as exc:
             # Adapters use ValueError for user-readable policy failures; never
             # reflect arbitrary OS exception strings (which may contain secrets).
             from .file_access import FileAccessError

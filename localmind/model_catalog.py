@@ -16,6 +16,8 @@ import uuid
 
 import httpx
 from .settings import ROOT
+from .download_store import JobStore, store as shared_store
+from .download_errors import record_download_error
 from .model_manager import installed_detail, ollama_json, positive
 
 REPO = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}')
@@ -44,8 +46,6 @@ def hub_json(path, params=None):
         with client.stream('GET', 'https://huggingface.co/api/models' + path, params=params) as response:
             if response.status_code == 429:
                 raise ValueError('Hugging Face ограничил частоту запросов. Повторите позже.')
-            if response.status_code in (401, 403, 404):
-                raise ValueError('Репозиторий недоступен, закрыт или требует доступа на Hugging Face.')
             response.raise_for_status()
             content = bytearray()
             deadline = time.monotonic() + 20
@@ -108,7 +108,7 @@ def enrich(row, context=4096):
     if context not in (2048, 4096, 8192):
         raise ValueError('Допустимый контекст: 2048, 4096 или 8192.')
     row = copy.deepcopy(row)
-    identity = {key: row.get(key) for key in ('id', 'source', 'revision', 'license', 'quantization', 'size', 'architecture', 'max_context')}
+    identity = {key: row.get(key) for key in ('id', 'source', 'revision', 'license', 'quantization', 'size', 'architecture', 'max_context', 'artifact', 'artifact_sha256')}
     row['fingerprint'] = hashlib.sha256(json.dumps(identity, sort_keys=True, allow_nan=False).encode()).hexdigest()
     row['disk'] = disk_status()
     row['memory'] = memory_estimate(row, context)
@@ -153,16 +153,21 @@ def hub_variants(identity, context=4096):
         blocked = 'Закрытая/gated модель: доступ в приложении не поддерживается.'
     if data.get('pipeline_tag') not in ('text-generation', None):
         blocked = 'Поддерживаются только текстовые chat GGUF.'
-    if any('mmproj' in str(f.get('rfilename', '')).lower() for f in siblings):
-        blocked = 'Vision projector требует отдельной поддержки; этот импорт заблокирован.'
     license_name = card.get('license')
     if not isinstance(license_name, str) or not license_name.strip() or len(license_name) > 200:
         blocked = 'Лицензия не указана; проверьте права у издателя.'
     groups = {}
     for file in siblings[:2000]:
-        name = str(file.get('rfilename', ''))
+        name = file.get('rfilename', '')
+        if not isinstance(name, str):
+            continue
+        lfs = file.get('lfs')
+        if lfs is not None and not isinstance(lfs, dict):
+            raise ValueError('Некорректные метаданные GGUF.')
+        if isinstance(lfs, dict) and lfs.get('sha256') is not None and not re.fullmatch('[a-f0-9]{64}', str(lfs['sha256'])):
+            raise ValueError('Некорректная контрольная сумма GGUF в metadata.')
         # Filenames are only inspected as text; never used in a URL or path.
-        if not name.lower().endswith('.gguf'):
+        if not name.lower().endswith('.gguf') or 'mmproj' in name.lower():
             continue
         match = re.search(r'(?:^|[-._])(' + '|'.join(sorted(QUANTS, key=len, reverse=True)) + r')(?=[-._]|$)', name, re.I)
         if match:
@@ -176,6 +181,7 @@ def hub_variants(identity, context=4096):
         row = {'id': identity, 'name': identity + ' / ' + quant, 'publisher': identity.split('/')[0],
                'source': 'huggingface', 'source_url': 'https://huggingface.co/' + identity,
                'revision': data.get('sha'), 'metadata_date': data.get('lastModified'),
+               'artifact': name, 'artifact_sha256': (files[0].get('lfs') or {}).get('sha256'),
                'license': license_name if isinstance(license_name, str) else None,
                'parameters': gguf.get('total') if positive(gguf.get('total')) else None, 'quantization': quant,
                'size': (sum(f['size'] for f in files) if all(positive(f.get('size')) for f in files) else None),
@@ -185,6 +191,10 @@ def hub_variants(identity, context=4096):
                                 'tools': 'unknown', 'vision': 'unsupported', 'reasoning': 'unknown'},
                'benchmarks': [], 'blocked_reason': reason}
         rows.append(enrich(row, context))
+    preference = ('Q4_K_M', 'Q5_K_M', 'Q6_K', 'Q8_0', 'Q4_0', 'Q5_0')
+    rows.sort(key=lambda r: (r['compatibility'] == 'blocked', preference.index(r['quantization'])))
+    for index, row in enumerate(rows):
+        row['recommended'] = index == 0 and row['compatibility'] != 'blocked'
     return rows
 
 
@@ -207,15 +217,19 @@ def resolve_pull(source, identity, quant, context):
 
 class DownloadJobs:
     """One bounded pull stream; restarting never resumes it implicitly."""
-    def __init__(self):
-        self.lock = Lock()
-        self.jobs = {}
+    def __init__(self, journal=None):
+        self.journal = journal or JobStore()
+        self.lock = self.journal.lock
+        self.jobs = self.journal.jobs
         self.controls = {}
 
     def start(self, source, identity, quant, context=4096, *, accept_license=False, acknowledge_unknown_disk=False, fingerprint=None):
         if not accept_license:
             raise ValueError('Подтвердите проверку лицензии перед загрузкой.')
         reference, row = resolve_pull(source, identity, quant, context)
+        from .model_manager import manager
+        if manager.active == reference:
+            raise ValueError('Активная модель не перезаписывается загрузкой. Сначала выберите другую установленную модель.')
         if fingerprint != row['fingerprint']:
             raise ValueError('Метаданные, лицензия или вариант изменились. Откройте карточку заново и подтвердите актуальные сведения.')
         disk, size = row['disk'], row.get('size')
@@ -230,14 +244,22 @@ class DownloadJobs:
                 # Evict only completed jobs, never grow an unbounded task log.
                 self.jobs.pop(next(iter(self.jobs)))
             key = uuid.uuid4().hex
-            self.jobs[key] = {'id': key, 'model': reference, 'status': 'starting', 'layers': {},
+            self.jobs[key] = {'id': key, 'kind': 'llm', 'model': reference, 'status': 'starting', 'layers': {},
+                              'expected_sha256': row.get('artifact_sha256'),
+                              'request': {'source': source, 'identity': identity, 'quantization': quant, 'context': context, 'fingerprint': fingerprint, 'accept_license': accept_license, 'acknowledge_unknown_disk': acknowledge_unknown_disk},
                               'error': None, 'cancel_supported': 'disconnect; daemon stop unverified'}
+            try:
+                self.journal.save()
+            except Exception:
+                self.jobs.pop(key, None)
+                raise
             self.controls[key] = {'loop': None, 'task': None, 'cancel': False}
             try:
                 Thread(target=lambda: asyncio.run(self._pull(key, reference)), daemon=True, name='localmind-pull').start()
             except RuntimeError:
                 self.jobs.pop(key, None)
                 self.controls.pop(key, None)
+                self.journal.save()
                 raise ValueError('Не удалось запустить обработчик загрузки. Повторите позже.')
             return copy.deepcopy(self.jobs[key])
 
@@ -252,6 +274,8 @@ class DownloadJobs:
 
     def snapshot(self, key=None):
         with self.lock:
+            if getattr(self.journal, 'unavailable', False):
+                raise ValueError('Журнал загрузок повреждён или недоступен.')
             if key is not None:
                 if key not in self.jobs:
                     raise ValueError('Задача недоступна после перезапуска или истечения срока.')
@@ -261,6 +285,7 @@ class DownloadJobs:
     def update(self, key, **fields):
         with self.lock:
             self.jobs[key].update(fields)
+            self.journal.save()
 
     def cancel(self, key):
         with self.lock:
@@ -271,6 +296,7 @@ class DownloadJobs:
             control = self.controls[key]
             control['cancel'] = True
             self.jobs[key]['status'] = 'cancelling'
+            self.journal.save()
             if control['loop'] and control['task']:
                 control['loop'].call_soon_threadsafe(control['task'].cancel)
         return self.snapshot(key)
@@ -284,7 +310,7 @@ class DownloadJobs:
         try:
             if cancelled:
                 raise asyncio.CancelledError()
-            self.update(key, status='downloading')
+            self.update(key, status='downloading', stage='pull')
             success, buffer, count = False, b'', 0
             async with httpx.AsyncClient(timeout=httpx.Timeout(30, connect=3), trust_env=False, follow_redirects=False) as client:
                 async with client.stream('POST', _local_ollama_url() + '/api/pull', json={'model': reference, 'stream': True}) as response:
@@ -300,7 +326,7 @@ class DownloadJobs:
                                 continue
                             event = json.loads(line)
                             if event.get('error'):
-                                raise ValueError('Pull failed')
+                                raise ValueError(str(event['error'])[:2000])
                             digest, total, completed = event.get('digest'), event.get('total'), event.get('completed')
                             if isinstance(digest, str) and re.fullmatch(r'sha256:[a-f0-9]{64}', digest):
                                 if positive(total) and positive(completed, zero=True) and completed <= total:
@@ -309,6 +335,8 @@ class DownloadJobs:
                                         if len(layers) >= 128 and digest not in layers:
                                             raise ValueError('Too many layers')
                                         layers[digest] = {'total': total, 'completed': completed}
+                                        self.jobs[key].update(total=sum(x['total'] for x in layers.values()), completed=sum(x['completed'] for x in layers.values()))
+                                        self.journal.save()
                             if event.get('status') == 'success':
                                 success = True
                     if buffer.strip():
@@ -316,16 +344,23 @@ class DownloadJobs:
                         raise ValueError('Interrupted progress record')
             if not success:
                 raise ValueError('Interrupted download')
-            self.update(key, status='verifying')
+            self.update(key, status='verifying', stage='installed_verification')
             detail = await asyncio.to_thread(installed_detail, reference)
-            self.update(key, status='succeeded', digest=detail.get('digest'))
+            expected = self.jobs[key].get('expected_sha256')
+            if expected and (not isinstance(expected, str) or not re.fullmatch('[a-f0-9]{64}', expected) or detail.get('weight_sha256') != expected):
+                raise ValueError('Файл несовместим: GGUF изменился после подтверждения metadata или его SHA-256 не подтверждён Ollama.')
+            with self.lock:
+                if control['cancel']:
+                    raise asyncio.CancelledError()
+                self.update(key, status='succeeded', digest=detail.get('digest'), ready=True, completed=self.jobs[key].get('total', 0))
         except asyncio.CancelledError:
             self.update(key, status='cancelled_unverified', error='Поток закрыт. Остановка скачивания внутри Ollama не подтверждена; общий pull другого клиента может продолжаться.')
-        except Exception:
-            self.update(key, status='failed', error='Загрузка или проверка не удалась: проверьте Ollama, сеть, совместимость, лицензию и место на диске. Повтор — только вручную.')
+        except Exception as exc:
+            diagnostic = record_download_error(exc, self.jobs[key].get('stage', 'pull'))
+            self.update(key, status='failed', error=diagnostic['message'], diagnostic=diagnostic)
         finally:
             with self.lock:
                 self.controls.pop(key, None)
 
 
-downloads = DownloadJobs()
+downloads = DownloadJobs(shared_store)

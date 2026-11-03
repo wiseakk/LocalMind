@@ -16,6 +16,7 @@ def main():
     profile = sys.argv[1] if len(sys.argv) == 2 else ''
     if profile not in EVALUATION_PROFILES:
         return
+    from .voice_diagnostics import MESSAGES, classify_voice_error
     recognizer = Recognizer()
     protocol.write(json.dumps({'ready': True}) + '\n')
     protocol.flush()
@@ -44,10 +45,11 @@ def main():
             payload['duration_ms'] = round((time.monotonic() - started) * 1000)
         except VoiceError as exc:
             payload = {'error': exc.detail, 'status_code': exc.status_code}
-        except Exception:
+        except Exception as exc:
             # Keep native diagnostics, audio, paths and transcripts out of logs.
             recognizer.clear()
-            payload = {'error': 'Не удалось обработать запись. Проверьте модель и зависимости в docs/VOICE.md.', 'status_code': 422}
+            code = classify_voice_error(exc)
+            payload = {'error': MESSAGES[code], 'error_code': code, 'status_code': 503}
         payload['id'] = request.get('id') if isinstance(request, dict) else None
         protocol.write(json.dumps(payload, ensure_ascii=False) + '\n')
         protocol.flush()

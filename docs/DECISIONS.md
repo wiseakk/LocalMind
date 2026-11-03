@@ -553,3 +553,51 @@ before starting a pull. A changed repository must not silently substitute anothe
 license or artifact. Tests verify stale rejection, explicit retry and thread-start
 rollback. CPU/RAM and NVIDIA bindings are included in new installations, remain
 optional at runtime, and degrade to unavailable when the vendor driver is absent.
+
+## 2026-11-03 — Productization: решения пяти этапов
+
+1. APP_ROOT только для ресурсов/кода, LOCALAPPDATA/LocalMind — для моделей и
+   состояния; LOCALMIND_DATA_DIR только операторский/test override. Миграция
+   повторяемая и не удаляет источник, не переносит разрешения или HA-токен.
+   Private CPython 3.11.9 поставляется отдельно от GUI EXE, workers запускаются
+   python.exe -m, без попытки использовать frozen launcher как интерпретатор.
+   На реальном embedded runtime найдено различие ../.. и ..\..\ в ._pth;
+   исправлено по фактическому sys.path. Драйверы/Windows protection не меняются.
+2. Один атомарный ограниченный JobStore для LLM/ASR/TTS/offline. После рестарта
+   incomplete становится interrupted, автоматических повторов нет. Отмена Ollama
+   означает закрытие потока, не доказанную остановку daemon. Подтверждение HF
+   связано с metadata/artifact fingerprint, после pull сверяется SHA-256 weights.
+   Активный tag не перезаписывается загрузкой. /api/blobs перед offline upload
+   проверяется HEAD: реальный опыт выявил reset соединения при отправке уже
+   существующего blob без этого шага; свежий upload и повтор теперь проверены.
+3. Основной UX исключает декоративную сцену. Старые scene browser tests доступны
+   только явным legacy opt-in, новые user-mode tests охватывают 100/125/140/150%.
+   Они не выданы за выполненные: браузерная среда блокирует запуск worker.
+4. LLM выбирает инструмент/аргументы внутри server-owned envelope, а не только
+   подтверждает один заранее выбранный intent. Envelope ограничивает семейство
+   действий и названные/выбранные IDs; содержимое документов/страниц не планирует
+   действия и не создаёт права. Registry и OS adapters проверяют снова. Native
+   tools берутся из локально проверенных capabilities; schema fallback остаётся
+   на той же LLM. Результаты адаптера первичны, оценка LLM их не переписывает.
+   При недоступном planner сохранён проверенный точный compatibility path.
+   Дополнительный privileged companion/UAC bypass не добавлен; foreground отказ
+   воспроизведён, GUI-проверка в обычной интерактивной сессии ещё обязательна.
+5. HA принимает только локальный numeric IP без credentials/path/redirect/proxy.
+   Разрешаются отдельно обнаруженные light/switch. Токен шифруется DPAPI текущего
+   пользователя, не возвращается API и не отражается в validation error.
+   При смене origin/token grants очищаются. POST service не равен наблюдению:
+   после него перечитывается состояние; ошибка чтения сохраняет unverified.
+   Явный переход в DEMO удаляет токен и сохраняет только режим.
+
+Проверенные внешние интерфейсы: CPython embedded package
+https://docs.python.org/3.11/using/windows.html#the-embeddable-package ; HF reference
+https://huggingface.co/docs/hub/ollama ; Ollama structured outputs/API create
+https://github.com/ollama/ollama/blob/main/docs/api.md и https://docs.ollama.com/api/create ;
+HA REST https://developers.home-assistant.io/docs/api/rest/ ; Windows foreground
+https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow .
+Это источники интерфейсов, а не доказательства аппаратной/продуктовой приёмки.
+
+- Файлы собственного приложения и DATA_ROOT исключены из обычных файловых
+  разрешений: разрешение родительской папки не даёт инструментам права менять
+  собственную политику, HA-подключение, runtime или манифест ресурсов. Проверено
+  targeted regression tests и полным Python-набором.

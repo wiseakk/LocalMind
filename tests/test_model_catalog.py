@@ -51,6 +51,12 @@ def test_old_or_missing_ollama_blocks(hub, monkeypatch):
     assert cat.curated()[0]['compatibility'] == 'blocked'
 
 
+def test_malformed_lfs_metadata_is_a_domain_error(hub,monkeypatch):
+    monkeypatch.setattr(cat,'hub_json',lambda *a:hub_data(siblings=[{'rfilename':'Test-Q4_K_M.gguf','size':100,'lfs':['invalid']}]))
+    with pytest.raises(ValueError,match='метаданные'):
+        cat.hub_variants('Qwen/Test-GGUF')
+
+
 def test_disk_source_never_uses_project_drive(monkeypatch):
     monkeypatch.delenv('LOCALMIND_OLLAMA_STORAGE_VERIFIED', raising=False)
     monkeypatch.setenv('OLLAMA_MODELS', 'C:/fake')
@@ -80,6 +86,18 @@ def prepare_job(jobs, key='test'):
     jobs.jobs[key] = {'id': key, 'model': 'qwen3:4b-q4_K_M', 'status': 'starting', 'layers': {}}
     jobs.controls[key] = {'loop': None, 'task': None, 'cancel': False}
     return key
+
+
+def test_changed_hf_artifact_cannot_become_ready(monkeypatch):
+    original = httpx.AsyncClient
+    transport = httpx.MockTransport(lambda request: httpx.Response(200,content=b'{"status":"success"}\n'))
+    monkeypatch.setattr(cat.httpx,'AsyncClient',lambda **kw:original(transport=transport,**kw))
+    monkeypatch.setattr(cat,'installed_detail',lambda reference:{'weight_sha256':'b'*64})
+    jobs=cat.DownloadJobs();key=prepare_job(jobs);jobs.jobs[key]['expected_sha256']='a'*64
+    asyncio.run(jobs._pull(key,'hf.co/Qwen/Test-GGUF:Q4_K_M'))
+    result=jobs.snapshot(key)
+    assert result['status']=='failed' and result['diagnostic']['stage']=='installed_verification'
+    assert result['diagnostic']['code']=='incompatible' and not result.get('ready')
 
 
 @pytest.mark.parametrize('ending,expected', [(b'{"status":"success"}\n', 'succeeded'),

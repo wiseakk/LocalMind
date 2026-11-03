@@ -2,6 +2,7 @@
 
 const externalAttempts=new WeakMap();
 test.beforeEach(async({page,baseURL})=>{
+  await page.route('**/api/setup',route=>route.fulfill({json:{voice:[{kind:'asr',state:'ready'},{kind:'tts',state:'ready'}],ollama:{state:'ready',active_installed:true}}}));
   const attempts=[];externalAttempts.set(page,attempts);const origin=new URL(baseURL).origin;
   await page.route('**/*',route=>{
     const url=route.request().url();
@@ -55,13 +56,13 @@ test('transcript remains an editable draft until explicit submit; repeated enter
 test('real DEMO endpoint displays authoritative status with composer disabled',async({page})=>{
   await page.goto('/');
   // Real endpoint uses a disabled composer so deterministic server integration is exercised.
-  await page.locator('#settingsOpen').click();await page.locator('#composeActions').uncheck();await page.keyboard.press('Escape');
+  await page.locator('#modelsOpen').click();await page.locator('#composeActions').uncheck();await page.keyboard.press('Escape');
   await page.locator('#message').fill('Включи лампу');await page.locator('#message').press('Enter');
   await expect(page.locator('.action-chip')).toContainText('ДЕМО');
   await expect(page.locator('#send')).toBeEnabled();
 });
 
-for(const zoom of [1,1.25,1.4])test(`desktop CSS scale stress ${zoom*100}% and keyboard dialogs`,async({page})=>{
+for(const zoom of [1,1.25,1.4,1.5])test(`desktop CSS scale stress ${zoom*100}% and keyboard dialogs`,async({page})=>{
   await fakeInfo(page);await page.goto('/');
   await page.evaluate(z=>document.documentElement.style.zoom=z,zoom);
   await expect(page.locator('#message')).toBeInViewport();await expect(page.locator('#mic')).toBeInViewport();

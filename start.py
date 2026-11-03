@@ -1,10 +1,12 @@
 """Run with: python start.py (after copying .env.example to .env)."""
 import uvicorn
 import sys
-from localmind.settings import settings
 
 
 def main():
+    from localmind.paths import migrate_legacy
+    migrate_legacy()
+    from localmind.settings import settings
     # Redirected Windows consoles may default to cp1252, which cannot print Russian.
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')

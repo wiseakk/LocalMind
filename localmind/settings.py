@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parents[1]
+from .paths import APP_ROOT as ROOT, DATA_ROOT
+load_dotenv(DATA_ROOT / '.env')
+# Source checkout compatibility; release preferences take precedence.
 load_dotenv(ROOT / '.env')
 
 @dataclass(frozen=True)

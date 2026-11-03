@@ -150,15 +150,19 @@ def test_cancellation_after_reply_never_returns_stale_audio(monkeypatch):
     assert calls[0][2].killed
 
 
-def test_candidate_interpreters_are_fixed_project_local_paths():
-    assert speech_worker.interpreter('silero-v5_6-ru').is_relative_to(speech_worker.ROOT / '.voice-envs')
-    assert speech_worker.interpreter('chatterbox-v3-ru').is_relative_to(speech_worker.ROOT / '.voice-envs')
+def test_candidate_interpreters_use_private_runtime_or_declared_dev_python():
+    from localmind.paths import python_runtime
+    for voice_id in ('silero-v5_6-ru', 'chatterbox-v3-ru'):
+        executable = speech_worker.interpreter(voice_id)
+        assert executable == python_runtime() or executable.is_relative_to(speech_worker.ROOT / '.voice-envs')
+        assert executable.name in ('python.exe', 'python')
 
 
 @pytest.mark.parametrize('selection', ['silero-v5_6-ru', 'chatterbox-v3-ru'])
 def test_missing_candidate_setup_message_does_not_misreport_piper(monkeypatch, selection):
     monkeypatch.setattr(voice, '_tts_ready', lambda value: False)
-    with pytest.raises(voice.VoiceError, match='NEXT_VOICE') as error:
+    expected = 'Подготовить голос' if selection == voice.DEFAULT_VOICE else 'NEXT_VOICE'
+    with pytest.raises(voice.VoiceError, match=expected) as error:
         voice.synthesize_speech('Проверка.', selection)
     assert 'Piper не установлен' not in error.value.detail
 

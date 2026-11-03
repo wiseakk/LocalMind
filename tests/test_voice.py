@@ -53,11 +53,11 @@ def test_upload_validation_runs_before_model_loading():
 
 def test_missing_assets_never_start_a_worker_or_download():
     with mock.patch.object(voice, '_installed', return_value=True), mock.patch.object(voice, '_stt_ready', return_value=False), mock.patch.object(voice, '_run_worker') as worker:
-        with pytest.raises(voice.VoiceError, match='setup-stt'):
+        with pytest.raises(voice.VoiceError, match='Подготовить голос'):
             voice.transcribe_audio(b'x' * 1024, '.wav')
     worker.assert_not_called()
     with mock.patch.object(voice, '_tts_ready', return_value=False), mock.patch.object(voice._speech_worker, 'synthesize') as worker:
-        with pytest.raises(voice.VoiceError, match='NEXT_VOICE'):
+        with pytest.raises(voice.VoiceError, match='Подготовить голос'):
             voice.synthesize_speech('Привет')
     worker.assert_not_called()
 

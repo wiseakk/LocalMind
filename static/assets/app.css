@@ -2255,3 +2255,39 @@ input:not([type=checkbox]),select {
 }
 
 .model-card {white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--line, #444);border-radius:12px;padding:12px;max-width:100%} #modelTelemetry {white-space:pre-wrap;overflow-wrap:anywhere} #settings-model button {margin:4px 4px 8px 0}
+/* LocalMind 1.0: task-oriented user workspace. */
+[hidden]{display:none!important}
+html:not([data-expert="true"]) .expert-only{display:none!important}
+.workspace{grid-template-columns:196px minmax(0,1fr)}
+.sidebar{padding:24px 14px}
+.rail-label{display:inline;white-space:normal;text-align:left}
+.sidebar .nav{width:100%;justify-content:flex-start;gap:12px;padding:12px;border-radius:12px;min-height:48px}
+.sidebar .brand{gap:10px}
+.rail-nav{gap:8px;margin-top:24px}
+.rail-bottom{margin-top:auto}
+.stage{display:flex;min-width:0}
+.dialogue-column{flex:1;border-right:0;max-width:1040px;width:100%;margin:0 auto}
+.dialogue-column>.section-heading{gap:12px;flex-wrap:wrap}
+#historyOpen{padding:6px 10px;display:flex;gap:8px;min-height:36px;margin-left:auto;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--text)}
+#historyOpen .rail-label{display:inline}
+.welcome h1{font-size:clamp(30px,4vw,56px)}
+#form{border-color:#55505f}
+.composer-tools{flex-wrap:wrap;gap:8px}
+.attachment-tools{flex:1}
+.composer-hint{color:#b6b2c1}
+.settings-tabs{display:flex;gap:6px;flex-wrap:wrap}
+.settings-tabs button{min-height:42px;padding:9px 12px}
+.settings-panel{max-width:760px}
+.settings-panel label{margin-block:14px}
+#modelsDialog,#downloadsDialog{width:min(850px,calc(100vw - 32px));max-height:90dvh;overflow:auto}
+#modelsDialog>.settings-grid{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+#modelsDialog pre,#downloadsDialog pre{white-space:pre-wrap;overflow-wrap:anywhere}
+.model-card{padding:18px;margin-block:14px;border:1px solid #494350;border-radius:14px}
+.model-card button{margin:5px 8px 5px 0}
+progress{width:100%;accent-color:var(--accent);height:12px}
+.expert-detail{margin-top:16px;color:var(--muted)}
+button:disabled{opacity:.65}
+#modelCatalog #modelDownloads{display:none}
+#modelCatalog>button:last-of-type{display:none}
+@media(max-width:900px){.breadcrumb,.header-divider,.footer-coordinate{display:none}.topbar{padding-inline:18px}.welcome{padding-inline:18px}}
+@media(max-width:760px){.workspace{grid-template-columns:minmax(0,1fr)}.sidebar{width:min(280px,86vw)}.dialogue-column{max-width:100%}.top-right{gap:6px}.topbar{flex-wrap:wrap;height:auto;min-height:64px;gap:8px}.top-right .connection{display:none}.composer-hint,.private-note{display:none}.composer-area{padding-inline:12px}#historyOpen{font-size:12px}dialog{padding:20px;max-height:94dvh}.settings-tabs{gap:4px}.settings-tabs button{font-size:12px}}

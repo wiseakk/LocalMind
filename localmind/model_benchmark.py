@@ -12,6 +12,7 @@ import time
 import uuid
 
 import httpx
+from .paths import PRIVATE
 from .settings import ROOT
 from .model_manager import installed_detail, ollama_json, response_metrics, positive
 
@@ -147,7 +148,7 @@ def evaluate_model(name, detail, *, cancelled, publish, chat=None, deadline=None
 
 class BenchmarkJobs:
     def __init__(self, directory=None):
-        self.directory = Path(directory or ROOT / 'results/private/model-benchmarks')
+        self.directory = Path(directory or PRIVATE / 'model-benchmarks')
         self.lock = Lock()
         self.jobs = {}
         self.cancel_events = {}

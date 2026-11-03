@@ -1,7 +1,8 @@
 """Single supervised warm TTS process, bounded admission and framed replies.
 
 Hard deadlines kill only our worker, including hung native inference. No text or
-audio is retained on disk. Candidate interpreters are fixed project-local venvs.
+audio is retained on disk. Release workers use private CPython; fixed legacy
+candidate venvs remain supported in source checkouts.
 """
 import atexit
 import base64
@@ -17,7 +18,7 @@ from threading import Lock, Thread
 import uuid
 import wave
 
-ROOT = Path(__file__).resolve().parents[1]
+from .paths import APP_ROOT as ROOT, DATA_ROOT, python_runtime
 MAX_FRAME = 17 * 1024 * 1024
 TIMEOUT = 120
 CANDIDATES = {
@@ -29,14 +30,18 @@ CANDIDATES = {
 
 def interpreter(voice):
     if voice not in CANDIDATES:
-        return Path(sys.executable)
+        return python_runtime()
     name, _ = CANDIDATES[voice]
-    return ROOT / '.voice-envs' / name / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+    release = ROOT / 'runtime/core/python.exe'
+    if release.is_file():
+        return release
+    legacy = ROOT / '.voice-envs' / name / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+    return legacy if legacy.is_file() else python_runtime()
 
 
 def candidate_ready(voice):
     try:
-        return interpreter(voice).is_file() and all((ROOT / path).is_file() and (ROOT / path).stat().st_size > 0 for path in CANDIDATES[voice][1])
+        return interpreter(voice).is_file() and all((DATA_ROOT / path).is_file() and (DATA_ROOT / path).stat().st_size > 0 for path in CANDIDATES[voice][1])
     except OSError:
         return False
 
@@ -140,6 +145,9 @@ class WarmSpeechWorker:
             payload = self.replies.get(timeout=max(0, self.deadline - time.monotonic()))
         except Empty as exc:
             raise SpeechWorkerError('timeout') from exc
+        from .voice_diagnostics import MESSAGES
+        if isinstance(payload, dict) and payload.get('error_code') in MESSAGES:
+            raise SpeechWorkerError(payload['error_code'])
         if not isinstance(payload, dict) or payload.get('error'):
             raise SpeechWorkerError('worker')
         return payload

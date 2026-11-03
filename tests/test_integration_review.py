@@ -193,3 +193,8 @@ def test_concurrent_uploads_are_admitted_before_body_buffering(monkeypatch):
             assert (await client.post('/api/chat', json={})).status_code == 422
 
     asyncio.run(check())
+
+
+# Exercise existing behavior when the local planner is unavailable.
+import pytest
+pytestmark = pytest.mark.usefixtures("offline_desktop_planner")

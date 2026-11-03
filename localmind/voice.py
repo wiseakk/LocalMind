@@ -66,7 +66,7 @@ VOICES = {
     PIPER_VOICE: {'label': 'Денис · Piper · CPU', 'dataset_license': 'CC0', 'engine': 'piper'},
     'chatterbox-v3-ru': {'label': 'Chatterbox Multilingual V3 · экспериментальный', 'license': 'MIT', 'engine': 'chatterbox'},
 }
-MODELS = ROOT / 'models'
+from .paths import MODELS, python_runtime
 _operation = threading.BoundedSemaphore(1)
 _temporary_directory = tempfile.TemporaryDirectory
 _pronunciation_logger = logging.getLogger('localmind.pronunciation')
@@ -121,7 +121,7 @@ def voice_status() -> dict:
         'max_upload_bytes': MAX_UPLOAD_BYTES,
         'profiles': [{'id': key, **value, 'ready': stt_installed and _stt_ready(key)} for key, value in PROFILES.items()],
         'voices': [{'id': key, **value, 'ready': ready[key]} for key, value in VOICES.items()],
-        'setup': 'См. docs/VOICE.md. Установите requirements-voice.txt и загрузите выбранную модель отдельно.',
+        'setup': 'Откройте Настройки → Голос → Подготовить голос / восстановить.',
         'local_only': True,
     }
 
@@ -135,7 +135,7 @@ def _run_worker(kind: str, selection: str, data: bytes, suffix: str) -> tuple[di
             source, result, audio = folder / ('input' + suffix), folder / 'result.json', folder / 'output.wav'
             source.write_bytes(data)
             # Arguments and module are server-owned constants. No shell or user path.
-            command = [sys.executable, '-m', 'localmind.voice', '_worker', kind, selection, str(source), str(result), str(audio)]
+            command = [str(python_runtime()), '-m', 'localmind.voice', '_worker', kind, selection, str(source), str(result), str(audio)]
             environment = {**os.environ, 'HF_HUB_OFFLINE': '1', 'HF_HUB_DISABLE_TELEMETRY': '1', 'DO_NOT_TRACK': '1'}
             try:
                 subprocess.run(command, shell=False, cwd=ROOT, env=environment, stdin=subprocess.DEVNULL,
@@ -184,14 +184,15 @@ def transcribe_audio(data: bytes, suffix: str, profile: str = 'balanced', decodi
     if len(data) < 128:
         raise VoiceError(422, 'Запись пустая или слишком короткая.')
     if not _installed('faster_whisper') or not _installed('av'):
-        raise VoiceError(503, 'Для локального распознавания установите requirements-voice.txt. См. docs/VOICE.md.')
+        raise VoiceError(503, 'Компоненты распознавания отсутствуют. Восстановите LocalMind установщиком.')
     if not _stt_ready(profile):
-        raise VoiceError(503, f'Модель не загружена. Выполните: python -m localmind.voice setup-stt --profile {profile}')
+        raise VoiceError(503, 'Ресурсы распознавания отсутствуют. Откройте «Настройки → Голос» и нажмите «Подготовить голос».')
     try:
         return _asr_worker.transcribe(data, suffix.lower(), profile, decoding)
     except SpeechWorkerError as exc:
         code = 429 if str(exc) == 'busy' else 504 if str(exc) == 'timeout' else 503
-        raise VoiceError(code, 'Распознавание занято.' if code == 429 else 'Локальное распознавание недоступно или превысило время. Проверьте docs/VOICE.md.') from exc
+        from .voice_diagnostics import MESSAGES
+        raise VoiceError(code, MESSAGES.get(str(exc), 'Распознавание занято.' if code == 429 else 'Распознавание недоступно. Откройте «Настройки → Голос» для восстановления.')) from exc
 
 
 def synthesize_speech(text: str, voice: str = DEFAULT_VOICE, generation_id: str | None = None) -> bytes:
@@ -200,6 +201,8 @@ def synthesize_speech(text: str, voice: str = DEFAULT_VOICE, generation_id: str 
     if not isinstance(text, str) or not text.strip() or len(text) > MAX_TTS_CHARACTERS:
         raise VoiceError(422, 'Для озвучивания нужен текст от 1 до 1200 символов.')
     if voice in CANDIDATES and not _tts_ready(voice):
+        if voice == DEFAULT_VOICE:
+            raise VoiceError(503, 'Голос Ксения ещё не подготовлен. Откройте «Настройки → Голос → Подготовить голос / восстановить».')
         raise VoiceError(503, 'Выбранный локальный голос не установлен. Подготовьте отдельную среду и модель по docs/NEXT_VOICE.md. Установка Silero: docs/VOICE.md; setup-tts устанавливает только явно выбранный Piper.')
     if voice == PIPER_VOICE and (not _tts_ready(voice) or not _installed('piper')):
         raise VoiceError(503, 'Локальный голос Piper не установлен. Установите requirements-voice.txt и выполните python -m localmind.voice setup-tts. См. docs/VOICE.md.')
@@ -220,7 +223,8 @@ def synthesize_speech(text: str, voice: str = DEFAULT_VOICE, generation_id: str 
         return _speech_worker.synthesize(spoken, voice, generation_id)
     except SpeechWorkerError as exc:
         code = 429 if str(exc) == 'busy' else 504 if str(exc) == 'timeout' else 503
-        raise VoiceError(code, 'Локальная озвучка занята.' if code == 429 else 'Локальная озвучка недоступна или превысила время. Проверьте голос в docs/VOICE.md.') from exc
+        from .voice_diagnostics import MESSAGES
+        raise VoiceError(code, MESSAGES.get(str(exc), 'Локальная озвучка занята.' if code == 429 else 'Озвучка недоступна. Откройте «Настройки → Голос» для восстановления.')) from exc
 
 
 def warm_tts():
@@ -320,6 +324,9 @@ class Recognizer:
         if self.model is not None and self.identity == identity:
             return self.model, 0, True
         self.clear()
+        if Path(directory) == MODELS / 'whisper/small' and (Path(directory) / 'model.bin').is_file():
+            from .resource_integrity import verify_resources
+            verify_resources('asr')
         loading = time.monotonic()
         self.model = WhisperModel(str(directory), device=device, compute_type=compute_type,
                                   cpu_threads=4, num_workers=1, local_files_only=True)

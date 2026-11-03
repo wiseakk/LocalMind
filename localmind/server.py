@@ -15,12 +15,14 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 from pydantic import BaseModel, Field, model_validator
 import httpx
 
 from .settings import ROOT, settings
 from .agent import reply, prepare_reply, complete_reply
-from .devices import device_catalog
+from .devices import device_catalog, is_demo
 from .apps import catalog, AppError
 from .requests import RequestStore, RequestBusy, RequestConflict
 from .generation import GenerationSettings
@@ -52,9 +54,23 @@ async def lifespan(app):
 
 
 app = FastAPI(title='LocalMind', version='1.0.0', docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+
+
+@app.exception_handler(RequestValidationError)
+async def private_validation_error(request, exc):
+    if request.url.path.startswith('/api/home'):
+        # Pydantic's default "input" field can reflect a malformed secret.
+        return JSONResponse({'detail': 'Проверьте поля подключения и разрешения Home Assistant.'}, status_code=422)
+    return await request_validation_exception_handler(request, exc)
+
 app.mount('/assets', StaticFiles(directory=ROOT / 'static' / 'assets'), name='assets')
-from .model_routes import router as model_router
+from .model_routes import router as model_router, unified_router
 app.include_router(model_router)
+app.include_router(unified_router)
+from .setup_routes import router as setup_router
+app.include_router(setup_router)
+from .home_routes import router as home_router
+app.include_router(home_router)
 store = RequestStore()
 LOCAL_HOSTS = frozenset(('127.0.0.1', 'localhost', '::1'))
 SERVER_INSTANCE = uuid.uuid4().hex
@@ -226,7 +242,7 @@ def home():
 def info(x_localmind_key: Annotated[str | None, Header()] = None):
     authorize(x_localmind_key)
     voice = voice_status()
-    return {'name':'LocalMind', 'version':'1.0.0', 'demo':settings.demo, 'model':manager.active,
+    return {'name':'LocalMind', 'version':'1.0.0', 'demo':is_demo(), 'model':manager.active,
             'server_instance':SERVER_INSTANCE,
             'devices':device_catalog(), 'voice_available':voice['stt_installed'], 'voice':voice}
 
@@ -252,7 +268,7 @@ def _entry(data: ChatRequest):
                 max_characters=max(256, (generation.context_tokens - generation.response_tokens - 1200) * 2))
             prepared = prepare_reply(data.text, [], data.actions_authorized, data.response_length,
                                      data.compose_actions, generation, conversation=conversation, local_retrieval=data.local_retrieval,
-                                     document_facts=context)
+                                       document_facts=context, llm_first=True)
             prepared.initial.update(request_id=data.request_id, server_instance=SERVER_INSTANCE)
             from .results import output_channels
             prepared.initial.update(output_channels(prepared.initial['answer'], prepared.initial['action_results'], prepared.initial.get('speech_text')))
@@ -447,6 +463,12 @@ def personal_permissions(x_localmind_key: Annotated[str | None, Header()] = None
     return {**file_access.personal_info(), 'server_instance': SERVER_INSTANCE}
 
 
+@app.get('/api/actions')
+def action_log():
+    from .action_journal import journal
+    return {'actions': journal.snapshot()}
+
+
 @app.post('/api/permissions/personal')
 def set_personal_permissions(data: PersonalModeRequest, x_localmind_key: Annotated[str | None, Header()] = None):
     authorize(x_localmind_key)
@@ -626,7 +648,7 @@ def permission(data:PermissionRequest,x_localmind_key:Annotated[str | None,Heade
 def diagnostics(x_localmind_key:Annotated[str | None,Header()]=None):
     authorize(x_localmind_key)
     from .agent import _local_ollama_url
-    status={'ollama_reachable':False,'model_installed':False,'voice':voice_status(), 'demo':settings.demo,
+    status={'ollama_reachable':False,'model_installed':False,'voice':voice_status(), 'demo':is_demo(),
             'gpu':'Не проверено: профиль GPU не означает наличие CUDA'}
     try:
         url=_local_ollama_url()

@@ -14,6 +14,7 @@ from threading import Thread
 import time
 import uuid
 
+from .paths import python_runtime
 from .speech_worker import WarmSpeechWorker, SpeechWorkerError, ROOT
 
 
@@ -26,7 +27,7 @@ class WarmASRWorker(WarmSpeechWorker):
         environment = {**os.environ, 'HF_HUB_OFFLINE': '1', 'HF_HUB_DISABLE_TELEMETRY': '1',
                        'DO_NOT_TRACK': '1', 'OMP_NUM_THREADS': '4', 'MKL_NUM_THREADS': '4',
                        'PYTHONIOENCODING': 'utf-8'}
-        self.process = subprocess.Popen([sys.executable, '-m', 'localmind.stt_worker', profile],
+        self.process = subprocess.Popen([str(python_runtime()), '-m', 'localmind.stt_worker', profile],
             cwd=ROOT, env=environment, shell=False, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         self.voice = profile

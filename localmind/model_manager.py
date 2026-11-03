@@ -3,12 +3,14 @@ from contextvars import ContextVar
 import json
 import math
 import os
+import re
 import time
 from pathlib import Path
 from threading import Lock
 
 import httpx
 from .generation import GenerationSettings
+from .paths import PRIVATE
 from .settings import ROOT, settings
 
 observation = ContextVar('ollama_observation', default=None)
@@ -84,8 +86,13 @@ def installed_detail(name, tags=None):
     info = show.get('model_info', {})
     if not isinstance(info, dict) or not isinstance(show.get('details', {}), dict):
         raise ValueError('Некорректные сведения модели.')
+    # Parse only the digest from Ollama's generated Modelfile. Never open or
+    # execute the daemon-supplied path. This binds a HF pull to the reviewed GGUF.
+    modelfile = show.get('modelfile')
+    digest_match = re.search(r'^FROM\s+[^\r\n]*sha256[-:]([a-f0-9]{64})(?:["\s]|$)', modelfile, re.M) if isinstance(modelfile, str) else None
     return {**installed, 'details': show.get('details', installed.get('details', {})),
             'capabilities': capabilities,
+            'weight_sha256': digest_match[1] if digest_match else None,
             'max_context': next((v for k, v in info.items() if k.endswith('.context_length')), None)}
 
 
@@ -98,9 +105,10 @@ def placement(item):
 
 class ModelManager:
     def __init__(self, path=None):
-        self.path = Path(path or ROOT / 'results/private/active-model.json')
+        self.path = Path(path or PRIVATE / 'active-model.json')
         self._lock = Lock()
         self._active = settings.model
+        self._capabilities = {}
         try:
             name = json.loads(self.path.read_text(encoding='utf-8'))['model']
             GenerationSettings(name)
@@ -138,6 +146,7 @@ class ModelManager:
                 temporary.unlink(missing_ok=True)
             with self._lock:
                 self._active = name
+                self._capabilities[name] = expected.get('capabilities', [])
             agent._resident_model = name
             return {'active': name, 'health': response_metrics(data)}
 
@@ -158,6 +167,8 @@ class ModelManager:
             row = {k: model.get(k) for k in ('name', 'size', 'digest', 'details')}
             try:
                 detail = installed_detail(model['name'], tags.get('models', []))
+                with self._lock:
+                    self._capabilities[model['name']] = detail.get('capabilities', [])
                 row.update({k: detail.get(k) for k in ('details', 'capabilities', 'max_context')}, selectable=True)
             except (httpx.HTTPError, ValueError, TypeError):
                 row.update(selectable=False, warning='Локальная совместимость чата не подтверждена.')
@@ -174,6 +185,12 @@ class ModelManager:
         active = self.active
         return {'models': rows, 'default': active, 'active': active,
                 'last_response': last, 'local_only': True, 'placement_source': 'Ollama /api/ps'}
+
+    def native_tools_supported(self, name):
+        # Populated by explicit inventory/selection. Unknown uses strict schema
+        # on the same model, without adding discovery I/O to every action.
+        with self._lock:
+            return 'tools' in self._capabilities.get(name, [])
 
 
 manager = ModelManager()

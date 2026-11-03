@@ -128,3 +128,8 @@ def test_permission_endpoint_accepts_only_id_and_fingerprint(client):
     assert result.status_code==409
     permission.assert_called_once_with('unknown',True,'a'*64)
     assert client.post('/api/apps/permission',json={'path':'C:/evil.exe','allowed':True}).status_code==422
+
+
+# Exercise existing behavior when the local planner is unavailable.
+import pytest
+pytestmark = pytest.mark.usefixtures("offline_desktop_planner")

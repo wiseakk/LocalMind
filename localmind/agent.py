@@ -1,7 +1,8 @@
-"""Deterministic action routing plus local Ollama chat.
+"""Local Ollama dialogue and checked desktop actions.
 
-Actions are parsed and authorized by server-owned rules. Model output is never
-used as an executable, path, URL, action name, or action target.
+HTTP turns use llm_planner for tool/argument selection within a server-owned
+policy. The conventional parser remains a compatibility fallback. Model output
+never becomes an executable, OS command, arbitrary path or URL.
 """
 from dataclasses import dataclass, replace
 import json
@@ -147,6 +148,9 @@ def _device_targets(text: str) -> list[str]:
         re.I,
     ):
         return light_devices
+    switch_devices = [key for key, item in DEVICES.items() if item['domain'] == 'switch']
+    if not matches and len(switch_devices) == 1 and re.search(r'\b(?:розетка|розетку|выключатель)\b', lowered, re.I):
+        return switch_devices
     return matches
 
 
@@ -169,6 +173,8 @@ def _matches_light_command(text: str, action: str, target: str, indirect: bool) 
     ]
     if config['domain'] == 'light' and len(light_devices) == 1:
         target_aliases.extend(('лампа', 'лампу', 'свет', 'освещение', 'освещение рабочего места'))
+    if config['domain'] == 'switch' and sum(item['domain'] == 'switch' for item in DEVICES.values()) == 1:
+        target_aliases.extend(('розетка', 'розетку', 'выключатель'))
     aliases = _aliases_pattern(target_aliases)
     polite_start = r'\s*(?:пожалуйста(?:,\s*|\s+))?'
     polite_end = r'(?:[\s,]+пожалуйста)?[.!]?\s*'
@@ -595,7 +601,7 @@ class PreparedReply:
 def prepare_reply(text: str, history: list | None = None, actions_authorized: bool = False,
                   response_length: str = 'normal', compose_actions: bool = True,
                   generation: GenerationSettings | None = None, conversation=None, local_retrieval=False,
-                  document_facts=None) -> PreparedReply:
+                  document_facts=None, llm_first=False) -> PreparedReply:
     """Execute the deterministic phase exactly once; do no generation here."""
     started = time.monotonic()
     text = text.strip()[:2000]
@@ -611,6 +617,10 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
         base['conversation_id'] = conversation.id
     prepared.generation = generation or defaults()
     base['generation'] = prepared.generation.to_dict()
+    if llm_first and conversation:
+        from .llm_planner import prepare as prepare_tools
+        if prepare_tools(prepared, actions_authorized, ollama_chat):
+            return prepared
     if conversation:
         from .orchestration import compound_parts, validate_sequence
         parts = compound_parts(text)
@@ -992,7 +1002,7 @@ def _dialogue_answer(prepared: PreparedReply) -> str:
                      'Не выдумывай имена, родственные связи, цитаты и подробности художественных миров. '
                      'Если источник не предоставлен и нет уверенности, обозначь это прямо. '
                      + (json.dumps({'capabilities': [{'name': t['name'], 'available': t['available'], 'permission': t['permission']}
-                                                   for t in registry.snapshot()]}, ensure_ascii=False) if re.search(r'мож|уме|доступ|управ|открываешь|читаешь', prepared.text, re.I) else ''))
+                                                   for t in registry.snapshot()]}, ensure_ascii=False) if re.search(r'\b(?:мож\w*|уме\w*|доступ\w*|управ\w*|открываешь|читаешь)\b', prepared.text, re.I) else ''))
     if prepared.conversation and re.search(r'\b(?:можешь|умеешь|доступ|сделал|получилось|файл\w*|приложени\w*)\b', prepared.text, re.I):
         # Never inject raw adapter status, paths, titles or document text into a
         # system instruction. Only compact outcome facts are relevant here.
@@ -1097,7 +1107,9 @@ def complete_reply(prepared: PreparedReply) -> dict:
     metric_token = observation.set(None)
     try:
         result = _complete_reply(prepared)
-        result['metrics'] = observation.get()
+        result['metrics'] = observation.get() or prepared.initial.get('planner_metrics')
+        if result['metrics'] and observation.get() is None:
+            result['metrics_stage'] = 'planner'
         result['actual_model'] = (result['metrics'] or {}).get('actual_model')
         record_last(result)
         return result

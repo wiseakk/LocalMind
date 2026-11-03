@@ -13,6 +13,7 @@ import re
 import secrets
 import subprocess
 import sys
+from .paths import python_runtime
 import threading
 import zipfile
 from xml.etree import ElementTree
@@ -256,7 +257,7 @@ def extract_document(data, filename):
             # the only argument is an allowlisted format. No filename, path or
             # model/user prose can enter a command. Bytes travel on stdin.
             try:
-                process = subprocess.run([sys.executable, '-m', 'localmind.document_worker', suffix],
+                process = subprocess.run([str(python_runtime()), '-m', 'localmind.document_worker', suffix],
                     input=data, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=PARSER_TIMEOUT, shell=False,
                     cwd=Path(__file__).resolve().parent.parent,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)

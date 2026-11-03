@@ -7,8 +7,11 @@ import hashlib
 import json
 from pathlib import Path
 import urllib.request
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from localmind.paths import MODELS
 CHATTERBOX_REVISION = '5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18'
 CHATTERBOX_FILES = ('ve.pt', 't3_mtl23ls_v3.safetensors', 's3gen.pt',
                     'grapheme_mtl_merged_expanded_v1.json', 'conds.pt', 'Cangjie5_TC.json')
@@ -42,12 +45,12 @@ def main():
     if args.english_evaluation and args.candidate != 'silero':
         parser.error('--english-evaluation requires silero')
     if args.candidate == 'silero':
-        folder = ROOT / 'models/silero'
+        folder = MODELS / 'silero'
         urls = [('v5_6_ru.pt', 'https://models.silero.ai/models/tts/ru/v5_6_ru.pt')]
         if args.english_evaluation:
             urls.append(('v3_en.pt', 'https://models.silero.ai/models/tts/en/v3_en.pt'))
     else:
-        folder = ROOT / 'models/chatterbox-v3'
+        folder = MODELS / 'chatterbox-v3'
         urls = [(name, f'https://huggingface.co/ResembleAI/chatterbox/resolve/{CHATTERBOX_REVISION}/{name}') for name in CHATTERBOX_FILES]
     folder.mkdir(parents=True, exist_ok=True)
     manifest = [download(url, folder / name) for name, url in urls]

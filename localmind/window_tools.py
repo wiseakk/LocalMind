@@ -127,6 +127,22 @@ class NativeWindowBackend:
                     return
                 observed = user.GetForegroundWindow() == hwnd and not user.IsIconic(hwnd)
                 outcome['state'] = 'focused' if observed else 'foreground_denied'
+            elif operation in ('minimize', 'restore'):
+                user.ShowWindowAsync.argtypes = [w.HWND, ctypes.c_int]
+                user.ShowWindowAsync.restype = w.BOOL
+                user.IsIconic.argtypes = [w.HWND]
+                user.IsIconic.restype = w.BOOL
+                desired = operation == 'minimize'
+                user.ShowWindowAsync(hwnd, 6 if desired else 9)
+                until = time.monotonic() + .4
+                while bool(user.IsIconic(hwnd)) != desired and time.monotonic() < until:
+                    check_cancelled()
+                    if not same_window():
+                        return
+                    time.sleep(.02)
+                if not same_window():
+                    return
+                outcome['state'] = ('minimized' if desired else 'restored') if bool(user.IsIconic(hwnd)) == desired else 'state_pending'
             elif operation == 'close':
                 user.PostMessageW.argtypes = [w.HWND, w.UINT, w.WPARAM, w.LPARAM]
                 user.PostMessageW.restype = w.BOOL
@@ -347,6 +363,7 @@ class WindowTools:
 
     def _operate(self, window_id, operation):
         action = {'focus': 'apps.focus_window', 'close': 'apps.close_window_safely',
+                  'minimize': 'apps.minimize_window', 'restore': 'apps.restore_window',
                   'verify': 'apps.verify_selection'}[operation]
         if not isinstance(window_id, str) or len(window_id) > 80:
             return refused(action, None, 'Нужен проверенный идентификатор окна.', status='stale_target')
@@ -377,6 +394,9 @@ class WindowTools:
                     if state == 'focused':
                         return ActionResult(True, action, app.id, 'observed', 'foreground_window',
                                             status_text=f'{app.name}: окно на переднем плане.', data=facts)
+                    if state in ('minimized', 'restored'):
+                        return ActionResult(True, action, app.id, 'observed', state,
+                                            status_text=f'{app.name}: окно ' + ('свёрнуто.' if state == 'minimized' else 'восстановлено.'), data=facts)
                     if state == 'close_requested':
                         selection.close_requested = True
                         # Do not infer window closure from PostMessage success.
@@ -400,6 +420,12 @@ class WindowTools:
 
     def focus_window(self, window_id):
         return self._operate(window_id, 'focus')
+
+    def minimize_window(self, window_id):
+        return self._operate(window_id, 'minimize')
+
+    def restore_window(self, window_id):
+        return self._operate(window_id, 'restore')
 
     def close_window_safely(self, window_id):
         return self._operate(window_id, 'close')

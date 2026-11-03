@@ -66,7 +66,7 @@ function renderStatus(el, value) {
     const target=result.resolved_target || result.requested_target || result.target || result.data?.application || result.data?.device_id || result.action || 'Действие';
     const observed={on:'включено',off:'выключено',visible_window:'видимое окно',running:'процесс работает',unknown:'неизвестно'};
     const actual=result.observed_state&&result.execution_status!=='request_accepted'?' · Наблюдение: '+(observed[result.observed_state] || result.observed_state):'';
-    chip.textContent = (result.mode==='DEMO'?'ДЕМО · симуляция · ':'') + target + ' · ' + (result.success ? states[result.execution_status] || result.status_text || 'Проверка завершена' : result.error || 'Действие не выполнено')+actual;
+    chip.textContent = (result.mode==='DEMO'?'ДЕМО · симуляция · ':'') + target + ' · ' + (result.success ? states[result.execution_status] || result.status_text || 'Проверка завершена' : result.error || result.status_text || 'Действие не выполнено')+actual;
     el.insertBefore(chip, el.querySelector('.rendered-message')); 
     if(result.success&&result.action?.startsWith('files.')&&result.data?.filename){
       const details=document.createElement('details');details.className='file-result-details';
@@ -231,8 +231,12 @@ async function refresh() {
     }
     renderDevices(info);
     const voice=info.voice || {};
+    for(const option of $('voiceProfile').options){
+      const profile=voice.profiles?.find(p=>p.id===option.value);
+      option.disabled=option.value!=='balanced' && profile?.ready!==true;
+    }
     const selectedVoice=voice.voices?.find(v=>v.id===($('ttsVoice').value || 'silero-v5_6-ru'));
-    $('voiceStatus').textContent=selectedVoice?.ready ? 'Ресурсы выбранного голоса найдены. Синтез выполняется локально; облачная замена отключена.' : 'Выбранный голос требует установки. Piper: docs/VOICE.md; Silero/Chatterbox: docs/NEXT_VOICE.md. Облачная озвучка не используется.';
+    $('voiceStatus').textContent=selectedVoice?.ready ? 'Ресурсы выбранного голоса найдены. Синтез выполняется локально; облачная замена отключена.' : 'Выбранный голос пока недоступен. Нажмите «Подготовить голос / восстановить». Основной голос — Silero xenia. Облачная озвучка не используется.';
     if (voice.setup) $('voiceStatus').textContent += '\n'+voice.setup;
   } catch (error) { $('status').textContent=error.message; $('connectionDot').classList.remove('online'); }
 }

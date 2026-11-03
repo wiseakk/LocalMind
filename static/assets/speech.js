@@ -63,6 +63,7 @@ class LocalMindSpeech {
       if(s.url)URL.revokeObjectURL(s.url);
       s.texts.length=0;s.audio.length=0;s.buffer='';}
     this.session=null;
+    window.dispatchEvent(new CustomEvent('localmind-playback',{detail:{active:false}}));
   }
   valid(s){return this.session===s && s.epoch===this.epoch && this.enabled();}
   feed(text, final=false) {
@@ -130,6 +131,7 @@ class LocalMindSpeech {
       if(!this.valid(s))return;
       s.releaseAmplitude?.();s.releaseAmplitude=null;
       URL.revokeObjectURL(s.url);s.url=null;s.current=null;s.playing=false;
+      window.dispatchEvent(new CustomEvent('localmind-playback',{detail:{active:false}}));
       this.pump(s);
     };
     audio.onended=complete;
@@ -138,6 +140,7 @@ class LocalMindSpeech {
       await audio.play();
       if(!this.valid(s)){audio.pause();return;}
       if(s.paused)audio.pause();
+      window.dispatchEvent(new CustomEvent('localmind-playback',{detail:{active:true}}));
       s.metrics.chunks++;
       // Browser play start, not a claim of measured sound at the speaker.
       if(s.metrics.first_playback_ms===null)s.metrics.first_playback_ms=performance.now()-s.started;

@@ -9,6 +9,9 @@ const pause=ms=>new Promise(r=>setTimeout(r,ms));
 function makeDom(fetcher,setup) {
   const dom=new JSDOM(html,{url:'http://127.0.0.1:8765',runScripts:'dangerously',pretendToBeVisual:true});
   const w=dom.window;
+  // Retained scene component is tested in isolation; product-dom.test covers
+  // the default user mode where that entire decorative panel is hidden.
+  w.document.getElementById('skyPanel').hidden=false;
   w.TextDecoder=TextDecoder;w.TextEncoder=TextEncoder;w.Response=Response;
   w.HTMLDialogElement.prototype.showModal=function(){this.open=true};
   w.HTMLDialogElement.prototype.close=function(){this.open=false};
@@ -594,8 +597,8 @@ function makeCanvasDom(){
     const dom=makeDom(),w=dom.window,d=w.document;
     try{
       const tabs=[...d.querySelectorAll('[data-settings]')];tabs[0].dispatchEvent(new w.KeyboardEvent('keydown',{key:'End',cancelable:true}));
-      assert.equal(tabs[3].getAttribute('aria-selected'),'true');assert.equal(d.querySelector('#settings-capabilities').hidden,false);assert.equal(d.querySelector('#settings-model').hidden,true);
-      tabs[3].dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowRight',cancelable:true}));assert.equal(tabs[0].getAttribute('aria-selected'),'true');
+      assert.equal(tabs.at(-1).getAttribute('aria-selected'),'true');assert.equal(d.querySelector('#settings-advanced').hidden,false);assert.equal(d.querySelector('#settings-model').hidden,true);
+      tabs.at(-1).dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowRight',cancelable:true}));assert.equal(tabs[0].getAttribute('aria-selected'),'true');
       d.querySelector('#reduceMotion').click();d.querySelector('#lowPerformance').click();
       assert.equal(w.localmindScene.stats().reduced,true);assert.equal(w.localmindScene.stats().low,true);assert.equal(d.documentElement.dataset.reducedMotion,'true');assert.equal(d.documentElement.dataset.lowPerformance,'true');
     }finally{dom.window.close()}
@@ -696,7 +699,7 @@ function makeCanvasDom(){
   await run('unavailable model and voice remain explicit without cloud substitution',async()=>{
     const urls=[],dom=makeDom(async(url)=>{urls.push(url);if(url==='/api/models')return Response.json({models:[],default:'missing-model'});return Response.json({server_instance:'test',demo:true,model:'missing-model',devices:[],apps:[],sources:[],voice:{voices:[{id:'ru_RU-denis-medium',ready:false}]}});}),w=dom.window,d=w.document;
     try{
-      await pause(10);await w.loadModels();assert.equal(d.querySelector('#modelSelect').value,'');assert.ok(d.querySelector('#modelSelect').textContent.includes('недоступна'));assert.ok(d.querySelector('#voiceStatus').textContent.includes('требует установки'));assert.ok(d.querySelector('#voiceStatus').textContent.includes('Облачная озвучка не используется'));
+      await pause(10);await w.loadModels();assert.equal(d.querySelector('#modelSelect').value,'');assert.ok(d.querySelector('#modelSelect').textContent.includes('недоступна'));assert.ok(d.querySelector('#voiceStatus').textContent.includes('Подготовить голос'));assert.ok(d.querySelector('#voiceStatus').textContent.includes('Облачная озвучка не используется'));
       assert.ok(urls.every(url=>url.startsWith('/api/')));
     }finally{dom.window.close()}
   });

@@ -108,6 +108,7 @@ def test_image_only_turn_reaches_production_message_builder(monkeypatch):
         image_id = upload.json()['id']
         response = client.post('/api/chat', json={'text': '', 'conversation_id': key, 'attachment_ids': [image_id]})
         assert response.status_code == 200, response.text
+        assert seen, response.text
         assert any(message.get('images') for message in seen[-1])
         actual = next(message['images'][0] for message in seen[-1] if message.get('images'))
         assert Image.open(io.BytesIO(base64.b64decode(actual))).getpixel((1, 1))[0] > 200
@@ -115,3 +116,8 @@ def test_image_only_turn_reaches_production_message_builder(monkeypatch):
         assert response.json()['context_sources'][0]['id'] == image_id
     finally:
         requests.close()
+
+
+# Exercise existing behavior when the local planner is unavailable.
+import pytest
+pytestmark = pytest.mark.usefixtures("offline_desktop_planner")

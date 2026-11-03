@@ -495,5 +495,6 @@ class FileAccess:
             return refused(action, file_id, reason, status='permission_required' if 'разреш' in reason.lower() else 'denied')
 
 
+from .paths import PRIVATE
 from .settings import ROOT
-file_access = FileAccess(persistence=ROOT / 'results' / 'private' / 'personal_mode.json')
+file_access = FileAccess(persistence=PRIVATE / 'personal_mode.json')

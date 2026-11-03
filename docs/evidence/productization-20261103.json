@@ -1,0 +1,266 @@
+{
+  "recorded_at": "2026-11-02T22:09:57.139657+00:00",
+  "scope": "Current Builder checkout; release candidate, not product acceptance",
+  "base_commit": "3e0a228fcaa693a90b1e95156804d02f1a86a462",
+  "automation": {
+    "pytest": {
+      "passed": 857,
+      "subtests": 35
+    },
+    "javascript_syntax": "passed",
+    "dom_suites": "passed",
+    "local_assets": 82,
+    "compileall": "passed",
+    "pip_check": "passed",
+    "git_diff_check": "passed",
+    "browser": {
+      "executed": 0,
+      "reason": "Playwright worker spawn EPERM"
+    },
+    "typecheck": "not configured"
+  },
+  "real_evidence": {
+    "hf-artifact-evidence.json": {
+      "weight_sha256": "6eb923e7d26e9cea28811e1a8e852009b21242fb157b26149d3b188f3a8c8653",
+      "expected_sha256": "6eb923e7d26e9cea28811e1a8e852009b21242fb157b26149d3b188f3a8c8653",
+      "job": {
+        "id": "24557b52c3584561aefaf08fd92a27d6",
+        "kind": "llm",
+        "model": "hf.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M",
+        "status": "succeeded",
+        "layers": {
+          "sha256:6eb923e7d26e9cea28811e1a8e852009b21242fb157b26149d3b188f3a8c8653": {
+            "total": 397808192,
+            "completed": 397808192
+          },
+          "sha256:e94a8ecb9327ded799604a2e478659bc759230fe316c50d686358f932f52776c": {
+            "total": 1573,
+            "completed": 1573
+          },
+          "sha256:3c3ae183ca1e36d3a6635bd787c882f80cfda6971fa52509042487d4a004ec0e": {
+            "total": 475,
+            "completed": 475
+          }
+        },
+        "expected_sha256": "6eb923e7d26e9cea28811e1a8e852009b21242fb157b26149d3b188f3a8c8653",
+        "request": {
+          "source": "huggingface",
+          "identity": "bartowski/Qwen2.5-0.5B-Instruct-GGUF",
+          "quantization": "Q4_K_M",
+          "context": 4096,
+          "fingerprint": "a0a45f63983d35494d2c0bd58f227f7b992bd5af76b7f8f482dc359d4906e6a9",
+          "accept_license": true,
+          "acknowledge_unknown_disk": true
+        },
+        "error": null,
+        "cancel_supported": "disconnect; daemon stop unverified",
+        "stage": "installed_verification",
+        "total": 397810240,
+        "completed": 397810240,
+        "digest": "acd7e615fd7ea192c1ea557400f53de06d2946f45b1cf560911315fe4a210aa7",
+        "ready": true
+      },
+      "active_unchanged": true
+    },
+    "hf-retry-evidence.json": {
+      "cancel": {
+        "id": "abcbfa104cbf4331b9ac850e1c8a43a5",
+        "kind": "llm",
+        "model": "hf.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M",
+        "status": "cancelled_unverified",
+        "layers": {},
+        "request": {
+          "source": "huggingface",
+          "identity": "bartowski/Qwen2.5-0.5B-Instruct-GGUF",
+          "quantization": "Q4_K_M",
+          "context": 4096,
+          "fingerprint": "a0a45f63983d35494d2c0bd58f227f7b992bd5af76b7f8f482dc359d4906e6a9",
+          "accept_license": true,
+          "acknowledge_unknown_disk": true
+        },
+        "error": "Поток закрыт. Остановка скачивания внутри Ollama не подтверждена; общий pull другого клиента может продолжаться.",
+        "cancel_supported": "disconnect; daemon stop unverified"
+      },
+      "restored_count": 2,
+      "retry": {
+        "id": "71f48f1f4b1044b78197498202da0b4e",
+        "kind": "llm",
+        "model": "hf.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF:Q4_K_M",
+        "status": "succeeded",
+        "layers": {
+          "sha256:6eb923e7d26e9cea28811e1a8e852009b21242fb157b26149d3b188f3a8c8653": {
+            "total": 397808192,
+            "completed": 397808192
+          },
+          "sha256:e94a8ecb9327ded799604a2e478659bc759230fe316c50d686358f932f52776c": {
+            "total": 1573,
+            "completed": 1573
+          },
+          "sha256:3c3ae183ca1e36d3a6635bd787c882f80cfda6971fa52509042487d4a004ec0e": {
+            "total": 475,
+            "completed": 475
+          }
+        },
+        "request": {
+          "source": "huggingface",
+          "identity": "bartowski/Qwen2.5-0.5B-Instruct-GGUF",
+          "quantization": "Q4_K_M",
+          "context": 4096,
+          "fingerprint": "a0a45f63983d35494d2c0bd58f227f7b992bd5af76b7f8f482dc359d4906e6a9",
+          "accept_license": true,
+          "acknowledge_unknown_disk": true
+        },
+        "error": null,
+        "cancel_supported": "disconnect; daemon stop unverified",
+        "stage": "installed_verification",
+        "total": 397810240,
+        "completed": 397810240,
+        "digest": "acd7e615fd7ea192c1ea557400f53de06d2946f45b1cf560911315fe4a210aa7",
+        "ready": true
+      },
+      "active_unchanged": true
+    },
+    "offline-import-evidence.json": {
+      "jobs": [
+        {
+          "id": "91382befce0845ec917ce1293c0f5251",
+          "kind": "llm_offline",
+          "model": "localmind-offline:1.0",
+          "status": "succeeded",
+          "layers": {},
+          "total": 397808192,
+          "completed": 397808192,
+          "error": null,
+          "ready": true,
+          "digest": "bddf074a3a0176761494d7e14051934f04f3b3a2270969127f95d143380271c6"
+        },
+        {
+          "id": "239f5be802b94a369a584006c0991bf5",
+          "kind": "llm_offline",
+          "model": "localmind-offline:1.0",
+          "status": "succeeded",
+          "layers": {},
+          "total": 397808192,
+          "completed": 397808192,
+          "error": null,
+          "ready": true,
+          "digest": "bddf074a3a0176761494d7e14051934f04f3b3a2270969127f95d143380271c6"
+        }
+      ],
+      "active_unchanged": true,
+      "fresh_store": true
+    },
+    "packaged-voice-evidence.json": {
+      "runtime": "dist/LocalMind/runtime/core/python.exe",
+      "sample_rate": 24000,
+      "frames": 69300,
+      "bytes": 138644,
+      "transcription": {
+        "text": "Как сварить пельмени? Что такое РСА?",
+        "profile": "balanced",
+        "device": "cpu",
+        "fallback": false,
+        "model": "small",
+        "compute_type": "int8_float32",
+        "decoding": "baseline",
+        "requested_device": "cpu",
+        "requested_compute_type": "int8",
+        "language": "ru",
+        "levels": {
+          "rms_dbfs": -25.6,
+          "peak": 0.4327,
+          "clipped_fraction": 0.0,
+          "warnings": []
+        },
+        "quality": {
+          "calibrated_confidence": null,
+          "mean_segment_logprob": -0.34531891180409324,
+          "max_no_speech_probability": 0.0012286758283153176,
+          "review_recommended": false
+        },
+        "final": true,
+        "model_load_ms": 891,
+        "model_reused": false,
+        "inference_ms": 1016,
+        "decoding_settings": {
+          "language": "ru",
+          "initial_prompt": "Русская речь. Пельмени, Codex, Кодекс, Obsidian, Discord, Visual Studio Code, блокнот, калькулятор.",
+          "beam_size": 5,
+          "vad_filter": true
+        },
+        "recording_seconds": 2.888,
+        "duration_ms": 2016
+      },
+      "audio_retained": false
+    },
+    "cpu-fallback-evidence.json": {
+      "kind": "synthetic xenia WAV, GPU explicitly hidden in this test process; not a microphone or GPU benchmark",
+      "result": {
+        "text": "Как сварить пельмени? Что такое РСА?",
+        "profile": "cuda-hidden-probe",
+        "device": "cpu",
+        "fallback": true,
+        "model": "small",
+        "compute_type": "int8_float32",
+        "decoding": "baseline",
+        "requested_device": "cuda",
+        "requested_compute_type": "float16",
+        "language": "ru",
+        "levels": {
+          "rms_dbfs": -25.6,
+          "peak": 0.4327,
+          "clipped_fraction": 0.0,
+          "warnings": []
+        },
+        "quality": {
+          "calibrated_confidence": null,
+          "mean_segment_logprob": -0.34531891180409324,
+          "max_no_speech_probability": 0.0012286758283153176,
+          "review_recommended": false
+        },
+        "final": true,
+        "model_load_ms": 1204,
+        "model_reused": false,
+        "inference_ms": 1000,
+        "decoding_settings": {
+          "language": "ru",
+          "initial_prompt": "Русская речь. Пельмени, Codex, Кодекс, Obsidian, Discord, Visual Studio Code, блокнот, калькулятор.",
+          "beam_size": 5,
+          "vad_filter": true
+        },
+        "recording_seconds": 2.888
+      }
+    }
+  },
+  "security_regression": "Approved parent cannot expose application resources or user-data/grants to file tools; focused and full tests passed",
+  "not_verified": [
+    "Clean Windows 10/11 install, update and uninstall without host Python",
+    "Interactive GUI, keyboard/contrast and 100/125/140/150 percent visual QA",
+    "Human microphone and audible xenia",
+    "Gemma regression and shared GPU/STT load",
+    "Physically disconnected network",
+    "Real Home Assistant controller and hardware"
+  ],
+  "observed_failure": {
+    "notepad": "Process created but Windows foreground activation denied; no success claimed",
+    "gui": "Qt WebEngine named IPC pipe Access denied in restricted execution token",
+    "computer_use": "Automatic approval review rejected reading csrss error dialog; no bypass",
+    "git": "External worktree index.lock Permission denied; zero commits created"
+  },
+  "incomplete_scope": [
+    "General browser tabs/navigation beyond a fixed declared bookmark",
+    "Directory mutations, general workspace editing and reversible file deletion",
+    "General Windows setting changes beyond opening fixed pages",
+    "Crash-persistent exactly-once actions",
+    "Migration from arbitrary prior checkout and browser profile; current migration covers benign .env, active model and model assets in application source root only"
+  ],
+  "build": {
+    "artifact": "dist/LocalMind-Offline-Setup.exe",
+    "bytes": 3058411974,
+    "sha256": "7c4957e22a93aeb32561f1248754345a988c926471b52a193fd56e91a1286ef9",
+    "application_source_matches_payload": true,
+    "private_runtime_workers": "Real xenia synthesis and small CPU recognition passed after final source copy",
+    "installed_on_clean_windows": false,
+    "signed_release": false
+  }
+}

@@ -18,6 +18,7 @@ async function setup(page,baseURL){
     const data=()=>request.postDataJSON();
     const json=(value,status=200)=>route.fulfill({status,json:value});
     const create=()=>{const id='conv'+String(++state.nextConversation).padStart(28,'0');state.conversations.add(id);return id;};
+    if(path==='/api/setup')return json({voice:[{kind:'asr',state:'ready'},{kind:'tts',state:'ready'}],ollama:{state:'ready',active_installed:true}});
     if(path==='/api/info')return json({server_instance:INSTANCE,demo:true,model:'local-fixture',devices:[{id:'desk_light',name:'Desk light',state:false}],voice:{voices:[]}});
     if(path==='/api/apps')return json({apps:[]});
     if(path==='/api/models')return json({models:[{name:'local-fixture'}],default:'local-fixture'});
@@ -114,27 +115,25 @@ for(const text of ['', 'What is in this image?'])test(`PNG sent thumbnail clears
   await expect(page.locator('.sent-attachment canvas')).toBeVisible();await expect(page.locator('#attachmentList .attachment')).toHaveCount(0);
 });
 
-test('drawers contain keyboard focus, all five modes work, Map restores draft and focus',async({page})=>{
+test('product navigation dialogs retain keyboard focus and keep the chat draft',async({page})=>{
   await ready(page);await page.locator('#message').fill('Keep this draft');
-  for(const [opener,dialog] of [['#settingsOpen','#settingsDialog'],['#appsOpen','#appsDialog'],['#filesOpen','#filesDialog'],['#devicesOpen','#devicesDialog'],['#historyOpen','#historyDialog']]){
+  for(const [opener,dialog] of [['#settingsOpen','#settingsDialog'],['#modelsOpen','#modelsDialog'],['#downloadsOpen','#downloadsDialog'],['#devicesOpen','#devicesDialog'],['#historyOpen','#historyDialog']]){
     await openRail(page,opener);await expect(page.locator(dialog)).toBeVisible();
     for(let i=0;i<12;i++)await page.keyboard.press('Tab');expect(await page.locator(dialog).evaluate(el=>el.contains(document.activeElement))).toBe(true);
     await page.keyboard.press('Escape');await expect(page.locator(dialog)).not.toBeVisible();await expect(page.locator(opener)).toBeFocused();
   }
-  for(const mode of ['ambient','focus','devices','files']){await page.locator('#constellationMode').selectOption(mode);expect(await page.evaluate(()=>localmindScene.stats().displayMode)).toBe(mode);await expect(page.locator('#message')).toBeVisible();}
-  await page.locator('#graphToggle').click();await expect(page.locator('body')).toHaveClass(/map-open/);await expect(page.locator('#nodeSelect')).toBeFocused();
-  await page.keyboard.press('Escape');await expect(page.locator('body')).not.toHaveClass(/map-open/);await expect(page.locator('#graphToggle')).toBeFocused();await expect(page.locator('#message')).toHaveValue('Keep this draft');
-  await page.locator('#constellationMode').selectOption('map');expect(await page.evaluate(()=>localmindScene.stats().displayMode)).toBe('map');await page.locator('#closeGraph').click();await expect(page.locator('#message')).toHaveValue('Keep this draft');
+  await expect(page.locator('#graphToggle')).not.toBeVisible();
+  await expect(page.locator('#imageAttach')).not.toBeVisible();
+  await expect(page.locator('.rail-nav #historyOpen')).toHaveCount(0);
+  await expect(page.locator('#message')).toHaveValue('Keep this draft');
 });
 
-for(const viewport of [{name:'desktop',width:1440,height:1000},{name:'mobile',width:390,height:844}])for(const zoom of [1,1.25,1.4])test(`${viewport.name} fullscreen scene CSS zoom stress ${zoom*100}%`,async({page},testInfo)=>{
+for(const viewport of [{name:'desktop',width:1440,height:1000},{name:'mobile',width:390,height:844}])for(const zoom of [1,1.25,1.4,1.5])test(`${viewport.name} workspace CSS zoom stress ${zoom*100}%`,async({page},testInfo)=>{
   await page.setViewportSize({width:viewport.width,height:viewport.height});await ready(page);await page.evaluate(z=>document.documentElement.style.zoom=z,zoom);
   await page.evaluate(()=>document.fonts.ready);
   await expect(page.locator('#message')).toBeInViewport();await expect(page.locator('#mic')).toBeInViewport();await expect(page.locator('#send')).toBeInViewport();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  const scene=await page.locator('#skyPanel').boundingBox(),workspace=await page.locator('.main').boundingBox();expect(scene.width).toBeGreaterThanOrEqual(workspace.width-2);
+  await expect(page.locator('#skyPanel')).not.toBeVisible();
   const shot=await page.screenshot({fullPage:true});await testInfo.attach(`${viewport.name}-${zoom}-CSS-zoom-scene`,{body:shot,contentType:'image/png'});
-  await openRail(page,'#filesOpen');await expect(page.locator('#filesDialog')).toBeInViewport();await page.keyboard.press('Escape');
-  await page.locator('#graphToggle').click();await expect(page.locator('#nodeSelect')).toBeInViewport();await expect(page.locator('#closeGraph')).toBeInViewport();
-  await testInfo.attach(`${viewport.name}-${zoom}-CSS-zoom-map`,{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+  await openRail(page,'#downloadsOpen');await expect(page.locator('#downloadsDialog')).toBeInViewport();await page.keyboard.press('Escape');
 });

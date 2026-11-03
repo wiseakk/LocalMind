@@ -23,7 +23,7 @@ test('model selection is explicit, identity is authoritative, catalog never star
   });
   await page.goto('/');await expect(page.locator('#status')).toContainText('подключён');
   if(await page.locator('#sidebarToggle').isVisible())await page.locator('#sidebarToggle').click();
-  await page.locator('#settingsOpen').click();await expect(page.locator('#modelStatus')).toContainText('fixture:4b');
+  await page.locator('#modelsOpen').click();await expect(page.locator('#modelStatus')).toContainText('fixture:4b');
   expect(calls.filter(c=>c.path.includes('catalog')||c.path.includes('/hub/'))).toHaveLength(0);
   await page.locator('#modelSelect').selectOption('fixture:8b');
   await expect(page.locator('#model')).not.toHaveText('fixture:8b');
@@ -32,7 +32,7 @@ test('model selection is explicit, identity is authoritative, catalog never star
   await page.locator('#openRegistry').click();await expect(page.locator('#catalogModels')).toContainText('<script>unsafe</script>');
   await expect(page.locator('#catalogModels script')).toHaveCount(0);
   expect(calls.filter(c=>c.path==='/api/models/downloads'&&c.body)).toHaveLength(0);
-  await page.locator('[data-close="settingsDialog"]').click();
+  await page.locator('#modelsDialog').getByRole('button',{name:'Закрыть',exact:true}).click();
   await page.locator('#message').fill('Привет');await page.locator('#send').click();
   await expect(page.locator('#model')).toHaveText('response:actual');
   expect(calls.find(c=>c.path==='/api/chat/stream').body.model).toBeNull();expect(outside).toEqual([]);

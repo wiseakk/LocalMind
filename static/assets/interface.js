@@ -31,7 +31,7 @@
   function syncGraphAccess(){
     const open=panel.classList.contains('graph-focused');
     panel.inert=false;
-    window.localmindScene?.setVisible(true);
+    window.localmindScene?.setVisible(!panel.hidden);
     document.querySelector('.dialogue-column').inert=open;
     for(const id of ['graphNav','graphToggle'])byId(id).setAttribute('aria-expanded',String(open));
   }

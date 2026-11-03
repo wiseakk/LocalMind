@@ -32,3 +32,6 @@ models/
 .pip-cache/
 
 .voice-envs/
+
+dist/
+build/

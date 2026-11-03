@@ -310,17 +310,24 @@ def test_disconnect_cancellation_cannot_destroy_execution_or_replay():
 
 
 def test_home_assistant_acceptance_does_not_claim_observed_state():
-    fake_client = mock.MagicMock()
-    fake_client.__enter__.return_value.post.return_value.raise_for_status.return_value = None
+    calls=[]
+    real_client=httpx.Client
+    def handler(request):
+        calls.append(request.method)
+        if request.method=='POST':return httpx.Response(200,json=[])
+        return httpx.Response(200,json={'entity_id':'light.desk_lamp','state':'off'})
+    transport=httpx.MockTransport(handler)
     configuration = SimpleNamespace(demo=False, ha_url='http://127.0.0.1:8123', ha_token='test-secret')
     with mock.patch.object(devices, 'settings', configuration), \
-         mock.patch.object(devices.httpx, 'Client', return_value=fake_client) as client:
+         mock.patch.object(devices.httpx, 'Client', side_effect=lambda **kw: real_client(transport=transport,**kw)) as client, \
+         mock.patch('localmind.home_assistant.time.sleep'):
         result = devices.set_light('desk_light', 'on')
-    assert result.success and result.execution_status == 'request_accepted'
-    assert result.observed_state is None and result.mode == 'REAL'
-    assert 'не проверено' in result.status_text
+    assert not result.success and result.execution_status == 'request_accepted'
+    assert result.observed_state == 'off' and result.mode == 'REAL'
+    assert 'не подтверждено' in result.status_text
     assert 'test-secret' not in str(result.to_dict())
     assert client.call_args.kwargs['trust_env'] is False
+    assert 'POST' in calls and calls[-1]=='GET'
 
 
 def test_unexpected_composer_defect_keeps_trusted_outcome_and_dedup():

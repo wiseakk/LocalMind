@@ -187,3 +187,8 @@ def test_reference_resolution_requires_complete_action_request(text):
     conversation.focus = 'application'
     intent, reason, _ = orchestration.pc_intent(text, conversation, agent.assess_action(text))
     assert intent is None
+
+
+# Exercise existing behavior when the local planner is unavailable.
+import pytest
+pytestmark = pytest.mark.usefixtures("offline_desktop_planner")

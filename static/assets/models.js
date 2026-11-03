@@ -56,7 +56,9 @@
           `Размер: ${bytes(row.size)} · возможности: ${(row.capabilities || []).join(', ') || 'неизвестно'}\n` +
           `Контекст max / загружен: ${unknown(row.max_context)} / ${unknown(row.context_length)}\n` +
           `Размещение /api/ps: ${unknown(row.placement)} · VRAM модели: ${bytes(row.size_vram)}${row.warning ? '\n' + row.warning : ''}`;
-        list.append(item);
+        const card=document.createElement('article');card.className='model-card';
+        const label=document.createElement('p');label.textContent=row.name+' · '+bytes(row.size)+(row.name===activeSelection?' · Активная':'');
+        item.classList.add('expert-only');card.append(label,item);list.append(card);
       }
       if (data.last_response) observe(data.last_response);
       await refreshHardware();
@@ -64,7 +66,7 @@
   }
   async function refreshHardware() {
     let box=$('hardwareTelemetry');
-    if(!box){box=document.createElement('pre');box.className='mini model-card';box.id='hardwareTelemetry';$('installedModels').append(box);}
+    if(!box){box=document.createElement('pre');box.className='mini model-card expert-only';box.id='hardwareTelemetry';$('installedModels').append(box);}
     try {
       const h = await api('/hardware');
       box.textContent = `CPU: ${unknown(h.cpu)} · ${unknown(h.cpu_percent)}%\nRAM всего / доступно: ${bytes(h.ram_total)} / ${bytes(h.ram_available)}\n` +
@@ -82,7 +84,7 @@
   window.localmindModels = {refresh, observe, api, bytes};
 
   // Discovery is intentional: no Hub/registry request on app startup.
-  const root = document.createElement('section'); root.className = 'side-section';
+  const root = document.createElement('section'); root.className = 'side-section'; root.id='modelCatalog';
   $('sessionControls').before(root);
   const title = document.createElement('h3'); title.textContent = 'Каталог и загрузки';
   const notice = document.createElement('p'); notice.className = 'mini';
@@ -101,13 +103,16 @@
   function cards(rows) {
     output.replaceChildren();
     if (!rows.length) { status.textContent = 'Поддерживаемые варианты GGUF не найдены.'; return; }
-    for (const row of rows) {
+    const recommended=rows.find(row=>row.recommended)||rows.find(row=>row.compatibility!=='blocked');
+    const visibleRows=document.documentElement.dataset.expert==='true'||!recommended?rows:[recommended];
+    for (const row of visibleRows) {
       const card = document.createElement('article'); card.className = 'model-card';
+      const cardSummary=document.createElement('p');cardSummary.textContent=bytes(row.size)+' · '+(row.compatibility==='blocked'?row.warning:'Подходящий вариант выбран автоматически');card.append(cardSummary);
       const heading = document.createElement('h4'); heading.textContent = row.name;
       const source = document.createElement('p'); source.className = 'mini';
       // Server constructs source URLs; rendering as text keeps metadata inert.
-      source.textContent = `Издатель: ${row.publisher} · ${row.source_url}\nЛицензия: ${row.license || 'неизвестно'} · metadata: ${row.metadata_date || 'неизвестно'}`;
-      const info = document.createElement('pre'); info.className = 'mini';
+      source.textContent = `Издатель: ${row.publisher} · Лицензия: ${row.license || 'неизвестно'}`;
+      const info = document.createElement('pre'); info.className = 'mini expert-only';
       const m = row.memory || {};
       info.textContent = `Параметры: ${unknown(row.parameters)} · ${row.quantization} · архитектура: ${unknown(row.architecture)}\n` +
         `Загрузка: ${bytes(row.size)}${row.size_is_estimate ? ' (оценка)' : ''} · диск: ${bytes(row.disk?.free)} (${row.disk?.status})\n` +
@@ -120,8 +125,8 @@
       consent.append(accept, document.createTextNode('Проверил(а) лицензию и разрешаю загрузить этот вариант'));
       const diskConsent = document.createElement('label'); diskConsent.className = 'check';
       const diskAccept = document.createElement('input'); diskAccept.type = 'checkbox';
-      diskConsent.append(diskAccept, document.createTextNode('Если размер/диск неизвестен: место проверено вручную, подтверждаю риск нехватки'));
-      const pull = document.createElement('button'); pull.className = 'secondary'; pull.textContent = 'Скачать / повторить';
+      diskConsent.append(diskAccept, document.createTextNode('Свободное место не удалось проверить. Разрешаю начать загрузку с этим предупреждением'));
+      const pull = document.createElement('button'); pull.className = 'secondary'; pull.textContent = 'Установить';
       pull.disabled = row.compatibility === 'blocked';
       pull.addEventListener('click', async () => {
         pull.disabled = true;
@@ -186,7 +191,7 @@
   $('settingsOpen').addEventListener('click', () => { clearTimeout(pollTimer); pollTimer = setTimeout(poll, 100); });
   $('settingsDialog').addEventListener('close', () => clearTimeout(pollTimer));
 
-  const benchmarkRoot = document.createElement('section'); benchmarkRoot.className = 'side-section';
+  const benchmarkRoot = document.createElement('section'); benchmarkRoot.className = 'side-section expert-only';
   const benchTitle = document.createElement('h3'); benchTitle.textContent = 'Локальный тест моделей';
   const benchNotice = document.createElement('p'); benchNotice.className = 'mini';
   benchNotice.textContent = '12 фиксированных русских заданий. Строгие проверки формата/ответа, не общая точность. Две модели получают одинаковые prompts, seed, контекст 4096 и бюджет 256; reasoning выключен в запросе. Инструменты и сгенерированный код не исполняются. Во время теста inference занят. Синтетические ответы сохраняются локально отдельно от чата; активная модель не меняется.';
@@ -218,6 +223,7 @@
       }
       for (const model of job.models || []) {
         const card = document.createElement('article'); card.className = 'model-card';
+
         const title = document.createElement('h4'); title.textContent = model.requested_model;
         const details = document.createElement('pre'); details.className = 'mini';
         details.textContent = `Digest: ${unknown(model.digest)} · ${unknown(model.quantization)}\nЗавершён: ${model.complete}\n` +
