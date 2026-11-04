@@ -42,9 +42,11 @@ Windows 10/11; её нельзя представлять готовым вып�
 
 ## Запуск исходников для разработчика
 
-Windows 10/11, Python 3.11+ с `py`, Ollama. Из корня проекта:
+Windows 10/11, x64 Python 3.11 с `py`, Ollama. Для desktop нужен именно
+поддерживаемый Qt interpreter; PySide6 6.8.3 требует Python<3.14. Из корня проекта:
 
 ```powershell
+py -3.11 -m venv .venv
 .\setup_windows.ps1 -Voice -Dev
 ollama pull qwen3:4b
 .\.venv\Scripts\python.exe -m localmind.voice setup-stt --profile balanced

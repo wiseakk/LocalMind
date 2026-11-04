@@ -1,3 +1,39 @@
+# RC2 — сборка и окончательная проверка 2026-11-04
+
+Milestone release build: SUCCESS, аппаратная приёмка заблокирована средой.
+Установщик, Source.zip и provenance собраны из одного source-коммита
+31fad862e248f729208f90f6e08551058ab42d10 на release/1.0.0-rc2, предок
+RC1 a229ffff4ab5dafd607c755e4f74090d6a965ece проверен. После сборки меняется
+только документация с этим evidence; исполняемый код релиза не изменён.
+
+Команда выполнена с exit0:
+py -3.11 scripts/build_windows.py --output dist/rc2 --iscc .test-artifacts/tools/inno6/ISCC.exe
+
+Артефакты в rc2/dist/rc2 (относительно родительского предоставленного worktree):
+- LocalMind-1.0.0-rc2-Setup.exe: 2119081203 bytes;
+  SHA256 911adc92f96bebfae184749463200848aae68dec22631b78f4b71ee071de8ba7.
+- LocalMind-1.0.0-rc2-Source.zip, SHA256.txt, build-provenance.json,
+  RELEASE_NOTES.md, KNOWN_ISSUES.md, MANUAL_QA.md.
+- Проверены все артефактные SHA256,19770 payload hashes, идентичность копий
+  committed app/static/config, Git ZIP commit и отсутствие base в каталоге.
+- Launcher FileVersion1.0.0.0/ProductVersion1.0.0-rc2. Настоящие .NET csc и
+  Inno Setup6.7.4 выполнены, это не fake build. Private CPython3.11.9 smoke
+  импортировал fastapi/av/faster_whisper/torch/QtWebEngine/server.
+- Финальные автотесты после установки decoder dependencies:1049 passed,
+  35 subtests,0 skipped (13.41s), Python3.11.9/PyAV18.1.0/faster-whisper1.2.1.
+  npm check:ui/test:dom/check:assets, compileall, pip check, git diff --check PASS.
+- Модели не загружались. Сеть использовалась для runtime/wheels и официального
+  Ollama prerequisite; его подпись проверена builder. Inference здесь не измерялся.
+
+Оставшиеся обязательные аппаратные/browser/install gates: NOT TESTED.
+QtWebEngine упал на Chromium pipe Access denied0x5; Playwright spawn EPERM,
+browser host unavailable. Микрофон, CPU/GPU speech accuracy, DPI/Alt+Tab/tray,
+установленный EXE, clean install/upgrade/uninstall/offline demo не проверены.
+Подробный протокол — MANUAL_QA.md. Нельзя считать RC2 принятой Stable-сборкой.
+Релиз не опубликован, push/deploy отсутствуют, RC1/Alpha сохранены.
+
+## Предыдущий milestone RC2
+
 # RC2 — фактический статус 2026-11-04
 
 Milestone: desktop/STT implementation and automated review.

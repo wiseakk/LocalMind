@@ -1,3 +1,15 @@
+# RC2 — решение о состоянии выпуска после сборки
+
+Собранные Setup/Source.zip/provenance/SHA256 относятся строго к31fad862e248f729208f90f6e08551058ab42d10.
+Этот последующий commit содержит только документы с фактическим результатом;
+артефакты не подменяются и source identity не переименовывается в новый HEAD.
+Сборка успешна, но Windows GUI/микрофон/GPU/install/offline gates остаются
+NOT TESTED. Статус кандидата сохраняется; Stable/tag/publish/merge не выполняются.
+Для source desktop использовать x64 Python3.11: закреплённый PySide6 6.8.3
+поддерживает Python>=3.9,<3.14 (проверено installed package metadata).
+
+## Реализация RC2
+
 # RC2 — решения 2026-11-04
 
 - Release a229fff — обязательный предок; независимая ветка release/1.0.0-rc2
