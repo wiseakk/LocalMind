@@ -170,6 +170,11 @@ class ConversationStore:
         topic = text[:300] if not final.get('action_results') else conversation.topic
         state = self._state(conversation)
         data = json.loads(state)
+        # Only the submitted input is consumed by this commit. A separate
+        # user draft must survive; a failed commit must retain the input too.
+        if data['draft'] == text:
+            data['draft'] = ''
+            state = json.dumps(data, ensure_ascii=False, allow_nan=False)
         with self._lock, self._transaction(write=True) as db:
             if db.execute('SELECT 1 FROM conversations WHERE id=?', (conversation.id,)).fetchone() is None:
                 raise ConversationError('Беседа удалена. Начните новый чат.')
@@ -182,6 +187,7 @@ class ConversationStore:
                        (title, now, topic, data['draft'], json.dumps(data['context'], ensure_ascii=False),
                         json.dumps(data['attachments'], ensure_ascii=False), conversation.id))
         conversation.title, conversation.updated_at = title, now
+        conversation.draft = data['draft']
         conversation._saved_state = state
 
     def _load(self, key):

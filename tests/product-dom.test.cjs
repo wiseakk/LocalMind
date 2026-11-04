@@ -6,19 +6,22 @@ const dom=new JSDOM(fs.readFileSync('static/index.html','utf8'),{url:'http://127
 const w=dom.window,d=w.document;
 w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
 w.HTMLDialogElement.prototype.close=function(){this.open=false;this.dispatchEvent(new w.Event('close'));};
-w.fetch=async url=>Response.json(url==='/api/setup'?{voice:[
+w.fetch=async url=>Response.json(url==='/api/setup'?{onboarding:{completed:false},tour:{completed:false,skipped:false},voice:[
   {kind:'asr',profile:'cpu-fast',model:'small',required:false,state:'model_missing'},
   {kind:'asr',profile:'balanced',model:'small',required:true,state:'model_missing'},
   {kind:'asr',profile:'gpu-quality',model:'medium',required:false,state:'model_missing'},
   {kind:'tts',state:'model_missing'}],ollama:{state:'ready',active_installed:true}}:url==='/api/home'?{configured:false}:url==='/api/permissions/personal'?{enabled:false,roots:[],server_instance:'test'}:{jobs:[]});
 w.localmindModels={refresh:()=>{}};
 w.closeSidebar=()=>{};
+d.querySelector('#settingsOpen').onclick=()=>d.querySelector('#settingsDialog').showModal();
 for(const file of ['interface.js','home.js','access.js','product.js','downloads.js','setup.js'])w.eval(fs.readFileSync('static/assets/'+file,'utf8'));
 (async()=>{
   try{
     await new Promise(r=>setTimeout(r,5));
-    assert.equal(d.querySelectorAll('#setupDialog .model-card').length,3,'small is prepared once for both compatible profile IDs');
-    assert.equal([...d.querySelectorAll('#setupDialog .model-card')].filter(card=>card.textContent.includes('small')).length,1);
+    assert.equal(d.querySelector('#setupDialog').open,true);
+    d.querySelector('#setupNext').click();
+    assert.equal(d.querySelectorAll('#setupDialog .model-card').length,1,'one selected ASR resource per wizard step');
+    assert.ok(d.querySelector('#setupDialog .model-card').textContent.includes('small'));
     assert.deepEqual([...d.querySelectorAll('.rail-nav>button')].map(b=>b.id),['chatNav','modelsOpen','devicesOpen','downloadsOpen']);
     assert.ok(!d.querySelector('.rail-nav #historyOpen'));
     assert.equal(d.querySelector('#skyPanel').hidden,true);
@@ -27,14 +30,15 @@ for(const file of ['interface.js','home.js','access.js','product.js','downloads.
     assert.ok(d.querySelector('#settings-capabilities #manageCapabilities'));
     d.querySelector('#setupDialog').close();
     d.querySelector('#modelsOpen').click();
-    assert.equal(d.querySelector('#modelsDialog').open,true);
-    assert.ok(d.querySelector('#modelsDialog #modelSelect'));
-    d.querySelector('#modelsDialog').close();
+    assert.equal(d.querySelector('#settingsDialog').open,true);
+    assert.ok(d.querySelector('#settings-model #modelSelect'));
+    assert.equal(d.querySelector('#settings-model').hidden,false);
+    d.querySelector('#settingsDialog').close();
     d.querySelector('#downloadsOpen').click();
     assert.equal(d.querySelector('#downloadsDialog').open,true);
     d.querySelector('#downloadsDialog').close();
     const tabs=[...d.querySelectorAll('[data-settings]')];
-    assert.deepEqual(tabs.map(b=>b.textContent),['Голос и микрофон','Нейросеть','Доступ к компьютеру','Общие','Дополнительно']);
+    assert.deepEqual(tabs.map(b=>b.textContent),['Голос и микрофон','Нейросеть','Оформление','Доступ и конфиденциальность','Дополнительно']);
     tabs[0].dispatchEvent(new w.KeyboardEvent('keydown',{key:'End',cancelable:true}));
     assert.equal(d.querySelector('#settings-advanced').hidden,false);
     w.dispatchEvent(new w.CustomEvent('localmind-playback',{detail:{active:true}}));

@@ -2,6 +2,7 @@ import {test,expect} from '@playwright/test';
 
 test('model selection is explicit, identity is authoritative, catalog never starts a pull',async({page,baseURL})=>{
   const calls=[],outside=[],origin=new URL(baseURL).origin;let active='fixture:4b';
+  const conversation={conversation_id:'c'.repeat(32),draft:'',context:{attachment_ids:[],local_retrieval:false},messages:[],attachments:[]};
   page.on('pageerror',error=>{throw error;});
   await page.route('**/*',route=>{
     const url=route.request().url();
@@ -12,6 +13,8 @@ test('model selection is explicit, identity is authoritative, catalog never star
     const request=route.request(),path=new URL(request.url()).pathname;
     const body=request.method()==='POST'?request.postDataJSON():null;
     calls.push({path,body});const json=data=>route.fulfill({json:data});
+    if(path==='/api/conversations')return json(request.method()==='POST'?{...conversation,server_instance:'f'.repeat(32)}:{conversations:[]});
+    if(path.startsWith('/api/conversations/'))return json({...conversation,server_instance:'f'.repeat(32)});
     if(path==='/api/info')return json({server_instance:'f'.repeat(32),model:active,demo:true,devices:[],voice:{voices:[]}});
     if(path==='/api/models')return json({active,models:['fixture:4b','fixture:8b'].map(name=>({name,selectable:true,details:{family:'qwen3',quantization_level:'Q4_K_M'},capabilities:['completion'],placement:'unknown'}))});
     if(path==='/api/models/hardware')return json({cpu:'CPU fixture',gpus:[],gpu_status:'unavailable'});
@@ -32,7 +35,7 @@ test('model selection is explicit, identity is authoritative, catalog never star
   await page.locator('#openRegistry').click();await expect(page.locator('#catalogModels')).toContainText('<script>unsafe</script>');
   await expect(page.locator('#catalogModels script')).toHaveCount(0);
   expect(calls.filter(c=>c.path==='/api/models/downloads'&&c.body)).toHaveLength(0);
-  await page.locator('#modelsDialog').getByRole('button',{name:'Закрыть',exact:true}).click();
+  await page.keyboard.press('Escape');
   await page.locator('#message').fill('Привет');await page.locator('#send').click();
   await expect(page.locator('#model')).toHaveText('response:actual');
   expect(calls.find(c=>c.path==='/api/chat/stream').body.model).toBeNull();expect(outside).toEqual([]);

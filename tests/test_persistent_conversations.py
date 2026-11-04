@@ -75,6 +75,40 @@ def test_complete_journal_does_not_inherit_llm_memory_limit(tmp_path):
     assert messages[1]['content'] == '0' + 'а' * 5000
 
 
+def test_submitted_draft_is_consumed_atomically_only_after_committed_answer(tmp_path):
+    store = ConversationStore(path=tmp_path / 'history.sqlite3')
+    key = store.create()
+    store.update(key, draft='Отправленный текст')
+    conversation = store.acquire(key)
+    try:
+        conversation.remember('Отправленный текст', {'answer': 'Сохранено'})
+    finally:
+        store.release(conversation)
+    assert store.read(key)['draft'] == ''
+    store.update(key, draft='Другой черновик')
+    conversation = store.acquire(key)
+    try:
+        conversation.remember('Новый вопрос', {'answer': 'Ответ'})
+    finally:
+        store.release(conversation)
+    assert store.read(key)['draft'] == 'Другой черновик'
+
+
+def test_independent_stores_initialize_one_database_concurrently(tmp_path):
+    from threading import Barrier
+    barrier = Barrier(8)
+    database = tmp_path / 'history.sqlite3'
+
+    def create(_):
+        store = ConversationStore(path=database)
+        barrier.wait(timeout=5)
+        return store.create()
+
+    with ThreadPoolExecutor(8) as pool:
+        keys = list(pool.map(create, range(8)))
+    assert {row['conversation_id'] for row in ConversationStore(path=database).list()} == set(keys)
+
+
 def test_uploaded_document_context_survives_without_restoring_capabilities(tmp_path):
     database = tmp_path / 'history.sqlite3'
     store = ConversationStore(path=database)

@@ -22,8 +22,13 @@ async function check(kind){
   };
   if(kind==='models')w.eval(fs.readFileSync('static/assets/downloads.js','utf8'));
   w.eval(fs.readFileSync(`static/assets/${kind}.js`,'utf8'));
-  if(kind==='models')w.eval(fs.readFileSync('static/assets/product.js','utf8'));
-  const dialog=d.getElementById(kind+'Dialog'),opener=d.getElementById(kind+'Open');
+  if(kind==='models'){
+    w.closeSidebar=()=>{};
+    d.getElementById('settingsOpen').onclick=()=>d.getElementById('settingsDialog').showModal();
+    w.eval(fs.readFileSync('static/assets/interface.js','utf8'));
+    w.eval(fs.readFileSync('static/assets/product.js','utf8'));
+  }
+  const dialog=d.getElementById(kind==='models'?'settingsDialog':'downloadsDialog'),opener=d.getElementById(kind+'Open');
   const refresh=()=>kind==='downloads'?w.localmindDownloads.refresh():[...d.querySelectorAll('#modelCatalog button')].find(b=>b.textContent==='Обновить загрузки').click();
   const visibility=value=>{hidden=value;d.dispatchEvent(new w.Event('visibilitychange'));};
   const fire=async()=>{const callbacks=[...timers.values()];timers.clear();callbacks.forEach(fn=>fn());await settle();assert.ok(timers.size<=1,'one timer');};

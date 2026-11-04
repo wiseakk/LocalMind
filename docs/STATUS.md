@@ -1130,3 +1130,84 @@ loopback/Host/Origin/auth барьером. Временные полномоч�
 неподтверждённого удаления. Команда: RC2 `.venv/Scripts/python.exe -B -m pytest -q`
 с текущим cwd; старое окружение использовано только для чтения зависимостей.
 Микрофон, GPU и установленный RC3 EXE: NOT TESTED. Следующий этап: мастер и загрузки.
+
+## RC3 — 2026-11-04, продолжение этапа истории
+
+Сохранён WIP HEAD 0134e2e. Перед stream интерфейс подтверждает запись черновика;
+сервер также сохраняет ввод до генерации/действий. Только успешная транзакция
+пары сообщений поглощает совпадающий черновик. Pagehide во время stream не
+ставит пустой autosave за блокировкой хода. Инициализация SQLite повторно
+проверяет schema version внутри транзакции при гонке разных процессов.
+
+Проверено: 35 Python-тестов истории, включая настоящий loopback HTTP, SQLite,
+выход серверного процесса, три беседы и продолжение каждой, аварийный выход до
+final, отказ диска, TTL/capacity/pinning. LLM в HTTP-тесте — фикстура, не Ollama.
+14 DOM-сценариев истории проходят. Зависимости Python читаются из прежнего
+LocalMind_MVP_01/.venv; это CPython 3.14, не runtime будущей сборки 3.11.
+Полный набор: 1055 passed, 1 skipped, 35 subtests; два старых build-fixture
+теста не создают теперь обязательный UTF-8 index.html и требуют исправления.
+Реальные микрофон, GPU, Qt GUI и установщик RC3 пока НЕ ПРОВЕРЕНЫ.
+
+## RC3 — 2026-11-04, onboarding и параллельные ресурсы
+
+Мастер выбирает уже найденную Medium также в состоянии unverified: наличие
+файлов не выдаётся за пройденную native-пробу. Установленные Silero и Gemma
+показываются без повторной загрузки. Обновлены DOM-проверки под пошаговый
+мастер и единое окно моделей. Добавлен постоянный regression test завершения,
+пропуска/повтора тура, отказа сохранения и последующего отсутствия моделей.
+Добавлена реальная межпроцессная проверка OS-lock Silero: Whisper независим;
+аварийный выход владельца освобождает lock без удаления lock-файла.
+
+Проверено: 27 Python tests ресурсов/product-state/build fixtures и DOM-навигация,
+новый onboarding/tour DOM-сценарий. Это фикстуры файлов/LLM, не скачивание
+пользовательских моделей и не реальные native-пробы. Git milestone-коммит
+недоступен: внешняя metadata Desktop checkout запрещает создание index.lock.
+Файлы сохранены в DevCrew-worktree; доступы не обходились. Сборка требует
+интеграции оркестратором и чистого release-коммита.
+
+## RC3 — 2026-11-04, интерфейс и итоговая проверка Builder
+
+Сохранены WIP-темы с фиолетово-розовыми акцентами, боковая постоянная история,
+вертикальные настройки и Qt-код. Исправлены устаревшие DOM/polling fixtures:
+модели находятся в общем окне настроек, мастер пошаговый. Добавлены browser
+сценарии onboarding/тура, отмены stream и двух независимых загрузок; всего
+собирается 31 Playwright test. tour.js включён в обязательный check:ui.
+Текст ошибки stream больше не утверждает, что неподтверждённый ответ сохранён.
+
+Итоговые автоматические факты:
+- Полный pytest: 1062 passed, 1 skipped, 35 subtests passed. Единственный skip:
+  tests/test_desktop_shell.py — в тестовом interpreter отсутствует PySide6.
+- npm run test:dom, npm run check:ui, npm run check:assets проходят; 86 assets.
+- CPython 3.11 разобрал AST 75 production/build Python-файлов.
+- HTTP/SQLite: три чата с ID/порядком/черновиками/выбранными документами/контекстом,
+  полный выход сервера, восстановление и продолжение каждого; авария до final;
+  закрытие stream, отмена и replay одного committed turn без дублирования.
+  LLM — фикстура. Реальную Ollama-интеграцию этот тест не доказывает.
+- Диагностическая копия 153 source/payload-файлов побайтно совпадает с worktree,
+  validate_ui_payload проверяет UTF-8; это НЕ собранный installer payload.
+- git diff --check проходит. Проведено самостоятельное review транзакций,
+  stream/autosave и границ полномочий: код не добавляет shell/LLM paths/URLs,
+  не меняет loopback/auth/Origin/Host/CSP и не восстанавливает grants из истории.
+
+Открытые блокеры и непроверенное:
+- Git add/commit: Permission denied на внешнем index.lock основного Desktop
+  checkout. Milestone-коммиты не созданы, оркестратор в tools отсутствует;
+  основной checkout/ветки/ACL не изменялись. HEAD остаётся
+  0134e2e873c547877b10ce862d79dcf47b9d249c; изменения не входят в этот commit.
+- py -3.11 scripts/build_windows.py --output dist/rc3: preflight отказал из-за
+  грязного дерева и отсутствия стандартного Inno Setup 6/ISCC.exe. Setup.exe,
+  release Source.zip, SHA256.txt и provenance не созданы. Нужна интеграция
+  оркестратором в чистую release/1.0.0-rc3; clean guards не ослаблялись.
+- npm run test:ui запущен с настоящим изолированным start.py, но worker не
+  стартовал: spawn EPERM. Computer Use: browser access host unavailable.
+  Browser visual QA, DPI, Qt/tray и установленный EXE — НЕ ПРОВЕРЕНЫ.
+- Настоящий микрофон, слышимый TTS, CPU/GPU inference, физический offline demo —
+  НЕ ПРОВЕРЕНЫ. Тестовый сервер остановлен; данные тестов только в workspace.
+
+Русская передача, запуск одной командой, offline demo, troubleshooting и полный
+ручной чек-лист: docs/RC3_HANDOFF.md. README/RELEASE_NOTES/MANUAL_QA актуализированы
+для RC3; docs/DEFENSE_QA.md содержит 60+ вопросов и дополнение об SQLite/stream/
+идемпотентности/onboarding/блокировках. Stable не публиковался.
+Логи: .test-artifacts/rc3-verification/; диагностическая копия:
+.test-artifacts/rc3-ui-copy-check.json. Восстановительный снимок изменений:
+.test-artifacts/rc3-builder-recovery/builder-working-snapshot.zip (не релиз).

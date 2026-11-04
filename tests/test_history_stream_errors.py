@@ -10,6 +10,27 @@ from localmind.conversations import ConversationStore
 from localmind.requests import RequestStore
 
 
+def test_failed_input_checkpoint_prevents_generation_and_action_preparation(tmp_path, monkeypatch):
+    database = tmp_path / 'history.sqlite3'
+    conversations = ConversationStore(path=database)
+    key = conversations.create()
+    with closing(sqlite3.connect(database)) as db:
+        db.execute("CREATE TRIGGER reject_draft BEFORE UPDATE OF draft ON conversations BEGIN SELECT RAISE(ABORT,'disk full'); END")
+    requests = RequestStore()
+    monkeypatch.setattr(server, 'conversations', conversations)
+    monkeypatch.setattr(server, 'store', requests)
+    def forbidden(*args, **kwargs):
+        raise AssertionError('preparation must not execute before the input checkpoint')
+    monkeypatch.setattr(server, 'prepare_reply', forbidden)
+    client = TestClient(server.app, base_url='http://127.0.0.1', client=('127.0.0.1', 120))
+    try:
+        result = client.post('/api/chat', json={'text': 'Включи лампу', 'conversation_id': key, 'request_id': 'no-disk-no-action'})
+        assert result.status_code == 409 and 'свободное место' in result.json()['detail']
+        assert conversations.read(key)['messages'] == []
+    finally:
+        requests.close()
+
+
 def test_stream_surfaces_safe_persistence_error_without_final_or_duplicate_turn(tmp_path, monkeypatch, offline_desktop_planner):
     database = tmp_path / 'history.sqlite3'
     conversations = ConversationStore(path=database)
@@ -36,6 +57,8 @@ def test_stream_surfaces_safe_persistence_error_without_final_or_duplicate_turn(
             assert not any(event['type'] == 'final' for event in events)
         assert len(generated) == 1
         assert conversations.read(key)['messages'] == []
+        assert conversations.read(key)['draft'] == body['text']
+        assert ConversationStore(path=database).read(key)['draft'] == body['text']
         assert not conversations._items[key].active
     finally:
         requests.close()

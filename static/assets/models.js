@@ -175,8 +175,7 @@
     } catch (e) { status.textContent = e.message; }
     finally { search.disabled = false; }
   });
-  // The catalog is moved into modelsDialog by product.js. Observe its actual
-  // containing dialog, including the legacy settings panel, rather than an opener.
+  // Observe the shared settings panel and containing dialog, not its opener.
   let pollTimer=null, pendingJobs=null, pollGeneration=0;
   const jobsVisible=()=>Boolean(root.closest('dialog')?.open)&&!document.hidden&&!root.closest('[hidden]')&&!$('downloadsDialog')?.open;
   function stopPolling(){pollGeneration++;clearTimeout(pollTimer);pollTimer=null;}

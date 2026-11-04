@@ -1,3 +1,13 @@
+# RC3: текущая передача
+
+Продолжение WIP и актуальные команды/блокеры: [RC3_HANDOFF](RC3_HANDOFF.md).
+Цель: чистая release/1.0.0-rc3; `py -3.11 scripts/build_windows.py --output dist/rc3`.
+Не запускать finalize_release.ps1 для RC3. Текущий sandbox запрещает внешний
+Git index.lock; Inno Setup по стандартному пути не найден. Нельзя выдавать
+старые RC2 artifacts или диагностический снимок за RC3 release.
+
+## Архив предыдущей процедуры
+
 # RC2: текущая сборка и provenance
 
 Ветка release/1.0.0-rc2 уже создана от a229fff в изолированном checkout rc2.

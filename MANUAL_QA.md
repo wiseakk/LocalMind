@@ -1,9 +1,12 @@
-# Короткая ручная приёмка 1.0.0-rc2
+# Короткая ручная приёмка 1.0.0-rc3
+
+Текущий русский чек-лист трёх чатов, stream, onboarding/тура и параллельных
+загрузок: [RC3_HANDOFF](docs/RC3_HANDOFF.md). Все реальные пункты открыты.
 
 Фиксировать Windows, hardware, commit из build-provenance.json, SHA256 установщика,
 дату и наблюдение. Повторить через исходники и установленный EXE.
 
-| Проверка | Реальная приёмка RC2 |
+| Проверка | Реальная приёмка RC3 |
 |---|---|
 | Чистая Windows без Python/Node: установка и два запуска | NOT TESTED |
 | Обновление RC1: история, профиль, каталог данных и настройки сохранены | NOT TESTED |
@@ -28,7 +31,7 @@ Desktop после установки зависимостей: `python -m local
 `& "$env:LOCALAPPDATA\Programs\LocalMind\LocalMind.exe"`.
 `python start.py` запускает только сервер и не проверяет native оболочку.
 
-В этой сессии запуск desktop предпринят, но Chromium завершился до визуальной
+В предыдущей RC2-сессии запуск desktop был предпринят, но Chromium завершился до визуальной
 приёмки: `named-platform-channel-pipe: Access is denied (0x5)`. Playwright не
 запустил worker (`EPERM`), browser host недоступен. Защита Chromium не отключалась.
 

@@ -110,7 +110,8 @@
       data=await api('');const prefs=data.preferences||{};
       if(first)window.dispatchEvent(new CustomEvent('localmind-preferences',{detail:prefs}));
       profile=data.onboarding?.profile||prefs.voice_profile||'cpu-fast';
-      if(!data.onboarding?.profile&&!prefs.voice_profile&&data.voice?.some(v=>v.kind==='asr'&&v.model==='medium'&&v.state==='ready')&&!data.voice?.some(v=>v.kind==='asr'&&v.model==='small'&&v.state==='ready'))profile='gpu-quality';
+      const found=row=>['ready','unverified'].includes(row.state);
+      if(!data.onboarding?.profile&&!prefs.voice_profile&&data.voice?.some(v=>v.kind==='asr'&&v.model==='medium'&&found(v))&&!data.voice?.some(v=>v.kind==='asr'&&v.model==='small'&&found(v)))profile='gpu-quality';
       skipASR=Boolean(data.onboarding?.skip_asr);skipTTS=Boolean(data.onboarding?.skip_tts);render();
       if(first&&data.onboarding?.completed===false&&!document.querySelector('dialog[open]'))dialog.showModal();
       if(first&&data.onboarding?.completed)window.dispatchEvent(new CustomEvent('localmind-setup-completed',{detail:data}));

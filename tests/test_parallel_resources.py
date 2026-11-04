@@ -123,6 +123,38 @@ def test_silero_has_an_independent_cross_process_lock(isolated):
         pass
 
 
+def test_other_process_holds_one_physical_writer_until_exit(isolated):
+    import subprocess
+    import sys
+    from pathlib import Path
+    marker = isolated / 'lock-acquired'
+    script = '''
+import sys,time
+from pathlib import Path
+from localmind.resource_lock import resource_download_lock
+with resource_download_lock(Path(sys.argv[1]), 'silero:ru'):
+    Path(sys.argv[2]).touch()
+    time.sleep(30)
+'''
+    process = subprocess.Popen([sys.executable, '-B', '-c', script, str(setup.MODELS), str(marker)])
+    try:
+        deadline = time.monotonic() + 5
+        while not marker.exists() and time.monotonic() < deadline:
+            assert process.poll() is None
+            time.sleep(.01)
+        assert marker.exists()
+        with pytest.raises(ResourceBusyError):
+            with resource_download_lock(setup.MODELS, 'silero:ru'):
+                pytest.fail('two processes admitted to the same voice')
+        with resource_download_lock(setup.MODELS, 'whisper:small'):
+            pass
+    finally:
+        process.kill()
+        process.wait(timeout=5)
+    with resource_download_lock(setup.MODELS, 'silero:ru'):
+        pass  # OS releases the handle even after an abrupt process exit.
+
+
 def test_partial_resume_requires_valid_suffix_and_checks_full_hash(isolated, monkeypatch):
     target = setup.MODELS / 'whisper/small/model.bin'
     target.parent.mkdir(parents=True)

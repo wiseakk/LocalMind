@@ -37,6 +37,11 @@ class ConversationDatabase:
             if version > SCHEMA_VERSION:
                 raise ValueError('История создана более новой версией LocalMind. Обновите приложение.')
             connection.execute('BEGIN IMMEDIATE' if write or version == 0 else 'BEGIN')
+            # Another process may have initialized the schema while BEGIN
+            # waited for its writer. Inspect again under the transaction lock.
+            version = connection.execute('PRAGMA user_version').fetchone()[0]
+            if version > SCHEMA_VERSION:
+                raise ValueError('История создана более новой версией LocalMind. Обновите приложение.')
             if version == 0:
                 connection.execute('''CREATE TABLE conversations (
                     id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at TEXT,

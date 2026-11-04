@@ -310,6 +310,10 @@ def _entry(data: ChatRequest):
                                     'attachment_ids': list(data.attachment_ids)}
             context = document_context(conversation, data.attachment_ids, query=data.text,
                 max_characters=max(256, (generation.context_tokens - generation.response_tokens - 1200) * 2))
+            # Persist the input before generation or trusted actions. A process
+            # exit before final leaves a recoverable draft, never a fake answer.
+            conversation.draft = data.text
+            conversations._save_state(conversation)
             prepared = prepare_reply(data.text, [], data.actions_authorized, data.response_length,
                                      data.compose_actions, generation, conversation=conversation, local_retrieval=data.local_retrieval,
                                        document_facts=context, llm_first=True)

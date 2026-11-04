@@ -71,6 +71,34 @@ async function choose(context,id){
   row.querySelector('button').click();await pause(25);
 }
 (async()=>{
+  await run('input is committed before streaming and pagehide cannot erase the pending draft',async()=>{
+    let entered,release;const started=new Promise(resolve=>{entered=resolve;});
+    const context=setup({fetch:async(url,init)=>{
+      if(url==='/api/chat/stream'){entered();return new Promise(resolve=>{release=()=>resolve(new Response(JSON.stringify({type:'final',data:{answer:'Ответ',engine:'test',action_results:[]}})+'\n'));});}
+    }});
+    try{
+      await pause(20);context.d.querySelector('#useLocalSources').checked=true;
+      const pending=context.w.sendText('Не потерять при перезапуске');await started;
+      const record=[...context.server.records.values()][0];
+      assert.equal(record.draft,'Не потерять при перезапуске');
+      assert.equal(record.context.local_retrieval,true);
+      assert.equal(context.d.querySelector('#message').value,'');
+      const patches=context.requests.filter(r=>r.method==='PATCH').length;
+      context.w.dispatchEvent(new context.w.Event('pagehide'));await pause(5);
+      assert.equal(context.requests.filter(r=>r.method==='PATCH').length,patches);
+      assert.equal(record.draft,'Не потерять при перезапуске');
+      release();await pending;assert.equal(record.draft,'');
+    }finally{context.dom.window.close();}
+  });
+  await run('failed initial draft write prevents stream admission and leaves input editable',async()=>{
+    const context=setup({fetch:async(url,init)=>init.method==='PATCH'?Response.json({detail:'Диск заполнен'},{status:409}):null});
+    try{
+      await pause(20);context.d.querySelector('#message').value='Сохранить ввод';await context.w.sendText('Сохранить ввод');
+      assert.equal(context.requests.filter(r=>r.url==='/api/chat/stream').length,0);
+      assert.equal(context.d.querySelector('#message').value,'Сохранить ввод');
+      assert.equal(context.d.querySelector('#send').disabled,false);
+    }finally{context.dom.window.close();}
+  });
   await run('three separate server conversations reopen after full UI restart and each can continue',async()=>{
     const server=fakeServer(),ids=[];const first=setup({server});
     try{

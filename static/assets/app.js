@@ -122,10 +122,11 @@ async function sendText(value) {
   const retry=previous&&previous.request.text===text&&previous.request.server_instance===serverInstance&&JSON.stringify(previous.request.attachment_ids)===JSON.stringify(ids)?previous:null;
   if(retry&&Date.now()-retry.created>120000){state('Срок безопасного повтора истёк. Проверь результат действия вручную; начни новый разговор.');return;}
   lock(true);
+  $('message').value=text;
   // Establish the durable ID before a turn is accepted. A dropped first response
   // must not leave an orphaned conversation or cause autosave to create a second.
-  try{await ensureConversation();}
-  catch(error){lock(false);showError(error.message);return;}
+  try{await ensureConversation();captureConversation();await persistConversation(currentConversation);}
+  catch(error){if(!$('message').value)$('message').value=text;lock(false);showError(error.message);return;}
   stopSpeech(); $('welcome').hidden = true; $('draftReview').hidden = true;
   window.localmindScene?.observeConversation(text,history);
   if(!currentConversation.messages.length&&currentConversation.title==='Новый разговор')currentConversation.title=text.slice(0,60)||'Вложения';
@@ -220,7 +221,7 @@ async function sendText(value) {
     stopSpeech();
     el.querySelector('.pending')?.remove();
     el.querySelector('.rendered-message').textContent=turn.cancelled?'Ответ прерван.':'Ответ недоступен: '+error.message;
-    state(turn.cancelled?'Ответ прерван; выполненное действие не отменяется.':'Ошибка связи. Полученный результат действия сохранён выше.');
+    state(turn.cancelled?'Ответ прерван; выполненное действие не отменяется.':'Ошибка получения ответа. Проверьте состояние действия перед новой отправкой.');
     const errorMessage={role:'assistant',content:el.querySelector('.rendered-message').textContent};currentConversation.messages.push(errorMessage);
     currentConversation.retryTurn=turn.cancelled?null:{request,userMessage,userBubble,el,errorMessage,created:retry?.created || wallSentAt};
     if(!$('message').value)$('message').value=text;
@@ -526,6 +527,9 @@ async function ensureConversation(item=currentConversation){
 }
 function saveConversation(options={}){
   clearTimeout(draftTimer);draftTimer=null;
+  // The submitted draft was committed before stream admission. A late pagehide
+  // must not queue an empty autosave behind the server's turn lease.
+  if(inFlight)return Promise.resolve();
   captureConversation();
   return persistConversation(currentConversation,options);
 }

@@ -1,5 +1,6 @@
 ﻿import { test, expect } from '@playwright/test';
 
+import {conversationFixture} from './conversation-fixture.mjs';
 const externalAttempts=new WeakMap();
 test.beforeEach(async({page,baseURL})=>{
   await page.route('**/api/setup',route=>route.fulfill({json:{voice:[{kind:'asr',state:'ready'},{kind:'tts',state:'ready'}],ollama:{state:'ready',active_installed:true}}}));
@@ -17,6 +18,7 @@ test.afterEach(async({page},testInfo)=>{
 });
 
 async function fakeInfo(page) {
+  await conversationFixture(page,'test-instance');
   await page.route('**/api/info',route=>route.fulfill({json:{server_instance:'test-instance',demo:true,model:'qwen3:4b',devices:[{name:'Настольная лампа',state:false}],voice:{voices:[]}}}));
 }
 

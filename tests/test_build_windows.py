@@ -21,6 +21,8 @@ def test_build_keeps_source_identity_through_runtime_and_asset_copies(tmp_path, 
     output = tmp_path / 'release'
     for folder in ('localmind', 'static', 'config', 'installer'):
         (root / folder).mkdir(parents=True)
+    (root / 'static/index.html').write_text(
+        '<span class="breadcrumb">Личное пространство</span>', encoding='utf-8')
     for name in ('RELEASE_NOTES.md', 'KNOWN_ISSUES.md', 'MANUAL_QA.md'):
         (root / name).write_text(name)
     asset = tmp_path / 'assets/silero/model.pt'
