@@ -42,7 +42,7 @@ RequestStore(request_id, fingerprint, instance) → prepare_reply
   повторяется под Windows file guard перед `Popen([absolute_exe], shell=False)`.
   Любые arguments/CLI/scripts/URLs/installers отказаны. Один каталог сканируется
   single-flight с cooldown. Уникальный ID позволяет выбрать одинаковые названия.
-- `voice.py` — фиксированные multilingual RU профили base/small/medium, VAD,
+- `voice.py` — фиксированные multilingual RU профили small/medium, VAD,
   CPU fallback и Piper Denis. Подготовка assets отдельная; inference offline.
   Дочерний процесс ограничивает native decode/model time до 120 секунд. Доступна
   одна STT/TTS операция, аудио до 8 МБ/30 секунд, TTS до 1200 символов. Форсируется

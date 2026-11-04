@@ -45,9 +45,12 @@ class WarmASRWorker(WarmSpeechWorker):
         environment = {**os.environ, 'HF_HUB_OFFLINE': '1', 'HF_HUB_DISABLE_TELEMETRY': '1',
                        'DO_NOT_TRACK': '1', 'OMP_NUM_THREADS': '4', 'MKL_NUM_THREADS': '4',
                        'PYTHONIOENCODING': 'utf-8'}
-        self.process = subprocess.Popen([str(python_runtime()), '-m', 'localmind.stt_worker', profile],
-            cwd=ROOT, env=environment, shell=False, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        with self.state_lock:
+            if self.closing:
+                raise SpeechWorkerError('cancelled')
+            self.process = subprocess.Popen([str(python_runtime()), '-m', 'localmind.stt_worker', profile],
+                cwd=ROOT, env=environment, shell=False, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         self.voice = profile
         self.reader = Thread(target=self._read, args=(self.process.stdout, self.replies),
                              daemon=True, name='localmind-asr-pipe')
@@ -62,6 +65,9 @@ class WarmASRWorker(WarmSpeechWorker):
         if not self.lock.acquire(blocking=False):
             raise SpeechWorkerError('busy')
         try:
+            with self.state_lock:
+                if self.closing:
+                    raise SpeechWorkerError('cancelled')
             self.deadline = time.monotonic() + WORKER_TIMEOUT_SECONDS
             self._start(profile)
             request_id = uuid.uuid4().hex
@@ -95,6 +101,8 @@ class WarmASRWorker(WarmSpeechWorker):
             if not isinstance(payload.get('text'), str) or not 1 <= len(payload['text']) <= 4000:
                 raise SpeechWorkerError('worker')
             with self.state_lock:
+                if self.closing:
+                    raise SpeechWorkerError('cancelled')
                 # Keep no transcript or audio in the diagnostics cache.
                 self.loaded_diagnostics = {key: value for key, value in payload.items()
                     if key not in ('id', 'text')}

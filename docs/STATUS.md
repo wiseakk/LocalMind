@@ -1,3 +1,43 @@
+# RC2 — фактический статус 2026-11-04
+
+Milestone: desktop/STT implementation and automated review.
+Ветка release/1.0.0-rc2 от a229ffff4ab5dafd607c755e4f74090d6a965ece.
+Исходные RC1/Alpha не изменены. Из-за запрета записи Git metadata родительского
+worktree новый независимый checkout находится в rc2/; скопированы Git objects,
+история и ancestry сохранены. Это не merge обратно в Alpha.
+
+Реализованы native рамка/иконки/tray/геометрия/recovery, обе темы/reduced motion,
+small/medium с совместимостью настроек, отсутствие base fallback и shared-resource
+locks. Закрытие останавливает только owned workers и setup probes, отменяет
+чат, запрещает late respawn. Текущий Ollama network read может ждать до30с.
+QML1.1 оценён отдельно; полная миграция RC2 не выполнялась.
+
+Проверено в rc2 на x64 CPython3.11.9 и PySide6 6.8.3:
+- .venv/Scripts/python.exe -m pytest -q: 1049 passed,0 skipped,
+  35 subtests (13.41s). Установлены PyAV18.1.0/faster-whisper1.2.1,
+  выполнены реальные decoder/framed-process тесты с синтетическим аудио;
+  neural inference в этих проверках подменён, microphone/accuracy ими не доказаны.
+- npm run check:ui; npm run test:dom; npm run check:assets: PASS,
+  43 основных DOM проверки плюс остальные suites,85 локальных assets.
+- Независимые desktop method/policy/state тесты:49 passed.
+- git diff --check: PASS. Reviewer/Security не нашли P0/P1;
+  замечания initial geometry/dragdrop/shortcut grouping исправлены.
+- Portable Inno Setup6.7.4 подготовлен только в .test-artifacts/tools/inno6;
+  Authenticode Valid, publisher Pyrsys B.V. Системная установка не изменялась.
+
+Настоящий desktop запуск предпринят: Chromium fatal named-platform-channel-pipe,
+Access denied0x5 до проверки GUI. Playwright27 тестов не исполнились из-за spawn
+EPERM; fallback browser host unavailable. Sandbox не отключался.
+Реальные Windows GUI/DPI/mic, CPU/GPU inference/accuracy, clean install/upgrade,
+installed EXE и offline demo: NOT TESTED. Сценарии в MANUAL_QA.md.
+
+Следующий этап: clean committed build, команда
+py -3.11 scripts/build_windows.py --output dist/rc2 --iscc .test-artifacts/tools/inno6/ISCC.exe.
+Результат сборки на момент этого milestone ещё не установлен; evidence в dist
+и следующий статус фиксируют фактический исход. Не объявлять Stable.
+
+## Исторические статусы до RC2
+
 # DevCrew — проверяемый статус LocalMind 1.0
 
 ## 2026-11-03 ? ?????????? final release / stabilization: 1.0.0-rc1, ?????? ????????????

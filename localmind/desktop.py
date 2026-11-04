@@ -3,17 +3,26 @@ import os
 import socket
 import sys
 import threading
-from .paths import APP_ROOT, DATA_ROOT, migrate_legacy, legacy_preferences_plan
+from .paths import migrate_legacy, legacy_preferences_plan
 
 
 def main():
-    from PySide6.QtCore import QUrl
-    from PySide6.QtWidgets import QApplication, QMainWindow, QMessageBox
-    from PySide6.QtWebEngineWidgets import QWebEngineView
-    from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings, QWebEngineProfile
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QIcon, QGuiApplication
+    from PySide6.QtWidgets import QApplication, QMessageBox
+    from .desktop_shell import DesktopWindow, ICON_PATH
     import uvicorn
+    # Qt 6 handles Per-Monitor V2 DPI. No extra Windows/CSS scale multiplier.
+    QGuiApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+    if os.name == 'nt':
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('LocalMind.Desktop.1')
     app = QApplication(sys.argv)
     app.setApplicationName('LocalMind')
+    app.setOrganizationName('LocalMind')
+    app.setWindowIcon(QIcon(str(ICON_PATH)))
+    app.setStyle('Fusion')
+    listener = server = thread = window = None
     try:
         plan = legacy_preferences_plan()
         if plan:
@@ -33,7 +42,7 @@ def main():
         listener.listen(128)
         listener.setblocking(False)
         server = uvicorn.Server(uvicorn.Config('localmind.server:app', host='127.0.0.1', port=settings.port,
-                                log_config=None, proxy_headers=False))
+                                log_config=None, proxy_headers=False, timeout_graceful_shutdown=3))
         thread = threading.Thread(target=lambda: server.run(sockets=[listener]), daemon=True)
         thread.start()
         import time
@@ -43,39 +52,33 @@ def main():
         if not server.started:
             server.should_exit = True
             raise RuntimeError('Не удалось запустить локальный сервер. Восстановите LocalMind установщиком.')
-        origin = f'http://127.0.0.1:{settings.port}'
-
-        class LocalPage(QWebEnginePage):
-            def acceptNavigationRequest(self, url, kind, main_frame):
-                return url.scheme() == 'http' and url.host() == '127.0.0.1' and url.port() == settings.port
-
-            def createWindow(self, kind):
-                return None
-
-        window = QMainWindow(); window.setWindowTitle('LocalMind'); window.resize(1280, 900)
-        view = QWebEngineView(window)
-        profile = QWebEngineProfile('LocalMind', view)
-        profile.setPersistentStoragePath(str(DATA_ROOT / 'webprofile'))
-        profile.setCachePath(str(DATA_ROOT / 'webcache'))
-        page = LocalPage(profile, view)
-        view.setPage(page)
-        view.settings().setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, False)
-
-        def permission(url, feature):
-            granted = (url.toString().rstrip('/') == origin and feature == QWebEnginePage.Feature.MediaAudioCapture
-                       and QMessageBox.question(window, 'Микрофон', 'Разрешить запись по кнопке микрофона?') == QMessageBox.StandardButton.Yes)
-            page.setFeaturePermission(url, feature, QWebEnginePage.PermissionPolicy.PermissionGrantedByUser if granted
-                                      else QWebEnginePage.PermissionPolicy.PermissionDeniedByUser)
-        page.featurePermissionRequested.connect(permission)
-        window.setCentralWidget(view); view.load(QUrl(origin)); window.show()
-        result = app.exec()
-        server.should_exit = True
-        thread.join(timeout=10)
-        listener.close()
-        return result
-    except Exception as exc:
-        QMessageBox.critical(None, 'LocalMind — восстановление', str(exc)[:800])
+        window = DesktopWindow(settings.port)
+        window.show()
+        window.load_ui()
+        return app.exec()
+    except Exception:
+        # Raw socket/Chromium tracebacks may contain URLs and personal paths.
+        QMessageBox.critical(None, 'LocalMind — восстановление',
+            'Не удалось запустить LocalMind. Закройте предыдущий экземпляр и повторите попытку. '
+            'Если ошибка сохраняется, восстановите приложение установщиком. Модели и настройки сохранятся.')
         return 1
+    finally:
+        if window is not None:
+            window.closing = True
+            window.theme_timer.stop()
+            window.tray.hide()
+            # Destroy the renderer before its persistent profile, releasing all
+            # microphone handles even when the page or JavaScript has crashed.
+            import shiboken6
+            shiboken6.delete(window.view)
+            shiboken6.delete(window.profile)
+        if server is not None:
+            server.should_exit = True
+        if thread is not None:
+            # ASGI lifespan owns STT/TTS workers and waits for their shutdown.
+            thread.join()
+        if listener is not None:
+            listener.close()
 
 
 if __name__ == '__main__':

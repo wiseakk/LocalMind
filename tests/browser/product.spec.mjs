@@ -8,7 +8,7 @@ test('first-run repair and the common download queue are explicit and survive a 
     if(request.method()==='POST')mutations.push(path);
     const json=data=>route.fulfill({json:data});
     if(path==='/api/setup')return json({voice:[
-      {kind:'asr',profile:'cpu-fast',model:'base',required:false,state:'model_missing'},
+      {kind:'asr',profile:'cpu-fast',model:'small',required:false,state:'model_missing'},
       {kind:'asr',profile:'balanced',model:'small',required:true,state:'model_missing'},
       {kind:'asr',profile:'gpu-quality',model:'medium',required:false,state:'model_missing'},
       {kind:'tts',model:'Silero · xenia',required:true,state:'model_missing'}],ollama:{state:'ready',active_installed:true}});

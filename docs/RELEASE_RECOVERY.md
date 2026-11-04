@@ -1,3 +1,28 @@
+# RC2: текущая сборка и provenance
+
+Ветка release/1.0.0-rc2 уже создана от a229fff в изолированном checkout rc2.
+Не запускать finalize_release.ps1 для RC2: ниже сохранена только архивная
+процедура RC1. Alpha/RC1 не изменяются. В корне RC2 после clean commit:
+
+```powershell
+py -3.11 scripts/build_windows.py --output dist/rc2
+```
+
+Нужны x64 Python3.11, .NET csc, Inno Setup6. Если Inno размещён переносимо внутри
+проекта, добавить `--iscc .test-artifacts/tools/inno6/ISCC.exe`.
+В текущей сессии Inno6.7.4 получен с официального GitHub release, подпись
+Pyrsys B.V. проверена как Valid; portable mode не меняет системную установку.
+Документация: https://jrsoftware.org/ishelp/topic_technotes.htm .
+
+Builder отказывает до downloads при грязном дереве/чужой ветке/неверном ancestry.
+При сбое payload сохраняется. Resume допускается только с тем же commit,
+параметрами, архивом runtime и всеми хешами; иначе новый каталог output.
+Готовые Setup/Source/SHA256 не перезаписываются. Нельзя заменять payload вручную
+или обходить проверку происхождения. Models подготавливаются явно и не включены
+в обычный установщик. После загрузки inference локальный.
+
+## Архив восстановления RC1 — не выполнять для RC2
+
 # Фиксация и сборка кандидата после ограниченной сессии
 
 Сейчас HEAD по-прежнему `66f6c101b91596936721313840684501c75dad1a`, тег Alpha

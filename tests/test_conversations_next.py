@@ -61,6 +61,7 @@ def test_expired_request_id_is_not_executable_again():
         # The final Future resolves before the worker's completion bookkeeping.
         # Join it before forcing expiry so it cannot overwrite the test timestamp.
         requests.close()
+        requests.reopen()  # A fresh lifespan admits requests; retired IDs stay protected.
         with requests._lock:
             entry.finished = 0
         with pytest.raises(RequestConflict):

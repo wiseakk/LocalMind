@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "assets": [
     {
       "path": "whisper/small/config.json",
@@ -30,30 +30,6 @@
       "url": "https://models.silero.ai/models/tts/ru/v5_6_ru.pt",
       "sha256": "04cc9b1d08ce38bcaa9d02c488d80d3e6806d17f7eaa7c95982f36a3cbf50b2e",
       "bytes": 147664410
-    },
-    {
-      "path": "whisper/base/config.json",
-      "url": "https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/config.json",
-      "sha256": "56a6d8110d311f19c8f0471e562832c7527f146b567275bfca59fcf7c184da9a",
-      "bytes": 2309
-    },
-    {
-      "path": "whisper/base/model.bin",
-      "url": "https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/model.bin",
-      "sha256": "d01c3014881c9c6f3133c182f3d2887eb6ca1c789a7538c5c007196857a0a6a9",
-      "bytes": 145217532
-    },
-    {
-      "path": "whisper/base/tokenizer.json",
-      "url": "https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/tokenizer.json",
-      "sha256": "fb7b63191e9bb045082c79fd742a3106a12c99513ab30df4a0d47fa6cb6fd0ab",
-      "bytes": 2203239
-    },
-    {
-      "path": "whisper/base/vocabulary.txt",
-      "url": "https://huggingface.co/Systran/faster-whisper-base/resolve/ebe41f70d5b6dfa9166e2c581c45c9c0cfc57b66/vocabulary.txt",
-      "sha256": "34ce3fe1c5041027b3f8d42912270993f986dbc4bb34cf27f951e34a1e453913",
-      "bytes": 459861
     },
     {
       "path": "whisper/medium/config.json",

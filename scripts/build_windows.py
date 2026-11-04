@@ -123,7 +123,7 @@ def main():
             'sha256': digest, 'bytes': args.offline_gguf.stat().st_size, 'license': args.offline_license}, indent=2), encoding='utf-8')
     if args.offline_assets:
         manifest = json.loads((ROOT / 'config/voice_resources.json').read_text(encoding='utf-8'))
-        asr_models = {'cpu-fast': 'base', 'balanced': 'small', 'gpu-quality': 'medium'}
+        asr_models = {'cpu-fast': 'small', 'balanced': 'small', 'gpu-quality': 'medium'}
         bundled_prefixes = ['silero/', *['whisper/' + asr_models[p] + '/' for p in args.asr_profiles]]
         for asset in manifest['assets']:
             if not any(asset['path'].startswith(prefix) for prefix in bundled_prefixes):
@@ -142,7 +142,7 @@ def main():
     run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
          "$s=Get-AuthenticodeSignature -LiteralPath '" + str(prerequisites / 'OllamaSetup.exe').replace("'", "''") +
          "'; if ($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -notmatch 'Ollama') {exit 1}"])
-    run([csc, '/nologo', '/target:winexe', '/reference:System.Windows.Forms.dll', '/out:' + str(payload / 'LocalMind.exe'), ROOT / 'installer/LocalMind.cs'])
+    run([csc, '/nologo', '/target:winexe', '/win32icon:' + str(ROOT / 'static/assets/localmind.ico'), '/reference:System.Windows.Forms.dll', '/out:' + str(payload / 'LocalMind.exe'), ROOT / 'installer/LocalMind.cs'])
     import os
     environment = {**os.environ, 'LOCALMIND_DATA_DIR': str(ROOT / '.test-artifacts/build-smoke')}
     run([runtime / 'python.exe', '-c', 'import fastapi, av, faster_whisper, torch; from PySide6 import QtWebEngineWidgets; import localmind.server'], cwd=payload, env=environment)

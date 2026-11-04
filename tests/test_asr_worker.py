@@ -53,7 +53,8 @@ def test_language_pairs_change_only_language_and_keep_defaults():
         voice.transcribe_audio(b'x' * 128, '.wav', 'gpu-turbo')
 
 
-@pytest.mark.parametrize('profile,model', [('gpu-turbo', 'large-v3-turbo'), ('gpu-large', 'large-v3')])
+@pytest.mark.parametrize('profile,model', [('cpu-fast', 'small'), ('balanced', 'small'),
+                                         ('gpu-quality', 'medium'), ('gpu-turbo', 'large-v3-turbo'), ('gpu-large', 'large-v3')])
 def test_candidate_setup_uses_declared_model_only(tmp_path, monkeypatch, profile, model):
     calls = []
     monkeypatch.setattr(voice, 'MODELS', tmp_path / 'models')
@@ -63,6 +64,14 @@ def test_candidate_setup_uses_declared_model_only(tmp_path, monkeypatch, profile
     voice.main()
     assert calls[0][0] == (model,)
     assert Path(calls[0][1]['output_dir']) == tmp_path / 'models' / 'whisper' / model
+
+
+def test_cli_base_is_rejected_before_any_download(monkeypatch):
+    import sys
+    monkeypatch.setattr(sys, 'argv', ['voice', 'setup-stt', '--profile', 'base'])
+    with pytest.raises(SystemExit) as error:
+        voice.main()
+    assert error.value.code == 2
 
 
 def test_unsupported_multilingual_is_explicit_not_silent_fallback(monkeypatch):

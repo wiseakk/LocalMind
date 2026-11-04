@@ -20,9 +20,9 @@ async function fakeInfo(page) {
   await page.route('**/api/info',route=>route.fulfill({json:{server_instance:'test-instance',demo:true,model:'qwen3:4b',devices:[{name:'Настольная лампа',state:false}],voice:{voices:[]}}}));
 }
 
-test('offline rendering, math, XSS and external-resource refusal',async({page})=>{
+test('offline rendering, math, XSS and external-resource refusal',async({page,baseURL})=>{
   await fakeInfo(page);const external=[];
-  page.on('request',r=>{if(!r.url().startsWith('http://127.0.0.1:8765')) external.push(r.url())});
+  page.on('request',r=>{if(new URL(r.url()).origin!==new URL(baseURL).origin) external.push(r.url())});
   await page.goto('/');
   await page.evaluate(()=>{
     const target=document.createElement('div');target.id='render-fixture';document.querySelector('#thread').append(target);

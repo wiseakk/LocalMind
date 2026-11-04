@@ -154,6 +154,7 @@ def test_gpu_failure_retries_cpu_with_local_only_multilingual_model():
     assert result['fallback'] is True
     assert result['text'] == 'Блокнот'
     assert calls[0][0].endswith('medium')
+    assert calls[1][0] == calls[0][0]  # Fallback changes device, never the model.
     assert calls[1][1]['local_files_only'] is True
     assert calls[1][1]['compute_type'] == 'int8'
 

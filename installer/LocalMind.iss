@@ -2,7 +2,7 @@
   #define Payload "..\dist\LocalMind"
 #endif
 #ifndef ReleaseVersion
-  #define ReleaseVersion "1.0.0-rc1"
+  #define ReleaseVersion "1.0.0-rc2"
 #endif
 [Setup]
 AppId={{E51E0AD1-BB08-4EC7-95B8-0A50D0543A88}
@@ -25,6 +25,7 @@ UninstallDisplayIcon={app}\LocalMind.exe
 CloseApplications=yes
 RestartApplications=no
 WizardStyle=modern
+SetupIconFile=..\static\assets\localmind.ico
 [Languages]
 Name: russian; MessagesFile: "compiler:Languages\Russian.isl"
 [Tasks]
@@ -33,8 +34,8 @@ Name: ollama; Description: "Локальный движок нейросети O
 [Files]
 Source: "{#Payload}\*"; DestDir: "{app}"; Excludes: "*.pyc"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
-Name: "{group}\LocalMind"; Filename: "{app}\LocalMind.exe"
-Name: "{autodesktop}\LocalMind"; Filename: "{app}\LocalMind.exe"; Tasks: desktopicon
+Name: "{group}\LocalMind"; Filename: "{app}\LocalMind.exe"; AppUserModelID: "LocalMind.Desktop.1"
+Name: "{autodesktop}\LocalMind"; Filename: "{app}\LocalMind.exe"; AppUserModelID: "LocalMind.Desktop.1"; Tasks: desktopicon
 [Run]
 Filename: "{app}\prerequisites\OllamaSetup.exe"; Tasks: ollama; Flags: waituntilterminated; Check: not OllamaPresent
 Filename: "{app}\LocalMind.exe"; Description: "Запустить LocalMind"; Flags: postinstall nowait skipifsilent

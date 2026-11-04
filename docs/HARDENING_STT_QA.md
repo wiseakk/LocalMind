@@ -1,3 +1,15 @@
+# RC2: актуальная схема STT
+
+cpu-fast и balanced → small CPU/int8; gpu-quality → medium CUDA/float16,
+fallback на тот же medium CPU/int8. Base удалён из поддерживаемого каталога,
+manifest v2, CLI и упаковки, но старые файлы остаются на диске. Старый env base
+выбирает small; явный профиль приоритетнее. Общие small файлы используют единый
+verification stamp и OS process lock. После обновления manifest нужна явная
+подготовка: корректные файлы повторно хешируются, не скачиваются заново.
+Реальные onset/отрицания/CPU/GPU в RC2: NOT TESTED. План — MANUAL_QA.md.
+
+## Архив сведений RC1 (профили ниже не являются каталогом RC2)
+
 # STT: диагностика и повторяемая Windows QA
 
 ## Установленные факты

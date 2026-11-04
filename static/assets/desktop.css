@@ -1,0 +1,122 @@
+/* RC2 desktop surface. Qt owns the real Windows frame and window controls.
+   Shared tokens also cover dynamic dialogs and rendered assistant messages. */
+:root {
+  color-scheme:dark;
+  --bg:#18181c; --panel:#202025; --panel2:#2b2b32; --line:#42424c;
+  --text:#f0eff4; --muted:#b5b2c1; --accent:#c1a6ff; --warm:#ddcbff;
+  --danger:#ffb1be; --sidebar:#1c1c21; --selected:#383043;
+  --input:#17171c; --primary:#d3baff; --primary-text:#251638;
+  --danger-bg:#472632; --danger-line:#a96375; --success:#a6dfc7;
+  --shadow:0 12px 32px #0003; --backdrop:#0008;
+  --code-bg:#171d28; --code-text:#c9dffa; --code-inline:#a5e3d3;
+  --quote-bg:#25303e; --quote-text:#c2cede; --link:#bad3ff;
+}
+:root[data-theme="light"] {
+  color-scheme:light;
+  --bg:#f4f4f7; --panel:#fff; --panel2:#e9e8ef; --line:#c9c6d2;
+  --text:#25222c; --muted:#625b70; --accent:#7041a3; --warm:#663a98;
+  --danger:#9c2945; --sidebar:#ededf2; --selected:#e4d9f1;
+  --input:#fff; --primary:#7041a3; --primary-text:#fff;
+  --danger-bg:#fce9ed; --danger-line:#bd6078; --success:#166148;
+  --shadow:0 12px 32px #30224418; --backdrop:#16102055;
+  --code-bg:#eff1f6; --code-text:#293e60; --code-inline:#12624f;
+  --quote-bg:#e9edf4; --quote-text:#42536d; --link:#285a9c;
+}
+body {background:var(--bg); color:var(--text)}
+button {transition:background-color .14s,border-color .14s,color .14s}
+button:active {transform:none}
+button:hover {background-color:var(--panel2)}
+input,textarea,select {color:var(--text); accent-color:var(--accent)}
+input:not([type="checkbox"]),select {
+  background:var(--input); border:1px solid var(--line);
+  min-height:36px; border-radius:7px;
+}
+textarea {background:transparent; color:var(--text); font-size:14px}
+textarea::placeholder,input::placeholder {color:var(--muted); opacity:1}
+.sidebar {background:var(--sidebar); border-color:var(--line); padding-block:20px}
+.sidebar .brand {margin-bottom:20px}
+.logo {background:var(--selected); border-color:var(--line); color:var(--warm); border-radius:10px}
+.sidebar .nav {border-radius:8px}
+.nav.selected,.settings-tabs button[aria-selected="true"] {
+  color:var(--warm); background:var(--selected); border-color:var(--line);
+}
+.topbar {min-height:64px; height:64px; background:var(--bg); border-bottom:1px solid var(--line); padding-inline:24px}
+.breadcrumb {font-size:12px; letter-spacing:0; color:var(--muted)}
+.model-pill {background:var(--panel); border-color:var(--line); color:var(--text); font-size:12px; border-radius:7px}
+.connection,.top-right .mode {font-size:11px}
+.connection,.edition,.rail-mark,.quiet,.section-heading,.local-badge,
+.dialogue-column>.section-heading,.composer-hint,.private-note,.footer-note,
+.footer-coordinate,.welcome>p,.suggestions small,.suggestions button>.icon,
+.eyebrow,.composer-state,.mini,.muted,.notice,.prototype-note,
+.file-entry small,.history-entry small,.attachment-notice {color:var(--muted)}
+.wordmark-dot,.tiny-star,.assistant-label {color:var(--accent)}
+.dialogue-column>.section-heading {font-size:10px; letter-spacing:.6px}
+.welcome {padding-top:clamp(24px,6vh,64px)}
+.welcome h1 {font-family:Onest,system-ui,sans-serif; font-weight:600; line-height:1.2; letter-spacing:-1.6px; font-size:clamp(30px,4vw,48px)}
+h1 em {background:none; color:var(--accent); -webkit-text-fill-color:currentColor}
+.welcome>p {font-size:14px; line-height:1.7}
+.suggestions button {background:var(--panel); border-color:var(--line); border-radius:10px; transition:background-color .14s,border-color .14s}
+.suggestions button:hover {background:var(--panel2); border-color:var(--accent); transform:none}
+.suggestions strong {font-size:12px; color:var(--text)}
+.suggestions small {font-size:11px}
+.conversation,dialog {scrollbar-color:var(--line) transparent}
+.conversation {mask-image:none}
+.bubble.me {background:var(--selected); border-color:var(--line); border-radius:12px 12px 3px 12px}
+.bubble.assistant {background:transparent; color:var(--text)}
+.action-chip,.attachment,.sent-attachment,.draft-review,.notice,.prototype-note,
+.graph-activity,.graph-inspector,.canvas-diagnostics,.model-card {
+  background:var(--panel); border-color:var(--line); color:var(--text);
+}
+.action-chip {animation:enter .14s}
+.action-chip.error,.error,.danger,.archive-notice,.attachment.error {
+  color:var(--danger)!important; border-color:var(--danger-line); background:var(--danger-bg);
+}
+#form {background:var(--panel); border:1px solid var(--line); border-radius:12px; box-shadow:0 2px 6px #0001; transition:border-color .14s}
+#form:focus-within {border-color:var(--accent); box-shadow:0 0 0 1px var(--accent)}
+.composer-hint {font-size:10px}
+.composer-state,.private-note,.footer-note {font-size:11px}
+#mic {background:var(--selected); border-color:var(--line); color:var(--warm); border-radius:7px}
+#mic[aria-pressed="true"] {background:var(--danger-bg); border-color:var(--danger-line); color:var(--danger)}
+#voiceMode[aria-pressed="true"] {background:var(--selected); color:var(--warm)}
+#send {background:var(--primary); color:var(--primary-text); border-color:var(--primary); border-radius:7px; min-height:36px}
+#send:hover {filter:brightness(1.08)}
+.voice-divider,.header-divider {background:var(--line)}
+.secondary,.preview-button {background:var(--panel2); color:var(--text); border-color:var(--line); border-radius:7px}
+.secondary:hover,.preview-button:hover {background:var(--selected); border-color:var(--accent)}
+.text-button {color:var(--warm)}
+dialog {background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); animation:drawerEnter .14s ease-out}
+dialog::backdrop {background:var(--backdrop); backdrop-filter:none}
+#settingsDialog,#appsDialog,dialog.drawer {border-radius:12px}
+.settings-tabs {background:var(--panel); border-color:var(--line)}
+.settings-tabs button {color:var(--muted); font-size:12px; border-radius:7px}
+.device,.history-entry,.file-entry {border-color:var(--line)}
+.history-entry.active {border-color:var(--accent)}
+.notice,.prototype-note {border-left-color:var(--accent)}
+.mode,.mode.real {background:var(--selected); color:var(--warm); border-color:var(--line)}
+.dot.online {background:var(--success)}
+.attachment,.attachment:hover {background:var(--panel2)}
+.attachment strong,.attachment .attachment-name,.suggestions strong,.rendered-message {color:var(--text)}
+.attachment small,.attachment-note {color:var(--muted)}
+.map-open #skyPanel,.map-open #skyPanel>.graph-inspector {background:var(--panel); border-color:var(--line)}
+.scene-mode {background:var(--panel)!important; border-color:var(--line)!important; color:var(--text)}
+#skyPanel::after {background:none}
+.rendered-message blockquote {background:var(--quote-bg); color:var(--quote-text)}
+.rendered-message code {background:var(--code-bg); color:var(--code-inline)}
+.rendered-message pre {background:var(--code-bg); border-color:var(--line)}
+.rendered-message pre code {background:none; color:var(--code-text)}
+.rendered-message a {color:var(--link)}
+.rendered-message th {background:var(--panel2)}
+.rendered-message th,.rendered-message td,.rendered-message hr {border-color:var(--line)}
+@media(max-width:760px) {
+  .topbar {height:auto; min-height:64px; padding-inline:16px}
+  .composer-state,.private-note {font-size:10px}
+  .suggestions button {background:var(--panel); border:1px solid var(--line); margin-bottom:8px; padding:12px}
+  .suggestions strong {font-size:12px}
+  .suggestions small {font-size:10px}
+}
+@media(prefers-reduced-motion:reduce) {
+  *,*::before,*::after {animation:none!important; transition:none!important; scroll-behavior:auto!important}
+}
+html[data-reduced-motion="true"] *,html[data-reduced-motion="true"] *::before,html[data-reduced-motion="true"] *::after {
+  animation:none!important; transition:none!important; scroll-behavior:auto!important;
+}

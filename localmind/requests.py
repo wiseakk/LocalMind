@@ -66,10 +66,13 @@ class RequestStore:
         self._retired: set[str] = set()
         self._lock = Lock()
         self._pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix='localmind-chat')
+        self._closing = False
 
     def begin(self, request_id: str | None, fingerprint: str, prepare, complete, *, admit=None) -> RequestEntry:
         key = request_id or uuid.uuid4().hex
         with self._lock:
+            if self._closing:
+                raise RequestBusy('LocalMind завершает работу. Новый запрос недоступен.')
             now = time.monotonic()
             expired = {k for k, v in self._entries.items() if v.finished is not None and now - v.finished >= self.ttl}
             if len(self._retired | expired) > 8192:
@@ -100,11 +103,15 @@ class RequestStore:
         token = cancellation.set(entry.cancelled)
         deadline_token = turn_deadline.set(time.monotonic() + 90)
         try:
+            if entry.cancelled.is_set():
+                raise ValueError('Generation cancelled')
             prepared = prepare()
             prepared.on_delta = entry.publish
             entry.initial.set_result(prepared.initial)
             try:
-                final = complete(prepared)
+                # Shutdown may arrive during prepare, after trusted actions.
+                # Preserve those results without entering another model/tool step.
+                final = dict(prepared.initial) if entry.cancelled.is_set() else complete(prepared)
             except Exception:
                 # Generation is downstream of execution. Even an unexpected
                 # composer defect must not erase the already trusted outcome
@@ -154,4 +161,24 @@ class RequestStore:
             return any(entry.finished is None for entry in self._entries.values())
 
     def close(self):
+        self.cancel_all()
         self._pool.shutdown(wait=True)
+
+    def cancel_all(self):
+        """Close admission before signalling active turns and downstream tools."""
+        with self._lock:
+            self._closing = True
+            for entry in self._entries.values():
+                if entry.finished is None:
+                    entry.cancelled.set()
+                    with entry.changed:
+                        entry.changed.notify_all()
+
+    def reopen(self):
+        """A new ASGI lifespan may reuse this module, never the old executor."""
+        with self._lock:
+            if any(entry.finished is None for entry in self._entries.values()):
+                raise RequestBusy('Предыдущий запрос ещё завершает работу.')
+            if self._closing:
+                self._pool = ThreadPoolExecutor(max_workers=self.workers, thread_name_prefix='localmind-chat')
+                self._closing = False

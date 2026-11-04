@@ -6,7 +6,8 @@ import subprocess
 import zipfile
 
 
-VERSION = '1.0.0-rc1'
+VERSION = '1.0.0-rc2'
+RELEASE_BASE = 'a229ffff4ab5dafd607c755e4f74090d6a965ece'
 
 
 def sha256(path):
@@ -23,12 +24,17 @@ def source_identity(root):
     branch = git(root, 'branch', '--show-current')
     if git(root, 'status', '--porcelain', '--untracked-files=all'):
         raise ValueError('Release requires a clean committed checkout, including untracked source files. See docs/RELEASE_RECOVERY.md.')
-    if branch != 'release/1.0.0-rc1':
-        raise ValueError('Build from release/1.0.0-rc1; preserve the Alpha and snapshot branches.')
+    if branch != 'release/1.0.0-rc2':
+        raise ValueError('Build from release/1.0.0-rc2; preserve the Alpha and snapshot branches.')
+    try:
+        git(root, 'merge-base', '--is-ancestor', RELEASE_BASE, commit)
+    except subprocess.CalledProcessError:
+        raise ValueError('RC2 must descend from the reviewed RC1 release commit ' + RELEASE_BASE) from None
     files = subprocess.check_output(['git', '-C', str(root), 'ls-files', '-z']).decode().split('\0')
     hashes = {name: sha256(root / name) for name in files if name and (root / name).is_file()}
     tags = git(root, 'tag', '--points-at', commit).splitlines()
-    return {'commit': commit, 'tags': tags, 'branch': branch, 'version': VERSION, 'sources': hashes}
+    return {'commit': commit, 'base_commit': RELEASE_BASE, 'tags': tags,
+            'branch': branch, 'version': VERSION, 'sources': hashes}
 
 
 def validate_resume(marker, identity):
@@ -80,7 +86,7 @@ def validate_payload_layout(root, payload, inputs):
     if inputs['offline_assets']:
         folders.add('offline-assets')
         manifest = json.loads((root / 'config/voice_resources.json').read_text(encoding='utf-8'))
-        models = {'cpu-fast': 'base', 'balanced': 'small', 'gpu-quality': 'medium'}
+        models = {'cpu-fast': 'small', 'balanced': 'small', 'gpu-quality': 'medium'}
         prefixes = ['silero/', *['whisper/' + models[p] + '/' for p in inputs['asr_profiles']]]
         allowed.update('offline-assets/' + asset['path'] for asset in manifest['assets']
                        if any(asset['path'].startswith(prefix) for prefix in prefixes))

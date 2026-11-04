@@ -32,7 +32,7 @@ def test_build_keeps_source_identity_through_runtime_and_asset_copies(tmp_path, 
     gguf.write_bytes(b'GGUFexample')
     iscc = tmp_path / 'compiler.exe'
     iscc.write_bytes(b'fake compiler')
-    source = {'commit': 'a' * 40, 'branch': 'release/1.0.0-rc1', 'version': builder.VERSION, 'sources': {}}
+    source = {'commit': 'a' * 40, 'branch': 'release/1.0.0-rc2', 'version': builder.VERSION, 'sources': {}}
     source['sources'] = {p.relative_to(root).as_posix(): builder.sha256(p)
                          for p in root.rglob('*') if p.is_file()}
     monkeypatch.setattr(builder, 'ROOT', root)

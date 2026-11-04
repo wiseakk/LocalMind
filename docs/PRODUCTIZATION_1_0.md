@@ -7,18 +7,18 @@
 
 ## Пользовательский запуск
 
-Запустить `LocalMind-Offline-Setup.exe`, затем ярлык **LocalMind**. Python, venv,
+Запустить `LocalMind-1.0.0-rc2-Setup.exe`, затем ярлык **LocalMind**. Python, venv,
 pip и терминал пользователю не нужны. Компонент Ollama предлагается установщиком;
 существующий Ollama обнаруживается. Для распакованного комплекта одна команда:
 
 ```powershell
-.\dist\LocalMind\LocalMind.exe
+.\dist\rc2\LocalMind\LocalMind.exe
 ```
 
 В мастере нажать «Подготовить распознавание», дождаться готовности в «Загрузках»,
 затем «Подготовить озвучку». Основные ресурсы: multilingual small и Silero xenia.
-Мастер готовит профиль Balanced. Fast/Quality доступны только при отдельно
-подготовленных прежних ресурсах; отсутствующие профили в UI отключены.
+Мастер готовит выбранный профиль: быстрый small или качественный medium.
+Balanced совместим с small. Base не поддерживается; старые файлы не удаляются.
 Мастер проверяет контрольные суммы и пробный CPU inference. Ресурсы загружаются
 только по явной кнопке; обычные STT/TTS используют локальные файлы.
 Silero v5.6 ru: CC-BY-NC-SA-4.0; источники и SHA-256 — в `config/voice_resources.json`.
@@ -60,7 +60,7 @@ python scripts/build_windows.py --offline-assets PATH_TO_PREPARED_MODELS --offli
 проверку/упаковку существующего `dist/LocalMind` после сбоя, повторно копирует
 текущие исходники, проверяет подпись Ollama и запускает smoke import приватного
 runtime. Для нового чистого варианта используйте новый checkout; скрипт не
-удаляет старые сборки. Офлайн-вариант выводится в `LocalMind-Offline-Setup.exe`.
+удаляет старые сборки. Офлайн-вариант выводится в `LocalMind-1.0.0-rc2-Setup.exe`.
 Офлайн GGUF загружается локальному Ollama через blobs/create, затем проверяется
 tags/show; модель называется `localmind-offline:1.0` и активируется только отдельно.
 

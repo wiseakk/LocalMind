@@ -5,6 +5,9 @@ const history = [];
 let busy = false, recording = null, recordingStartedAt = 0, recordingTimer = null;
 let voiceBusy = false;
 let sttProfiles=[],sttDefaultApplied=false;
+// RC1's balanced identifier remains valid on the server and in saved settings.
+// Both legacy fast profiles now use small; the UI presents one fast mode.
+const visibleSTTProfile=id=>id==='balanced'?'cpu-fast':id;
 let serverInstance = null;
 let conversationId = null;
 let inFlight = null;
@@ -245,14 +248,14 @@ async function refresh() {
     const voice=info.voice || {};
     sttProfiles=voice.profiles||[];
     if(!sttDefaultApplied){
-      try{const saved=localStorage.getItem('localmind.sttProfile.v1');if(sttProfiles.some(p=>p.id===saved))$('voiceProfile').value=saved;else if(voice.default_profile)$('voiceProfile').value=voice.default_profile;}catch(_){if(voice.default_profile)$('voiceProfile').value=voice.default_profile;}
+      try{const saved=localStorage.getItem('localmind.sttProfile.v1');if(sttProfiles.some(p=>p.id===saved))$('voiceProfile').value=visibleSTTProfile(saved);else if(voice.default_profile)$('voiceProfile').value=visibleSTTProfile(voice.default_profile);}catch(_){if(voice.default_profile)$('voiceProfile').value=visibleSTTProfile(voice.default_profile);}
       sttDefaultApplied=true;
     }
     for(const option of $('voiceProfile').options){
       const profile=voice.profiles?.find(p=>p.id===option.value);
       option.disabled=false;
       option.dataset.baseLabel??=option.textContent;
-      option.textContent=(profile?.label||option.dataset.baseLabel)+(profile?.ready===true?'':' · требуется подготовка');
+      option.textContent=option.dataset.baseLabel+(profile?.ready===true?'':' · требуется подготовка');
     }
     showSTTProfile();
     const selectedVoice=voice.voices?.find(v=>v.id===($('ttsVoice').value || 'silero-v5_6-ru'));

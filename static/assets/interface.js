@@ -1,4 +1,4 @@
-/* Navigation, accessible native dialogs, and session-only appearance preferences. */
+/* Navigation, accessible native dialogs, and persistent appearance preferences. */
 (() => {
   'use strict';
   const byId=id=>document.getElementById(id);
@@ -19,13 +19,26 @@
   });
   byId('manageCapabilities').addEventListener('click',()=>{byId('settingsDialog').close();byId('appsOpen').click();});
   const media=window.matchMedia?.('(prefers-reduced-motion: reduce)');
+  const theme=byId('theme');
+  function readPreference(key){try{return localStorage.getItem(key)}catch(_){return null}}
+  function savePreference(key,value){try{localStorage.setItem(key,value)}catch(_){/* Session still works. */}}
+  theme.value=document.documentElement.dataset.theme==='light'?'light':'dark';
+  function setTheme(){
+    const value=theme.value==='light'?'light':'dark';
+    document.documentElement.dataset.theme=value;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content',value==='light'?'#f4f4f7':'#18181c');
+  }
+  theme.addEventListener('change',()=>{setTheme();savePreference('localmind.theme.v1',theme.value);});
+  setTheme();
+  for(const id of ['reduceMotion','lowPerformance'])byId(id).checked=readPreference('localmind.'+id+'.v1')==='true';
   function appearance(){
     const reduced=Boolean(media?.matches||byId('reduceMotion').checked),low=byId('lowPerformance').checked;
     document.documentElement.dataset.reducedMotion=String(reduced);document.documentElement.dataset.lowPerformance=String(low);
     window.localmindScene?.configure({reduced,low});
   }
   media?.addEventListener('change',appearance);
-  byId('reduceMotion').addEventListener('change',appearance);byId('lowPerformance').addEventListener('change',appearance);appearance();
+  for(const id of ['reduceMotion','lowPerformance'])byId(id).addEventListener('change',()=>{savePreference('localmind.'+id+'.v1',String(byId(id).checked));appearance();});
+  appearance();
   const panel=byId('skyPanel');
   let graphOpener=byId('graphToggle'),previousMode='ambient';
   function syncGraphAccess(){

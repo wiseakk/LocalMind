@@ -6,13 +6,19 @@ const dom=new JSDOM(fs.readFileSync('static/index.html','utf8'),{url:'http://127
 const w=dom.window,d=w.document;
 w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
 w.HTMLDialogElement.prototype.close=function(){this.open=false;this.dispatchEvent(new w.Event('close'));};
-w.fetch=async url=>Response.json(url==='/api/setup'?{voice:[{kind:'asr',state:'model_missing'},{kind:'tts',state:'model_missing'}],ollama:{state:'ready',active_installed:true}}:url==='/api/home'?{configured:false}:url==='/api/permissions/personal'?{enabled:false,roots:[],server_instance:'test'}:{jobs:[]});
+w.fetch=async url=>Response.json(url==='/api/setup'?{voice:[
+  {kind:'asr',profile:'cpu-fast',model:'small',required:false,state:'model_missing'},
+  {kind:'asr',profile:'balanced',model:'small',required:true,state:'model_missing'},
+  {kind:'asr',profile:'gpu-quality',model:'medium',required:false,state:'model_missing'},
+  {kind:'tts',state:'model_missing'}],ollama:{state:'ready',active_installed:true}}:url==='/api/home'?{configured:false}:url==='/api/permissions/personal'?{enabled:false,roots:[],server_instance:'test'}:{jobs:[]});
 w.localmindModels={refresh:()=>{}};
 w.closeSidebar=()=>{};
 for(const file of ['interface.js','home.js','access.js','product.js','downloads.js','setup.js'])w.eval(fs.readFileSync('static/assets/'+file,'utf8'));
 (async()=>{
   try{
     await new Promise(r=>setTimeout(r,5));
+    assert.equal(d.querySelectorAll('#setupDialog .model-card').length,3,'small is prepared once for both compatible profile IDs');
+    assert.equal([...d.querySelectorAll('#setupDialog .model-card')].filter(card=>card.textContent.includes('small')).length,1);
     assert.deepEqual([...d.querySelectorAll('.rail-nav>button')].map(b=>b.id),['chatNav','modelsOpen','devicesOpen','downloadsOpen']);
     assert.ok(!d.querySelector('.rail-nav #historyOpen'));
     assert.equal(d.querySelector('#skyPanel').hidden,true);

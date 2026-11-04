@@ -5,7 +5,7 @@
   const labels = {ready:'Готово · пробный запуск пройден',dependency_missing:'Компоненты отсутствуют — восстановите установку',
     model_missing:'Модель ещё не загружена',path_invalid:'Ресурсы недоступны по выбранному пути',
     resource_corrupt:'Файлы повреждены — подготовьте повторно',library_incompatible:'Библиотеки несовместимы — восстановите установку',
-    gpu_error:'GPU недоступен — используйте профиль CPU',unverified:'Требуется проверка пробным запуском'};
+    gpu_error:'GPU недоступен — проверьте запуск той же модели на CPU',unverified:'Требуется проверка пробным запуском'};
   const dialog=document.createElement('dialog'); dialog.id='setupDialog'; dialog.setAttribute('aria-labelledby','setupTitle');
   const heading=document.createElement('h2');heading.id='setupTitle';heading.textContent='Добро пожаловать в LocalMind';
   const note=document.createElement('p');note.textContent='Подготовим русскую речь и проверим локальную нейросеть. Загрузка требует интернета; затем голос работает локально. Существующая модель сохранится.';
@@ -20,7 +20,14 @@
   async function refresh(first=false){
     try{
       const state=await api('');content.replaceChildren();
+      // Legacy cpu-fast and balanced share small files. Show each resource once,
+      // preferring the required/default row without altering saved profile IDs.
+      const resources=new Map();
       for(const row of state.voice){
+        const key=row.kind==='asr'?'asr:'+row.model:row.kind;
+        if(!resources.has(key)||row.required===true)resources.set(key,row);
+      }
+      for(const row of resources.values()){
         const card=document.createElement('div');card.className='model-card';
         const text=document.createElement('p');text.textContent=(row.kind==='asr'?'Распознавание речи · '+row.model:'Озвучка · Silero xenia')+' — '+(labels[row.state]||row.state);card.append(text);
         if(!['ready','dependency_missing'].includes(row.state)){

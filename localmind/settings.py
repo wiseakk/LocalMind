@@ -21,7 +21,8 @@ class Settings:
     demo: bool = os.getenv('DEMO_MODE', 'true').strip().lower() in ('true', '1', 'yes')
     ha_url: str = os.getenv('HOME_ASSISTANT_URL', '').rstrip('/')
     ha_token: str = os.getenv('HOME_ASSISTANT_TOKEN', '')
-    whisper_model: str = os.getenv('WHISPER_MODEL', 'base')
+    # Legacy base is a compatible fast-mode preference, never a model download.
+    whisper_model: str = 'small' if os.getenv('WHISPER_MODEL', 'small') == 'base' else os.getenv('WHISPER_MODEL', 'small')
 
 settings = Settings()
 DEVICES = json.loads((ROOT / 'config' / 'devices.json').read_text(encoding='utf-8'))

@@ -1,48 +1,29 @@
-# LocalMind 1.0.0-rc1 — кандидат, не Stable
+# LocalMind 1.0.0-rc2
 
-Интеграция от Alpha `66f6c101b91596936721313840684501c75dad1a`, 3 ноября 2026.
-Изменения двух исходных worktree сохранены отдельно, включая untracked source.
-Коммит интеграции и бинарник пока отсутствуют: запись Git index запрещена sandbox,
-Inno Setup 6 отсутствует. Не распространять этот checkout как готовый релиз.
+Основа — RC1 a229ffff4ab5dafd607c755e4f74090d6a965ece, отдельная ветка
+release/1.0.0-rc2. RC1 и Alpha не изменены. Из-за read-only Git metadata
+предоставленного worktree создан изолированный checkout rc2/ внутри него;
+объекты истории скопированы без изменения оригинала. Builder проверяет ancestry.
 
-- STT: расширенная диагностика и строгий JSON на границах worker/legacy/HTTP;
-  NaN и ±Infinity становятся `null` с путями полей, текст распознавания не заменяется.
-  Добавлены регрессии warm worker и понятных ошибок 422/503.
-- LLM: default новой установки `gemma4:12b`, прежний выбор сохраняется.
-  Thinking, temperature, context, response tokens и keep-alive сохраняются по модели
-  и используются фактически. Thought-channel и think-теги исключены из ответа.
-  `ministral-3:8b` — необязательный кандидат, загрузка не запускается автоматически.
-- Windows: запуск, обнаружение окна и foreground activation учитываются отдельно.
-  Отказ активации сохраняет успешный результат запуска. Закрытие адресное;
-  небезопасное закрытие Блокнота получает честный отказ.
-- UI: защита от повторных сообщений, очистка контекста новой беседы,
-  прекращение polling скрытых/закрытых диалогов и завершённых загрузок.
-  Дизайн сохранён; технические сведения находятся в раскрываемой диагностике.
-- Данные: постоянный `%LOCALAPPDATA%\LocalMind` и явный override;
-  перенос после просмотра плана и согласия, проверка копий без удаления источника.
-  Старый журнал загрузок используется по прежнему пути без скрытого переноса.
-  Общие модели Ollama не удаляются и автоматически не выгружаются.
-- Сборка: versioned RC-имена, clean release branch, исходники только из Git,
-  Source.zip, SHA256, commit, версии зависимостей и хеши payload в provenance.
-  Resume проверяет исходники, параметры, runtime и отсутствие старых/лишних файлов.
+- Native рамка Windows, единая иконка и tray, сохранение normal/maximized,
+  восстановление окна после отключения монитора.
+- Светлая/тёмная тема, reduced motion, native recovery вместо Chromium errors.
+  Старые webprofile и пользовательские настройки сохранены.
+- Два STT режима: small CPU/int8; medium CUDA/float16 с fallback на тот же
+  medium CPU/int8. Balanced остаётся совместимым идентификатором small.
+- Base исключён из каталога/загрузок/CLI/упаковки/fallback. Старый
+  WHISPER_MODEL=base выбирает small; base файлы не удаляются. Small готовится
+  явно; общие файлы защищены process lock и единой проверкой готовности.
+- Release provenance сохраняет source/payload identity, clean/resume checks,
+  ветку RC2, ancestry RC1 и хеши. Полной миграции UI или сервера нет.
+- Выход закрывает owned ASR/TTS и setup probes, отменяет запросы чата,
+  запрещает поздний respawn. Сетевой read текущего Ollama ограничен прежним
+  timeout (до30 с); чужой daemon не останавливается.
 
-Реальные наблюдения: gemma4 ответила по-русски на RSA в пустом текстовом диалоге
-за 5557 мс с фиксированными параметрами; Python создал процесс Блокнота и нашёл
-его окна, Windows отказала в активации. Это отдельные smoke-проверки, не голосовая
-приёмка. См. `docs/evidence/release-real-smoke.json` и `MANUAL_QA.md`.
+QML отложен до отдельного решения 1.1: docs/RC2_DESKTOP_DECISION.md.
+Реальные микрофон, CPU/GPU accuracy, Windows GUI/DPI, установленный EXE и
+offline demo — NOT TESTED. Это release candidate, не Stable. Автоматические
+факты — docs/STATUS.md; ручной протокол — MANUAL_QA.md.
 
-Запуск подготовленного source-окружения: `python start.py`.
-После установки: `& "$env:LOCALAPPDATA\Programs\LocalMind\LocalMind.exe"`.
-Установщик ещё НЕ СОБРАН. Продолжение: `docs/RELEASE_RECOVERY.md`.
-
-Обычный комплект содержит runtime и интерфейс, но модели требуют явной подготовки
-через настройки. Сеть при скачивании моделей не является offline inference.
-Комплект `--offline-assets` содержит проверенные STT/TTS assets выбранных профилей;
-локальная LLM требуется отдельно либо явно добавляется через `--offline-gguf`.
-Лёгкий GGUF не заменяет default gemma4 и обозначается резервным.
-
-Проверенные интерфейсы: [Ollama chat](https://docs.ollama.com/api/chat),
-[SetForegroundWindow](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegroundwindow),
-[CPython embedded](https://docs.python.org/3.11/using/windows.html#the-embeddable-package),
-[Inno filename](https://jrsoftware.org/ishelp/topic_setup_outputbasefilename.htm).
-Эти документы не подтверждают испытания установщика.
+Обычный установщик не содержит моделей; их подготовка требует сети.
+После подготовки STT/TTS/LLM inference выполняется локально.

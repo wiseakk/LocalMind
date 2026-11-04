@@ -38,6 +38,13 @@ from .voice import VoiceError, voice_status, transcribe_audio, synthesize_speech
 async def lifespan(app):
     from .voice import warm_tts, shutdown_tts, shutdown_stt
     from .window_tools import window_tools
+    from . import resource_setup
+    from .speech_worker import worker as tts_worker
+    from .asr_worker import worker as stt_worker
+    store.reopen()
+    resource_setup.reopen()
+    tts_worker.reopen()
+    stt_worker.reopen()
     catalog.set_personal_mode(file_access.known_app_launch_allowed())
     warm_task = asyncio.create_task(asyncio.to_thread(warm_tts))
     try:
@@ -45,12 +52,17 @@ async def lifespan(app):
     finally:
         from .model_catalog import downloads
         from .model_benchmark import benchmarks
-        downloads.stop_all()
-        benchmarks.stop_all()
-        await asyncio.to_thread(shutdown_tts)
-        await asyncio.to_thread(shutdown_stt)
+        # Interrupt owned native work and reject new work before awaiting locks.
+        store.cancel_all()
+        tts_worker.begin_shutdown()
+        stt_worker.begin_shutdown()
+        results = await asyncio.gather(*(asyncio.to_thread(close) for close in
+            (downloads.stop_all, benchmarks.stop_all, resource_setup.stop_all,
+             shutdown_tts, shutdown_stt, store.close)), return_exceptions=True)
         warm_task.cancel()
         window_tools.close()
+        if any(isinstance(result, BaseException) for result in results):
+            raise RuntimeError('Не все фоновые задачи LocalMind удалось завершить.')
 
 
 app = FastAPI(title='LocalMind', version='1.0.0', docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)

@@ -38,11 +38,11 @@ WORKER_TIMEOUT_SECONDS = 120
 SAMPLE_RATE = 16000
 SUPPORTED_SUFFIXES = frozenset(('.webm', '.ogg', '.mp4', '.wav', '.m4a'))
 PROFILES = {
-    'cpu-fast': {'model': 'base', 'device': 'cpu', 'compute_type': 'int8', 'label': 'Fast · CPU / base',
-                 'description': 'Меньшая модель для быстрого отклика на CPU. Сложные слова требуют особенно внимательной проверки.'},
-    'balanced': {'model': 'small', 'device': 'cpu', 'compute_type': 'int8', 'label': 'Balanced · CPU / small',
-                 'description': 'Основной профиль: более крупная модель на CPU. Компромисс времени и качества проверяется на ваших записях.'},
-    'gpu-quality': {'model': 'medium', 'device': 'cuda', 'compute_type': 'float16', 'label': 'Quality · GPU / medium',
+    'cpu-fast': {'model': 'small', 'device': 'cpu', 'compute_type': 'int8', 'label': 'Быстрый · small · CPU',
+                 'description': 'Быстрый режим: small на CPU int8. Перед действием проверьте расшифровку.'},
+    'balanced': {'model': 'small', 'device': 'cpu', 'compute_type': 'int8', 'label': 'Быстрый · small · CPU',
+                 'description': 'Сохранённый профиль balanced совместим с быстрым режимом small на CPU int8.'},
+    'gpu-quality': {'model': 'medium', 'device': 'cuda', 'compute_type': 'float16', 'label': 'Качественный · medium · GPU / CPU',
                     'description': 'Более крупная модель; требует CUDA и памяти совместно с LLM. При ошибке GPU используется CPU int8. Превосходство качества ещё требует измерения.'},
 }
 # CLI evaluation only; preserve the three public profile IDs and their defaults.
@@ -129,7 +129,7 @@ def voice_status() -> dict:
         'default_voice': DEFAULT_VOICE,
         'default_profile': default_stt_profile(),
         'legacy_whisper_model': {'value': os.environ.get('WHISPER_MODEL'),
-                                'meaning': 'Default profile only: base→cpu-fast, small→balanced, medium→gpu-quality; explicit profile wins; other values ignored.'},
+                                'meaning': 'Default profile only: legacy base→cpu-fast (small), small→balanced (small), medium→gpu-quality (medium); explicit profile wins; other values ignored.'},
         'max_recording_seconds': MAX_RECORDING_SECONDS,
         'max_upload_bytes': MAX_UPLOAD_BYTES,
         'profiles': [{'id': key, **value, 'ready': stt_installed and _stt_ready(key),
@@ -506,10 +506,14 @@ def main():
         os.environ['HF_XET_CACHE'] = str(MODELS / '.download-cache' / 'xet')
         os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
         from faster_whisper.utils import download_model
-        directory = MODELS / 'whisper' / EVALUATION_PROFILES[args.profile]['model']
-        directory.mkdir(parents=True, exist_ok=True)
-        download_model(EVALUATION_PROFILES[args.profile]['model'], output_dir=str(directory),
-                       cache_dir=str(MODELS / '.download-cache' / 'hub'))
+        from .resource_lock import model_download_lock
+        model = EVALUATION_PROFILES[args.profile]['model']
+        directory = MODELS / 'whisper' / model
+        # Share setup admission with HTTP and the compatible small profile ID.
+        with model_download_lock(MODELS, model):
+            directory.mkdir(parents=True, exist_ok=True)
+            download_model(model, output_dir=str(directory),
+                           cache_dir=str(MODELS / '.download-cache' / 'hub'))
         print('STT model downloaded. Inference will use local files only.')
     elif args.command == 'setup-tts':
         from piper.download_voices import download_voice

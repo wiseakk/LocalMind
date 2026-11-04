@@ -62,6 +62,31 @@ class WarmSpeechWorker:
         self.active_token = None
         self.cancelled = False
         self.retired = {}
+        self.closing = False
+
+    def reopen(self):
+        """Only a new application lifespan may admit work after shutdown."""
+        with self.lock, self.state_lock:
+            if self.process is not None:
+                raise SpeechWorkerError('worker_cleanup')
+            self.closing = False
+            self.cancelled = False
+
+    def begin_shutdown(self):
+        """Stop native work before waiting for the request's operation lock."""
+        with self.state_lock:
+            self.closing = True
+            self.cancelled = True
+            if self.process is not None:
+                try:
+                    self.process.kill()
+                except OSError:
+                    pass
+            if self.replies is not None:
+                try:
+                    self.replies.put_nowait({'error': 'Worker shutting down'})
+                except Full:
+                    pass
 
     def _expire_retired(self):
         now = time.monotonic()
@@ -121,6 +146,7 @@ class WarmSpeechWorker:
             self.reader = None
 
     def close(self):
+        self.begin_shutdown()
         with self.lock:
             self._close()
 
@@ -187,7 +213,7 @@ class WarmSpeechWorker:
         env = {**os.environ, 'HF_HUB_OFFLINE': '1', 'HF_HUB_DISABLE_TELEMETRY': '1', 'DO_NOT_TRACK': '1',
                'OMP_NUM_THREADS': '4', 'MKL_NUM_THREADS': '4', 'PYTHONIOENCODING': 'utf-8'}
         with self.state_lock:
-            if self.cancelled:
+            if self.closing or self.cancelled:
                 raise SpeechWorkerError('cancelled')
             self.process = subprocess.Popen([str(interpreter(voice)), '-m', 'localmind.tts_worker', voice],
                 cwd=ROOT, env=env, shell=False, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -206,6 +232,8 @@ class WarmSpeechWorker:
         try:
             self.deadline = time.monotonic() + TIMEOUT
             with self.state_lock:
+                if self.closing:
+                    raise SpeechWorkerError('cancelled')
                 self._expire_retired()
                 if token is not None and (token in self.retired or '*' in self.retired):
                     raise SpeechWorkerError('cancelled')

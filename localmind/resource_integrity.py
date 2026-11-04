@@ -6,12 +6,15 @@ from .paths import APP_ROOT, MODELS, ordinary_tree
 
 def verify_resources(kind, model='small'):
     manifest = json.loads((APP_ROOT / 'config/voice_resources.json').read_text(encoding='utf-8'))
-    if kind == 'asr' and model not in ('base', 'small', 'medium'):
+    if kind not in ('asr', 'tts'):
+        raise ValueError('Неизвестный ресурс.')
+    if kind == 'asr' and model not in ('small', 'medium'):
         raise ValueError('Неизвестная модель распознавания.')
     prefix = 'whisper/' + model + '/' if kind == 'asr' else 'silero/'
-    for asset in manifest['assets']:
-        if not asset['path'].startswith(prefix):
-            continue
+    assets = [asset for asset in manifest['assets'] if asset['path'].startswith(prefix)]
+    if not assets:
+        raise ValueError('Ресурс отсутствует в манифесте.')
+    for asset in assets:
         path = ordinary_tree(MODELS / asset['path'])
         if path.stat().st_size != asset['bytes']:
             raise ValueError('Размер ресурса не совпадает с манифестом.')

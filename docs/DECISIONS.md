@@ -1,3 +1,27 @@
+# RC2 — решения 2026-11-04
+
+- Release a229fff — обязательный предок; независимая ветка release/1.0.0-rc2
+  в разрешённом rc2 checkout. Alpha/RC1 и прежние артефакты не изменяются.
+  finalize_release.ps1 не запускается. Builder проверяет чистоту, ancestry,
+  payload/source identity, resume и хеши.
+- Оставить QtWebEngine и системную Windows рамку. Qt6 масштабирует DIPs;
+  второго множителя нет. Native recovery, tray, enum-only theme sync,
+  фиксированный navigation origin и явный audio-only permission без JS OS bridge.
+- Хранить normal bounds/maximized/theme отдельно в пользовательских данных.
+  Повреждённые prefs не блокируют запуск; отключённый монитор → visible area.
+- Два режима small/medium; balanced совместим, env base → small. Не удалять
+  пользовательские файлы. Shared small verification и process lock предотвращают
+  конфликт подготовки. Manifest2 не даёт прежнему stamp ложную готовность.
+- Exit закрывает renderer и owned STT/TTS/setup subprocess, отменяет чат,
+  закрывает admission. Уже выполненные действия сохраняют правдивый результат.
+  Не завершать чужие процессы; прежний Ollama network timeout остаётся ограничением.
+- QML1.1 — отдельный прототип/решение; цена переноса и критерии в
+  RC2_DESKTOP_DECISION.md. Ни UI, ни сервер не переписываются в RC2.
+- Mock/DOM/policy тесты не являются реальной микрофонной/GPU/Windows GUI приёмкой.
+  Непроведённые сценарии явно NOT TESTED; Chromium sandbox не обходить.
+
+## Исторические решения до RC2
+
 # Архитектурные решения DevCrew
 
 ## 2026-11-03 ? final release: ??????????, scoped integration, ??????? RC gate

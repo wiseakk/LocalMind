@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const {JSDOM} = require('jsdom');
 const html=fs.readFileSync('static/index.html','utf8').replace(/^\uFEFF/,'');
-const scripts=['marked.umd.js','purify.min.js','katex.min.js','localmind-rich.js','icons.js','constellation.js','attachments.js','speech.js','models.js','app.js','interface.js'];
+const scripts=['appearance.js','marked.umd.js','purify.min.js','katex.min.js','localmind-rich.js','icons.js','constellation.js','attachments.js','speech.js','models.js','app.js','interface.js'];
 let passed=0;
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 function makeDom(fetcher,setup) {
@@ -52,6 +52,38 @@ function makeCanvasDom(){
   });
 }
 (async()=>{
+  await run('theme and motion preferences persist, validate values and tolerate unavailable storage',async()=>{
+    for(const saved of ['light','dark','../../invalid',null]){
+      const dom=makeDom(null,w=>{if(saved)w.localStorage.setItem('localmind.theme.v1',saved)});
+      try{
+        const w=dom.window,theme=w.document.getElementById('theme');
+        assert.equal(w.document.documentElement.dataset.theme,saved==='light'?'light':'dark');
+        theme.value='light';theme.dispatchEvent(new w.Event('change'));
+        assert.equal(w.localStorage.getItem('localmind.theme.v1'),'light');
+        assert.equal(w.document.documentElement.dataset.theme,'light');
+        const motion=w.document.getElementById('reduceMotion');motion.checked=true;motion.dispatchEvent(new w.Event('change'));
+        assert.equal(w.localStorage.getItem('localmind.reduceMotion.v1'),'true');
+        assert.equal(w.document.documentElement.dataset.reducedMotion,'true');
+      }finally{dom.window.close()}
+    }
+    const dom=makeDom(null,w=>{Object.defineProperty(w,'localStorage',{get(){throw new Error('storage disabled')}})});
+    try{assert.equal(dom.window.document.documentElement.dataset.theme,'dark');}finally{dom.window.close()}
+  });
+  await run('two visible STT modes retain balanced preference compatibility without rewriting it',async()=>{
+    for(const saved of ['balanced','cpu-fast','gpu-quality','invalid']){
+      const dom=makeDom(async()=>Response.json({server_instance:'test',demo:true,devices:[],voice:{default_profile:'balanced',profiles:[
+        {id:'cpu-fast',model:'small',ready:true},{id:'balanced',model:'small',ready:true},{id:'gpu-quality',model:'medium',ready:false}
+      ]}}),w=>w.localStorage.setItem('localmind.sttProfile.v1',saved));
+      try{
+        await pause(25);const w=dom.window,select=w.document.getElementById('voiceProfile');
+        assert.deepEqual([...select.options].map(option=>option.value),['cpu-fast','gpu-quality']);
+        assert.equal(select.value,saved==='gpu-quality'?'gpu-quality':'cpu-fast');
+        assert.equal(w.localStorage.getItem('localmind.sttProfile.v1'),saved);
+        assert.ok(select.options[1].textContent.includes('medium'));
+        assert.ok(select.options[1].textContent.includes('подготовка'));
+      }finally{dom.window.close()}
+    }
+  });
   await run('Silero defaults and explicit voice preferences survive reload without switching engines',async()=>{
     for(const saved of [null,'ru_RU-denis-medium','silero-v5_6-ru','chatterbox-v3-ru','../../unknown']){
       const dom=makeDom(null,w=>{if(saved)w.localStorage.setItem('localmind.ttsVoice.v1',saved)});
