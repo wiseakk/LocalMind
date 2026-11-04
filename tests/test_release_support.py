@@ -20,22 +20,22 @@ def test_resume_refuses_missing_and_changed_source_or_options(tmp_path):
 
 
 def test_source_gate_rejects_uncommitted_files_and_wrong_branch(monkeypatch, tmp_path):
-    values = {'rev-parse': 'abc', 'branch': 'release/1.0.0-rc2', 'status': '?? untracked.py'}
+    values = {'rev-parse': 'abc', 'branch': 'release/1.0.0-rc3', 'status': '?? untracked.py'}
     monkeypatch.setattr(release, 'git', lambda root, *args: values[args[0]])
     with pytest.raises(ValueError, match='clean committed'):
         release.source_identity(tmp_path)
     values.update(status='', branch='alpha')
-    with pytest.raises(ValueError, match='release/1.0.0-rc2'):
+    with pytest.raises(ValueError, match='release/1.0.0-rc3'):
         release.source_identity(tmp_path)
 
 
-def test_rc2_provenance_requires_reviewed_release_ancestry(monkeypatch, tmp_path):
+def test_rc3_provenance_requires_reviewed_release_ancestry(monkeypatch, tmp_path):
     calls = []
     def fake_git(root, *args):
         calls.append(args)
         if args[0] == 'merge-base':
             raise subprocess.CalledProcessError(1, ['git', *args])
-        return {'rev-parse': 'abc', 'branch': 'release/1.0.0-rc2', 'status': ''}[args[0]]
+        return {'rev-parse': 'abc', 'branch': 'release/1.0.0-rc3', 'status': ''}[args[0]]
     monkeypatch.setattr(release, 'git', fake_git)
     with pytest.raises(ValueError, match='descend from'):
         release.source_identity(tmp_path)

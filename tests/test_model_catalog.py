@@ -198,7 +198,7 @@ def test_changed_metadata_requires_new_acknowledgement_and_retry_is_explicit(hub
         def start(self):starts.append(True)
     monkeypatch.setattr(cat,'Thread',DormantThread)
     first=jobs.start('huggingface','Qwen/Test-GGUF','Q4_K_M',accept_license=True,acknowledge_unknown_disk=True,fingerprint=fingerprint)
-    with pytest.raises(ValueError,match='Другая'):
+    with pytest.raises(ValueError,match='этого ресурса'):
         jobs.start('huggingface','Qwen/Test-GGUF','Q4_K_M',accept_license=True,acknowledge_unknown_disk=True,fingerprint=fingerprint)
     jobs.update(first['id'],status='failed')
     second=jobs.start('huggingface','Qwen/Test-GGUF','Q4_K_M',accept_license=True,acknowledge_unknown_disk=True,fingerprint=fingerprint)

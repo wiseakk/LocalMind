@@ -1,11 +1,11 @@
-/* RC2 desktop surface. Qt owns the real Windows frame and window controls.
+/* RC3 desktop surface. Qt owns the real Windows frame and window controls.
    Shared tokens also cover dynamic dialogs and rendered assistant messages. */
 :root {
   color-scheme:dark;
-  --bg:#18181c; --panel:#202025; --panel2:#2b2b32; --line:#42424c;
-  --text:#f0eff4; --muted:#b5b2c1; --accent:#c1a6ff; --warm:#ddcbff;
-  --danger:#ffb1be; --sidebar:#1c1c21; --selected:#383043;
-  --input:#17171c; --primary:#d3baff; --primary-text:#251638;
+  --bg:#0b0a11; --panel:#15121f; --panel2:#231d31; --line:#3d324f;
+  --text:#f5efff; --muted:#b8aacb; --accent:#c39aff; --warm:#f3b8ea;
+  --danger:#ffb1be; --sidebar:#100d18; --selected:#312144;
+  --input:#100d18; --primary:#c7a0ff; --primary-text:#251638;
   --danger-bg:#472632; --danger-line:#a96375; --success:#a6dfc7;
   --shadow:0 12px 32px #0003; --backdrop:#0008;
   --code-bg:#171d28; --code-text:#c9dffa; --code-inline:#a5e3d3;
@@ -13,10 +13,10 @@
 }
 :root[data-theme="light"] {
   color-scheme:light;
-  --bg:#f4f4f7; --panel:#fff; --panel2:#e9e8ef; --line:#c9c6d2;
-  --text:#25222c; --muted:#625b70; --accent:#7041a3; --warm:#663a98;
-  --danger:#9c2945; --sidebar:#ededf2; --selected:#e4d9f1;
-  --input:#fff; --primary:#7041a3; --primary-text:#fff;
+  --bg:#faf8fd; --panel:#fff; --panel2:#f1eaf9; --line:#d5c5e2;
+  --text:#241930; --muted:#6c557b; --accent:#7934ae; --warm:#983c85;
+  --danger:#9c2945; --sidebar:#f3edf9; --selected:#ebdaf9;
+  --input:#fff; --primary:#7934ae; --primary-text:#fff;
   --danger-bg:#fce9ed; --danger-line:#bd6078; --success:#166148;
   --shadow:0 12px 32px #30224418; --backdrop:#16102055;
   --code-bg:#eff1f6; --code-text:#293e60; --code-inline:#12624f;
@@ -53,7 +53,7 @@ textarea::placeholder,input::placeholder {color:var(--muted); opacity:1}
 .dialogue-column>.section-heading {font-size:10px; letter-spacing:.6px}
 .welcome {padding-top:clamp(24px,6vh,64px)}
 .welcome h1 {font-family:Onest,system-ui,sans-serif; font-weight:600; line-height:1.2; letter-spacing:-1.6px; font-size:clamp(30px,4vw,48px)}
-h1 em {background:none; color:var(--accent); -webkit-text-fill-color:currentColor}
+h1 em {background:linear-gradient(110deg,var(--accent),var(--warm)); background-clip:text; -webkit-background-clip:text; color:var(--accent); -webkit-text-fill-color:transparent}
 .welcome>p {font-size:14px; line-height:1.7}
 .suggestions button {background:var(--panel); border-color:var(--line); border-radius:10px; transition:background-color .14s,border-color .14s}
 .suggestions button:hover {background:var(--panel2); border-color:var(--accent); transform:none}
@@ -120,3 +120,96 @@ dialog::backdrop {background:var(--backdrop); backdrop-filter:none}
 html[data-reduced-motion="true"] *,html[data-reduced-motion="true"] *::before,html[data-reduced-motion="true"] *::after {
   animation:none!important; transition:none!important; scroll-behavior:auto!important;
 }
+
+/* Sidebar owns durable conversations; the composer remains the visual center. */
+.workspace {grid-template-columns:264px minmax(0,1fr)}
+.sidebar {align-items:stretch;padding:20px 14px;min-height:0}
+.sidebar .brand {justify-content:flex-start;margin-bottom:20px;flex-shrink:0}
+.sidebar .rail-label {display:inline}
+.new-chat {display:flex;align-items:center;justify-content:center;gap:10px;flex-shrink:0;padding:12px 16px;min-height:44px;border:1px solid var(--accent);border-radius:10px;background:var(--selected);color:var(--text);font-weight:600}
+#newChat {display:flex}
+.new-chat:hover {background:var(--panel2);border-color:var(--warm)}
+.sidebar-history {flex:1;min-height:80px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent;margin-top:16px}
+.sidebar-history>h2 {font:600 12px Onest,system-ui;margin:0 6px;color:var(--muted)}
+#historyStorage {margin:8px 6px;font-size:11px;line-height:1.5}
+.history-period {font-size:11px;color:var(--muted);font-weight:500;margin:18px 6px 8px;letter-spacing:.03em}
+.history-entry {display:grid;grid-template-columns:1fr auto;gap:2px;padding:6px;margin:5px 0;border:1px solid transparent;border-radius:9px;min-width:0}
+.history-entry.active {background:var(--selected);border-color:var(--line)}
+.history-entry:hover {background:var(--panel2)}
+.history-entry>button:first-child {grid-column:1/-1;display:block;min-width:0;background:none;border:0;color:var(--text);text-align:left;padding:5px 4px;overflow-wrap:anywhere;line-height:1.5;font-weight:500;font-size:13px}
+.history-entry small {display:block;font-size:11px;font-weight:400;margin-top:3px}
+.history-entry>.text-button {font-size:11px;padding:3px 4px;min-height:28px;opacity:.8;justify-self:start}
+.history-entry>.text-button:last-child {justify-self:end}
+.rail-nav {margin-top:10px;gap:0;flex-shrink:0;border-top:1px solid var(--line);padding-top:8px}
+.sidebar .nav {min-height:40px;padding:9px 12px;font-size:13px}
+.rail-bottom {margin-top:6px;flex-shrink:0;gap:0;align-items:stretch}
+.rail-bottom .nav {width:100%}
+.welcome h1 {font-family:Unbounded,Onest,system-ui,sans-serif;font-weight:500;line-height:1.32;font-size:clamp(28px,3.7vw,49px);letter-spacing:-1.8px}
+.welcome .eyebrow {color:var(--warm);letter-spacing:.16em}
+.welcome {padding-top:clamp(20px,6vh,66px)}
+.suggestions button {border-radius:12px;background:var(--panel);padding:17px 18px}
+.suggestions button:hover {border-color:var(--accent);box-shadow:0 3px 16px #a865e510}
+.suggestions button>.icon {color:var(--accent)}
+.bubble {font-size:15px;line-height:1.75}
+.assistant-label {letter-spacing:.1em}
+.bubble.me {background:var(--selected);border-color:var(--line)}
+.bubble.assistant {padding-top:8px}
+.topbar {height:auto;min-height:66px}
+.top-left,.top-right {min-width:0}
+.model-pill {max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.composer-area {padding-bottom:20px}
+textarea {font-size:15px;line-height:1.6}
+label {color:var(--text)}
+#form {border-radius:16px;box-shadow:0 8px 34px #0001}
+#form:focus-within {box-shadow:0 0 0 1px var(--accent),0 8px 32px #b86aeb12}
+#send {background:linear-gradient(120deg,var(--primary),var(--warm));font-weight:600;padding-inline:18px}
+:root[data-theme="light"] #send {background:var(--primary)}
+#mic {border-color:var(--line);border-radius:10px;min-width:40px;min-height:40px}
+#mic[aria-pressed="true"] {box-shadow:0 0 0 4px #d47bdb14,0 0 25px #d47bdb33;animation:micGlow 1.8s ease-in-out infinite}
+@keyframes micGlow {50% {box-shadow:0 0 0 7px #d47bdb09,0 0 32px #d47bdb40}}
+html[data-low-performance="true"] #mic {animation:none;box-shadow:none}
+.rendered-message pre {border-radius:10px;font-size:.9em}
+.rendered-message .katex-display {overflow-x:auto;overflow-y:hidden;padding-block:8px}
+.dialog-heading h2 {letter-spacing:-.5px}
+
+/* The settings navigation and content scroll independently at every DPI. */
+#settingsDialog {width:min(980px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:90dvh;padding:24px;overflow:hidden}
+.settings-layout {display:grid;grid-template-columns:220px minmax(0,1fr);gap:24px;min-height:0;height:min(620px,calc(90dvh - 130px))}
+.settings-tabs {display:flex;flex-direction:column;flex-wrap:nowrap;align-items:stretch;position:static;border:0;border-right:1px solid var(--line);padding:0 14px 0 0;gap:6px;overflow-y:auto;background:none}
+.settings-tabs button {flex:none;text-align:left;font-size:13px;line-height:1.45;padding:12px;min-height:44px;white-space:normal}
+.settings-panel {min-width:0;max-width:none;overflow-y:auto;padding:0 10px 16px 2px;scrollbar-color:var(--line) transparent}
+.settings-panel h3 {font-size:18px;margin-top:4px}
+.settings-panel .model-card {padding:14px;margin-block:12px}
+.settings-panel pre {white-space:pre-wrap;overflow-wrap:anywhere}
+.model-card {border-color:var(--line);padding:16px;border-radius:10px}
+.setup-progress {display:flex;list-style:none;margin:0 0 24px;padding:0;gap:8px}
+.setup-progress li {display:grid;place-items:center;flex:1;min-height:30px;border-radius:6px;background:var(--panel2);color:var(--muted);border-bottom:2px solid var(--line);font-size:12px}
+.setup-progress li[aria-current="step"] {background:var(--selected);border-color:var(--accent);color:var(--text);font-weight:700}
+.setup-progress li.complete {color:var(--warm);border-color:var(--warm)}
+#setupDialog {width:min(640px,calc(100vw - 24px));max-height:90dvh;padding:28px}
+#setupDialog h2 {font-size:24px;line-height:1.4}
+.setup-content {line-height:1.7}
+.setup-content p {color:var(--muted)}
+.setup-actions {display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-top:24px}
+#setupNext {background:var(--primary);color:var(--primary-text);border-color:var(--accent);margin-left:auto}
+.tour-popover {position:fixed;z-index:100;background:var(--panel);border:1px solid var(--accent);border-radius:14px;padding:22px;box-shadow:0 12px 50px #0005;line-height:1.65;max-height:calc(100dvh - 24px);overflow-y:auto}
+.tour-popover h2 {font-size:19px;margin-block:6px}
+.tour-popover .mini {color:var(--warm)}
+.tour-target {outline:2px solid var(--accent)!important;outline-offset:4px;box-shadow:0 0 24px #c077e52b}
+@media(max-width:1000px) {.workspace {grid-template-columns:232px minmax(0,1fr)}.breadcrumb {display:none}.welcome h1 {font-size:clamp(26px,4vw,42px)}.connection {display:none}.settings-layout {grid-template-columns:190px minmax(0,1fr);gap:18px}}
+@media(max-width:760px) {
+  .workspace {grid-template-columns:minmax(0,1fr)}
+  .sidebar {width:min(280px,86vw);background:var(--sidebar);padding:20px 14px}
+  .sidebar .brand {margin-bottom:16px}.sidebar-history {min-height:70px}.rail-nav {gap:0}
+  #sidebarToggle {display:inline-flex}
+  .topbar {padding-inline:14px;min-height:60px;flex-wrap:nowrap}
+  .top-left .wordmark {display:none}.top-right .model-pill {max-width:45vw;font-size:11px}
+  .welcome {padding-top:24px}.welcome h1 {font-size:clamp(24px,6vw,38px)}
+  .suggestions {gap:6px}.suggestions button {padding:12px}.bubble {font-size:14px}
+  #settingsDialog {padding:18px;max-height:94dvh;width:calc(100vw - 20px);max-width:calc(100vw - 20px)}
+  .settings-layout {grid-template-columns:minmax(104px,30%) minmax(0,1fr);gap:12px;height:calc(90dvh - 110px)}
+  .settings-tabs {padding-right:8px;gap:4px}.settings-tabs button {padding:9px 6px;font-size:12px;overflow-wrap:anywhere}
+  .settings-panel {padding-right:2px}.settings-panel h3 {font-size:16px}.settings-grid {grid-template-columns:minmax(0,1fr)}
+  #setupDialog {padding:20px}.setup-progress {gap:4px;margin-bottom:18px}.setup-actions {margin-top:16px}
+}
+@media(max-height:650px) {.welcome {padding-top:16px}.welcome h1 {font-size:28px}.welcome>p {margin-block:10px}.suggestions button {padding:9px 12px}.composer-area {padding-top:8px;padding-bottom:12px}.sidebar .brand {margin-bottom:12px}.sidebar .nav {min-height:34px;padding-block:6px}.rail-nav {padding-top:4px;margin-top:4px}}

@@ -118,8 +118,7 @@ def test_shared_small_profiles_cannot_prepare_simultaneously(monkeypatch):
     monkeypatch.setattr(resource_setup, 'dependencies', lambda _: True)
     monkeypatch.setattr(resource_setup.threading, 'Thread', PendingThread)
     first = resource_setup.start('asr', 'cpu-fast')
-    with pytest.raises(ValueError, match='этого ресурса уже выполняется'):
-        resource_setup.start('asr', 'balanced')
+    assert resource_setup.start('asr', 'balanced')['id'] == first['id']
     assert resource_setup.store.snapshot()[0]['id'] == first['id']
     assert resource_setup.verification_key('asr', 'cpu-fast') == resource_setup.verification_key('asr', 'balanced')
 

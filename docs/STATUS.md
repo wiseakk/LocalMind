@@ -1116,3 +1116,17 @@ Git commit could not be created: the sandbox denied creation of the external
 worktree metadata index.lock. Source changes remain in this checkout; no push
 or merge was attempted. The focused patch is saved under
 `.test-artifacts/stt-http-regression.patch`.
+# RC3 — 2026-11-04, этап 1: постоянное серверное хранилище
+
+Исходная точка проверена: чистый DevCrew-worktree, HEAD `3ead34b`,
+`31fad86` присутствует в ancestry; исходный RC3 и релизы не изменялись.
+SQLite сохраняет полный журнал, ID, черновик и выбранный контекст отдельно от
+ограниченного окна LLM. CRUD и ограниченный идемпотентный импорт защищены тем же
+loopback/Host/Origin/auth барьером. Временные полномочия не восстанавливаются.
+Транзакции закрываются до переноса данных; используется DELETE journal, не WAL.
+
+Проверено: 54 целевых Python-теста истории/вложений, включая выход дочернего
+процесса, восстановление и продолжение трёх бесед, откат записи и запрет
+неподтверждённого удаления. Команда: RC2 `.venv/Scripts/python.exe -B -m pytest -q`
+с текущим cwd; старое окружение использовано только для чтения зависимостей.
+Микрофон, GPU и установленный RC3 EXE: NOT TESTED. Следующий этап: мастер и загрузки.

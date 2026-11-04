@@ -171,6 +171,24 @@
     conversation=next;entries=groups.get(next)||[];groups.set(next,entries);for(const entry of entries)list.append(entry.row);
     if(notice){notice.hidden=!entries.length;notice.textContent=entries.length?'Вложения этого диалога · локальная обработка':'';}changed();
   }
+  function restore(documents,session,selectedIds=[]){
+    setConversation(session.conversation_id);
+    const selected=new Set(selectedIds),existing=new Map(entries.map(e=>[e.serverId,e]));
+    for(const doc of documents||[]){
+      if(!selected.has(doc.id))continue;
+      if(existing.has(doc.id)){existing.get(doc.id).session={...session};continue;}
+      const ext=String(doc.name||'document.txt').split('.').pop().toLowerCase().slice(0,8);
+      const entry={id:'attachment-'+(++serial),number:serial,serverId:doc.id,file:null,name:doc.name||'Документ',size:doc.size||0,ext,state:'ready',alive:true,group:entries,session:{...session},preview:doc.preview||'',characters:doc.characters,truncated:doc.truncated};
+      const row=document.createElement('div');row.className='attachment';row.dataset.id=entry.id;entry.row=row;
+      const info=document.createElement('div');info.className='attachment-info';
+      entry.title=document.createElement('span');entry.title.className='attachment-name';entry.title.textContent=label(entry);
+      entry.status=document.createElement('span');entry.status.className='attachment-state';
+      entry.demo=document.createElement('button');entry.demo.type='button';entry.demo.className='preview-button';entry.demo.textContent='Предпросмотр';entry.demo.addEventListener('click',()=>preview(entry));
+      const close=document.createElement('button');close.type='button';close.className='text-button';close.textContent='Удалить';close.onclick=()=>remove(entry);
+      info.append(entry.title,entry.status,entry.demo);row.append(info,close);entries.push(entry);list.append(row);status(entry,'ready');entry.demo.hidden=!entry.preview||images.has(ext);
+    }
+    changed();
+  }
   function clearConversation(id){const key=id||'';const group=groups.get(key);if(!group)return;for(const entry of [...group])remove(entry);groups.delete(key);if(key===conversation){entries=[];groups.set(key,entries);changed();}}
   function reset(){selection++;closePreview();submissions.clear();for(const group of groups.values())for(const e of [...group])remove(e);groups.clear();conversation='';entries=[];groups.set('',entries);get('fileInput').value='';if(get('imageInput'))get('imageInput').value='';notice.hidden=true;notice.textContent='';zone.classList.remove('drop-active');dragDepth=0;changed();}
   function hasPending(){return entries.some(e=>e.state==='preparing'||e.state==='parsing');}
@@ -198,6 +216,7 @@
     if(!entries.length){notice.hidden=true;notice.textContent='';}changed();return true;
   }
   function releaseSubmission(id){submissions.delete(id);}
-  window.addEventListener('pagehide',reset);
-  window.localmindAttachments={add,reset,setConversation,adoptConversation,clearConversation,contextIds,hasPending,beginSubmission,releaseSubmission,acknowledge,limits:LIMITS,configure:options=>{requestOverride=options?.request||null;sessionOverride=options?.getSession||null;},snapshot:()=>entries.map(e=>({id:e.id,serverId:e.serverId,state:e.state,hasFile:Boolean(e.file)}))};
+  // Leaving the page disposes browser buffers, never deletes durable context.
+  window.addEventListener('pagehide',()=>{selection++;for(const group of groups.values())for(const e of group){e.uploadController?.abort();e.file=null;e.preview='';}submissions.clear();});
+  window.localmindAttachments={add,reset,restore,setConversation,adoptConversation,clearConversation,contextIds,hasPending,beginSubmission,releaseSubmission,acknowledge,limits:LIMITS,configure:options=>{requestOverride=options?.request||null;sessionOverride=options?.getSession||null;},snapshot:()=>entries.map(e=>({id:e.id,serverId:e.serverId,state:e.state,hasFile:Boolean(e.file)}))};
 })();

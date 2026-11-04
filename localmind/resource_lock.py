@@ -17,7 +17,19 @@ class ResourceBusyError(ValueError):
 def model_download_lock(root, model):
     if model not in ('small', 'medium', 'large-v3-turbo', 'large-v3'):
         raise ValueError('Неизвестная модель распознавания.')
-    path = ordinary_tree(root / 'whisper' / ('.' + model + '.setup.lock'))
+    with resource_download_lock(root, 'whisper:' + model):
+        yield
+
+
+@contextmanager
+def resource_download_lock(root, resource):
+    """Silero voices share one file, so they also share one OS lock."""
+    if resource == 'silero:ru':
+        path = ordinary_tree(root / 'silero' / '.ru.setup.lock')
+    elif resource in ('whisper:small', 'whisper:medium', 'whisper:large-v3-turbo', 'whisper:large-v3'):
+        path = ordinary_tree(root / 'whisper' / ('.' + resource.split(':')[1] + '.setup.lock'))
+    else:
+        raise ValueError('Неизвестный ресурс загрузки.')
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open('a+b') as handle:
         handle.seek(0, os.SEEK_END)

@@ -149,6 +149,8 @@ def test_setup_shutdown_closes_download_without_deleting_existing_models(tmp_pat
     existing.parent.mkdir(parents=True)
     existing.write_bytes(b'owner model')
     class Response:
+        status_code = 200
+        headers = {}
         def __enter__(self): return self
         def __exit__(self, *args): self.close()
         def raise_for_status(self): pass

@@ -743,3 +743,13 @@ https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setforegr
   recording or consented fixture is available; Windows UI access/Chromium launch
   were blocked. The actual incident field and CPU/GPU behavior remain unverified.
   `docs/STT_HTTP_REGRESSION.md` records evidence and the remaining live gate.
+# RC3 — 2026-11-04
+
+- Работать от `3ead34b` в существующем DevCrew-worktree; занятую ветку
+  `release/1.0.0-rc3` не переключать и исходный репозиторий не изменять.
+- История: stdlib SQLite в пользовательском HISTORY, версионированная схема,
+  короткие транзакции synchronous FULL и DELETE journal. Полный журнал не
+  ограничивается TTL/окном LLM. Закрытые соединения упрощают согласованный перенос.
+- Старый browser-only архив импортируется атомарно и идемпотентно; даты,
+  которых в нём нет, остаются неизвестными. Полномочия, tokens и действия не
+  восстанавливаются из текста. Ошибка сохранения не становится успешным final.

@@ -128,7 +128,7 @@ def status():
             'directories': {name: str(getattr(paths, name)) for name in
                             ('LLM', 'ASR', 'TTS', 'CONFIG', 'HISTORY', 'LOGS', 'DOWNLOADS', 'PRIVATE')},
             'legacy_assets_available': (paths.APP_ROOT / 'models').is_dir(),
-            'notice': 'Смена применяется после перезапуска. Исходные файлы сохраняются. История браузера остаётся в его профиле.'}
+            'notice': 'Смена применяется после перезапуска. Исходные файлы сохраняются. Беседы SQLite и настройки входят в данные LocalMind.'}
 
 
 def plan(raw, source_kind='current'):

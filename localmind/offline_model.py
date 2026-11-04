@@ -12,6 +12,55 @@ from .download_errors import record_download_error
 
 _lock = threading.RLock()
 _controls = {}
+_threads = {}
+_sources = {}
+_closing = False
+
+
+def reopen():
+    """A new application lifespan admits work; old imports never auto-resume."""
+    global _closing
+    with _lock:
+        if any(thread.is_alive() for thread in _threads.values()) or _sources:
+            raise ValueError('Предыдущий импорт ещё завершает работу.')
+        _closing = False
+
+
+def stop_all():
+    """Close our HTTP streams and join our import threads, never stop Ollama."""
+    global _closing
+    with _lock:
+        _closing = True
+        for event in _controls.values():
+            event.set()
+        sources, threads = list(_sources.values()), list(_threads.values())
+    for source in sources:
+        try:
+            source.close()
+        except (OSError, RuntimeError, httpx.HTTPError):
+            pass
+    # Import I/O uses five-second read/write timeouts. Final inventory checks
+    # use the existing two bounded four-second metadata requests.
+    deadline = time.monotonic() + 20
+    for thread in threads:
+        if thread is not threading.current_thread():
+            thread.join(timeout=max(0, deadline - time.monotonic()))
+    if any(thread.is_alive() for thread in threads if thread is not threading.current_thread()):
+        raise RuntimeError('Не удалось завершить импорт офлайн-модели.')
+
+
+class _CancellableDigestInput:
+    """file_digest adapter checks shutdown between its bounded read buffers."""
+    def __init__(self, stream, event):
+        self.stream, self.event = stream, event
+
+    def readable(self):
+        return True
+
+    def readinto(self, buffer):
+        if self.event.is_set():
+            raise InterruptedError()
+        return self.stream.readinto(buffer)
 
 
 def manifest():
@@ -55,13 +104,18 @@ def start(accept_license, *, expected_artifact=None, acknowledge_unknown_disk=Fa
            'accepted_artifact': fingerprint, 'acknowledge_unknown_disk': acknowledge_unknown_disk,
            'created_at': time.time(), 'total': data['bytes'], 'completed': 0, 'error': None}
     with _lock:
+        if _closing:
+            raise ValueError('LocalMind завершает работу. Новый импорт недоступен.')
         store.insert(job)
         _controls[key] = event
         try:
-            threading.Thread(target=_import, args=(key, data, event), daemon=True, name='localmind-offline-import').start()
+            thread = threading.Thread(target=_import, args=(key, data, event), daemon=True, name='localmind-offline-import')
+            _threads[key] = thread
+            thread.start()
         except RuntimeError:
             _controls.pop(key, None)
-            store.update(key, status='failed', error='Не удалось начать импорт. Повторите позже.')
+            _threads.pop(key, None)
+            store.terminal_failure(key, error='Не удалось начать импорт. Повторите позже.')
             raise ValueError('Не удалось начать импорт.') from None
     return store.snapshot(key)
 
@@ -87,7 +141,7 @@ def _import(key, data, event):
             if stream.read(4) != b'GGUF' or source.stat().st_size != data['bytes']:
                 raise ValueError('Файл несовместим с офлайн-комплектом')
             stream.seek(0)
-            if hashlib.file_digest(stream, 'sha256').hexdigest() != data['sha256']:
+            if hashlib.file_digest(_CancellableDigestInput(stream, event), 'sha256').hexdigest() != data['sha256']:
                 raise ValueError('Контрольная сумма GGUF не совпадает')
             if event.is_set():
                 raise InterruptedError()
@@ -101,7 +155,11 @@ def _import(key, data, event):
                     store.update(key, status='downloading', completed=sent)
                     yield chunk
             # Blob paths, digest, filename and model name are build-owned.
-            with httpx.Client(timeout=httpx.Timeout(60, connect=3), trust_env=False, follow_redirects=False) as client:
+            with httpx.Client(timeout=httpx.Timeout(60, connect=3, read=5, write=5), trust_env=False, follow_redirects=False) as client:
+                with _lock:
+                    if _closing or event.is_set():
+                        raise InterruptedError()
+                    _sources[key] = client
                 blob_url = _local_ollama_url() + '/api/blobs/sha256:' + data['sha256']
                 check = client.head(blob_url)
                 if check.status_code == 404:
@@ -140,6 +198,8 @@ def _import(key, data, event):
                             done = done or event_data.get('status') == 'success'
                 if not done or buffer.strip():
                     raise ValueError('Interrupted creation stream')
+        if event.is_set():
+            raise InterruptedError()
         detail = installed_detail(data['model'])
         if detail.get('weight_sha256') != data['sha256']:
             raise ValueError('Файл несовместим: SHA-256 установленного GGUF не совпадает с офлайн-комплектом или не подтверждён Ollama.')
@@ -148,10 +208,15 @@ def _import(key, data, event):
                 raise InterruptedError()
             store.update(key, status='succeeded', ready=True, completed=data['bytes'], digest=detail.get('digest'))
     except InterruptedError:
-        store.update(key, status='cancelled_unverified', error='Поток импорта закрыт. Состояние Ollama проверьте в установленных моделях.')
+        store.terminal_failure(key, status='cancelled_unverified', error='Поток импорта закрыт. Состояние Ollama проверьте в установленных моделях.')
     except Exception as exc:
-        diagnostic = record_download_error(exc, 'offline_import')
-        store.update(key, status='failed', error=diagnostic['message'], diagnostic=diagnostic)
+        if event.is_set():
+            store.terminal_failure(key, status='cancelled_unverified', error='Импорт остановлен при завершении LocalMind. Состояние Ollama проверьте после запуска.')
+        else:
+            diagnostic = record_download_error(exc, 'offline_import')
+            store.terminal_failure(key, error=diagnostic['message'], diagnostic=diagnostic)
     finally:
         with _lock:
+            _sources.pop(key, None)
             _controls.pop(key, None)
+            _threads.pop(key, None)

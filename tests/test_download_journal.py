@@ -26,13 +26,27 @@ def test_legacy_journal_is_reused_without_deletion_or_automatic_download(tmp_pat
     assert json.loads(legacy.read_text(encoding='utf-8'))[0]['status'] == 'interrupted'
 
 
-def test_shared_queue_serializes_model_and_voice_downloads(tmp_path):
+def test_shared_queue_admits_distinct_resources_and_deduplicates_physical_files(tmp_path):
     journal=JobStore(tmp_path/'jobs.json')
     journal.insert({'id':'llm','status':'verifying','kind':'llm'})
-    with pytest.raises(ValueError):journal.insert({'id':'voice','status':'starting','kind':'tts'})
-    journal.update('llm',status='succeeded')
     journal.insert({'id':'voice','status':'starting','kind':'tts'})
-    assert len(journal.snapshot())==2
+    journal.insert({'id':'small','status':'starting','kind':'asr','profile':'cpu-fast'})
+    with pytest.raises(ValueError, match='этого ресурса'):
+        journal.insert({'id':'alias','status':'starting','kind':'asr','profile':'balanced'})
+    with pytest.raises(ValueError, match='этого ресурса'):
+        journal.insert({'id':'voice-alias','status':'starting','kind':'tts'})
+    assert len(journal.snapshot())==3
+
+
+def test_journal_eviction_never_removes_an_active_job(tmp_path):
+    journal = JobStore(tmp_path / 'jobs.json')
+    journal.insert({'id': 'active', 'status': 'downloading', 'kind': 'tts'})
+    for index in range(31):
+        journal.insert({'id': str(index), 'status': 'failed'})
+    journal.insert({'id': 'new', 'status': 'starting', 'kind': 'asr'})
+    assert len(journal.snapshot()) == 32
+    assert journal.snapshot('active')['status'] == 'downloading'
+    assert journal.snapshot('new')['status'] == 'starting'
 
 
 def test_dismiss_is_durable_and_does_not_delete_assets(tmp_path):
@@ -67,6 +81,18 @@ def test_failed_journal_update_rolls_back_visible_state(monkeypatch):
     monkeypatch.setattr(journal,'save',lambda:(_ for _ in ()).throw(OSError('disk full')))
     with pytest.raises(OSError):journal.update('one',status='succeeded')
     assert journal.snapshot('one')['status']=='downloading'
+
+
+def test_failed_terminal_write_marks_only_a_terminal_error_in_memory(monkeypatch):
+    journal = JobStore()
+    journal.insert({'id': 'one', 'status': 'downloading', 'completed': 10})
+    monkeypatch.setattr(journal, 'save', lambda: (_ for _ in ()).throw(OSError('disk full')))
+    journal.terminal_failure('one', status='cancelled', error='Stopped')
+    state = journal.snapshot('one')
+    assert state['status'] == 'failed' and state['ready'] is False
+    assert state['persistence_error'] in state['error']
+    with pytest.raises(ValueError):
+        journal.terminal_failure('one', status='succeeded')
 
 
 @pytest.mark.parametrize('error,expected',[(httpx.ConnectError('offline'),'network'),

@@ -2,7 +2,7 @@
   #define Payload "..\dist\LocalMind"
 #endif
 #ifndef ReleaseVersion
-  #define ReleaseVersion "1.0.0-rc2"
+  #define ReleaseVersion "1.0.0-rc3"
 #endif
 [Setup]
 AppId={{E51E0AD1-BB08-4EC7-95B8-0A50D0543A88}

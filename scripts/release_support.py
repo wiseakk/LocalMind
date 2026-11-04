@@ -6,8 +6,20 @@ import subprocess
 import zipfile
 
 
-VERSION = '1.0.0-rc2'
-RELEASE_BASE = 'a229ffff4ab5dafd607c755e4f74090d6a965ece'
+VERSION = '1.0.0-rc3'
+RELEASE_BASE = '3ead34b00f8ecc712693205f72d0188da349be4c'
+
+
+def validate_ui_payload(payload):
+    """Reject damaged source text after the exact committed bytes are copied."""
+    import re
+    html = (Path(payload) / 'static/index.html').read_text(encoding='utf-8', errors='strict')
+    if '<span class="breadcrumb">Личное пространство</span>' not in html or re.search(r'\?{3,}|\ufffd', html):
+        raise ValueError('UI payload contains damaged Cyrillic or an unexpected Russian header.')
+    for folder, suffixes in (('localmind', {'.py'}), ('static', {'.html', '.css', '.js'}), ('config', {'.json'})):
+        for file in (Path(payload) / folder).rglob('*'):
+            if file.is_file() and file.suffix in suffixes:
+                file.read_text(encoding='utf-8', errors='strict')
 
 
 def sha256(path):
@@ -24,12 +36,12 @@ def source_identity(root):
     branch = git(root, 'branch', '--show-current')
     if git(root, 'status', '--porcelain', '--untracked-files=all'):
         raise ValueError('Release requires a clean committed checkout, including untracked source files. See docs/RELEASE_RECOVERY.md.')
-    if branch != 'release/1.0.0-rc2':
-        raise ValueError('Build from release/1.0.0-rc2; preserve the Alpha and snapshot branches.')
+    if branch != 'release/1.0.0-rc3':
+        raise ValueError('Build from release/1.0.0-rc3 after orchestrator integration; preserve RC1/RC2 and DevCrew worktrees.')
     try:
         git(root, 'merge-base', '--is-ancestor', RELEASE_BASE, commit)
     except subprocess.CalledProcessError:
-        raise ValueError('RC2 must descend from the reviewed RC1 release commit ' + RELEASE_BASE) from None
+        raise ValueError('RC3 must descend from the reviewed RC2 documentation commit ' + RELEASE_BASE) from None
     files = subprocess.check_output(['git', '-C', str(root), 'ls-files', '-z']).decode().split('\0')
     hashes = {name: sha256(root / name) for name in files if name and (root / name).is_file()}
     tags = git(root, 'tag', '--points-at', commit).splitlines()

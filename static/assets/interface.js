@@ -11,8 +11,8 @@
     tab.addEventListener('click',()=>select(tab));
     tab.addEventListener('keydown',e=>{
       let n=index;
-      if(e.key==='ArrowRight')n=(index+1)%tabs.length;
-      else if(e.key==='ArrowLeft')n=(index+tabs.length-1)%tabs.length;
+      if(e.key==='ArrowRight'||e.key==='ArrowDown')n=(index+1)%tabs.length;
+      else if(e.key==='ArrowLeft'||e.key==='ArrowUp')n=(index+tabs.length-1)%tabs.length;
       else if(e.key==='Home')n=0;else if(e.key==='End')n=tabs.length-1;else return;
       e.preventDefault();select(tabs[n],true);
     });
@@ -39,6 +39,34 @@
   media?.addEventListener('change',appearance);
   for(const id of ['reduceMotion','lowPerformance'])byId(id).addEventListener('change',()=>{savePreference('localmind.'+id+'.v1',String(byId(id).checked));appearance();});
   appearance();
+  let applying=false,preferenceWrites=Promise.resolve();
+  const changedChoices=new Set();
+  const preferenceNames={theme:'theme',reduceMotion:'reduce_motion',lowPerformance:'low_performance',voiceProfile:'voice_profile',ttsVoice:'tts_voice',speak:'speak'};
+  async function saveChoice(id){
+    if(applying)return;
+    const input=byId(id),value=input.type==='checkbox'?input.checked:input.value;
+    changedChoices.add(id);
+    preferenceWrites=preferenceWrites.catch(()=>{}).then(async()=>{
+      try{
+        const r=await fetch('/api/setup/preferences',{method:'POST',headers:{'Content-Type':'application/json','X-LocalMind-Key':byId('key').value},body:JSON.stringify({[preferenceNames[id]]:value})});
+        if(!r.ok){const d=await r.json();throw Error(typeof d.detail==='string'?d.detail:'Настройку не удалось сохранить');}
+      }catch(e){byId('composerState').textContent='Не удалось сохранить настройку: '+e.message;}
+    });
+    return preferenceWrites;
+  }
+  for(const id of Object.keys(preferenceNames))byId(id)?.addEventListener('change',()=>saveChoice(id));
+  window.addEventListener('localmind-preferences',event=>{
+    applying=true;
+    try{
+      for(const [id,name] of Object.entries(preferenceNames)){
+        if(changedChoices.has(id))continue;
+        let value=event.detail[name];if(value===undefined)continue;
+        if(id==='voiceProfile'&&value==='balanced')value='cpu-fast';
+        const input=byId(id);if(input.type==='checkbox')input.checked=value;else input.value=value;
+        input.dispatchEvent(new Event('change'));
+      }
+    }finally{applying=false;}
+  });
   const panel=byId('skyPanel');
   let graphOpener=byId('graphToggle'),previousMode='ambient';
   function syncGraphAccess(){
@@ -77,13 +105,16 @@
     if(e.key==='Escape'&&!document.querySelector('dialog[open]')&&panel.classList.contains('graph-focused')){e.preventDefault();setGraph(false,true);}
   });
   syncGraphAccess();
-  for(const id of ['settingsOpen','appsOpen','historyOpen','filesOpen','devicesOpen'])byId(id).addEventListener('click',closeSidebar);
+  for(const id of ['settingsOpen','appsOpen','filesOpen','devicesOpen','helpOpen'])byId(id)?.addEventListener('click',closeSidebar);
   // Native <dialog> handles focus containment, Escape and focus return. Explicitly
   // restore its opener too, including when the opener lives in the mobile rail.
-  for(const [id,opener] of [['settingsDialog','settingsOpen'],['appsDialog','appsOpen'],['historyDialog','historyOpen'],['filesDialog','filesOpen'],['devicesDialog','devicesOpen']]){
+  for(const [id,opener] of [['settingsDialog','settingsOpen'],['appsDialog','appsOpen'],['filesDialog','filesOpen'],['devicesDialog','devicesOpen'],['helpDialog','helpOpen']]){
     byId(id).addEventListener('close',()=>{
-      if(!document.querySelector('dialog[open]'))(window.matchMedia?.('(max-width:760px)').matches?byId('sidebarToggle'):byId(opener)).focus();
+      const target=id==='settingsDialog'&&window.localmindSettingsOpener||byId(opener);
+      if(id==='settingsDialog')window.localmindSettingsOpener=null;
+      if(!document.querySelector('dialog[open]'))(window.matchMedia?.('(max-width:760px)').matches?byId('sidebarToggle'):target).focus();
     });
   }
+  byId('helpOpen')?.addEventListener('click',()=>byId('helpDialog').showModal());
   document.fonts?.ready.then(()=>window.localmindScene?.redraw());
 })();

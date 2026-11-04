@@ -15,7 +15,26 @@ function makeDom(fetcher,setup) {
   w.TextDecoder=TextDecoder;w.TextEncoder=TextEncoder;w.Response=Response;
   w.HTMLDialogElement.prototype.showModal=function(){this.open=true};
   w.HTMLDialogElement.prototype.close=function(){this.open=false};
-  w.fetch=fetcher || (async()=>Response.json({server_instance:'test',demo:true,model:'test',devices:[],voice:{voices:[]}}));
+  const request=fetcher || (async()=>Response.json({server_instance:'test',demo:true,model:'test',devices:[],voice:{voices:[]}}));
+  let instance='test',conversationSerial=0;
+  w.fetch=async(url,options={})=>{
+    let response;
+    try{response=await request(url,options);}
+    catch(error){
+      // These component tests do not exercise history transport; its complete
+      // contract and failures are covered in history.test.cjs.
+      if(url==='/api/conversations'&&(options.method||'GET')==='GET')return Response.json({conversations:[]});
+      if(url==='/api/conversations'&&options.method==='POST')return Response.json({conversation_id:String(++conversationSerial).padStart(32,'0'),server_instance:instance});
+      if(url.startsWith('/api/conversations/')&&options.method==='PATCH')return Response.json({ok:true});
+      throw error;
+    }
+    if(url==='/api/info'&&response.ok){const data=await response.clone().json();instance=data.server_instance||instance;}
+    if(url==='/api/conversations'&&options.method==='POST'&&response.ok){
+      const data=await response.clone().json();
+      if(!data.conversation_id)return Response.json({conversation_id:String(++conversationSerial).padStart(32,'0'),server_instance:instance});
+    }
+    return response;
+  };
   setup?.(w);
   for(const s of scripts){const script=w.document.createElement('script');script.textContent=fs.readFileSync('static/assets/'+s,'utf8');w.document.head.append(script)}
   return dom;
@@ -177,8 +196,8 @@ function makeCanvasDom(){
   await run('mismatched info and conversation instances reject valid PNG before any upload',async()=>{
     const calls=[];
     const dom=makeDom(async(url,options)=>{
-      calls.push(url);
-      if(url==='/api/conversations')return Response.json({conversation_id:'c'.repeat(32),server_instance:'live-instance'});
+      calls.push({url,method:options?.method||'GET'});
+      if(url==='/api/conversations'&&options?.method==='POST')return Response.json({conversation_id:'c'.repeat(32),server_instance:'live-instance'});
       return Response.json({server_instance:'constellation-test',demo:true,model:'test',devices:[],voice:{voices:[]}});
     });
     try{
@@ -187,8 +206,8 @@ function makeCanvasDom(){
       w.localmindAttachments.add([new w.File([png],'dot.png',{type:'image/png'})]);
       for(let i=0;i<100&&w.localmindAttachments.hasPending();i++)await pause(10);
       assert.equal(w.localmindAttachments.snapshot()[0].state,'error');
-      assert.equal(calls.filter(url=>url==='/api/conversations').length,1);
-      assert.equal(calls.filter(url=>url==='/api/attachments').length,0);
+      assert.equal(calls.filter(call=>call.url==='/api/conversations'&&call.method==='POST').length,1);
+      assert.equal(calls.filter(call=>call.url==='/api/attachments').length,0);
       assert.deepEqual([...w.localmindAttachments.contextIds()],[]);
       assert.ok(w.document.querySelector('.attachment-state').textContent.includes('Сервер перезапущен'));
     }finally{dom.window.close()}
@@ -803,26 +822,28 @@ function makeCanvasDom(){
       assert.equal(d.querySelector('#errorDialog').open,false);assert.equal(d.querySelector('#errorText').textContent,'');assert.equal(d.querySelector('#message').value,'');assert.equal(d.querySelector('#draftReview').hidden,true);assert.equal(d.querySelector('#send').disabled,false);assert.equal(d.querySelector('#mic').disabled,false);assert.equal(w.localmindScene.stats().mode,'idle');
     }finally{dom.window.close()}
   });
-  await run('server reset blocks every send path until success and starts the next turn without old context',async()=>{
-    const chatBodies=[];let resolveReset,resetCalls=0;
+  await run('new chat saves the previous conversation before switching and starts without old context',async()=>{
+    const chatBodies=[];let resolveSave,heldSaves=0,holdSave=false,destructiveResets=0;
     const dom=makeDom(async(url,options={})=>{
       if(url==='/api/chat/stream'){
         chatBodies.push(JSON.parse(options.body));
         return new Response(JSON.stringify({type:'final',data:{answer:'Ответ',conversation_id:'conversation-'+chatBodies.length,engine:'test',action_results:[]}})+'\n');
       }
-      if(url==='/api/conversations/reset'){resetCalls++;return new Promise(resolve=>{resolveReset=resolve});}
+      if(url==='/api/conversations/reset')destructiveResets++;
+      if(url.startsWith('/api/conversations/')&&options.method==='PATCH'&&holdSave){heldSaves++;return new Promise(resolve=>{resolveSave=resolve});}
       return Response.json({server_instance:'test',demo:true,model:'test',devices:[],apps:[],voice:{}});
     }),w=dom.window,d=w.document;
     try{
       await pause(10);await w.sendText('Первый ход');assert.equal(chatBodies.length,1);
-      d.querySelector('#resetConversation').click();assert.equal(resetCalls,1);assert.equal(d.querySelector('#send').disabled,true);assert.equal(d.querySelector('#mic').disabled,true);
+      holdSave=true;d.querySelector('#resetConversation').click();await pause(1);
+      assert.equal(heldSaves,1);assert.equal(d.querySelector('#send').disabled,true);assert.equal(d.querySelector('#mic').disabled,true);
       d.querySelector('#message').value='Не выполнять во время сброса';
       d.querySelector('#form').dispatchEvent(new w.Event('submit',{cancelable:true}));
       d.querySelector('#message').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',cancelable:true}));
       d.querySelector('[data-example]').click();await w.sendText('Тоже не выполнять');d.querySelector('#resetConversation').click();
-      assert.equal(chatBodies.length,1);assert.equal(resetCalls,1);
-      resolveReset(Response.json({ok:true}));await pause(10);assert.equal(d.querySelector('#send').disabled,false);assert.equal(d.querySelector('#mic').disabled,false);assert.equal(d.querySelectorAll('.bubble.me').length,0);
-      await w.sendText('Новый ход');assert.equal(chatBodies.length,2);assert.equal(chatBodies[1].conversation_id,null);assert.equal(chatBodies[1].history.length,0);assert.notEqual(chatBodies[0].request_id,chatBodies[1].request_id);assert.equal(d.querySelectorAll('.bubble.me').length,1);
+      assert.equal(chatBodies.length,1);assert.equal(heldSaves,1);assert.equal(destructiveResets,0);
+      holdSave=false;resolveSave(Response.json({ok:true}));await pause(10);assert.equal(d.querySelector('#send').disabled,false);assert.equal(d.querySelector('#mic').disabled,false);assert.equal(d.querySelectorAll('.bubble.me').length,0);
+      await w.sendText('Новый ход');assert.equal(chatBodies.length,2);assert.notEqual(chatBodies[1].conversation_id,chatBodies[0].conversation_id);assert.equal(chatBodies[1].history.length,0);assert.notEqual(chatBodies[0].request_id,chatBodies[1].request_id);assert.equal(d.querySelectorAll('.bubble.me').length,1);
     }finally{dom.window.close()}
   });
   await run('overlapping application catalog reads cannot overwrite a completed grant',async()=>{

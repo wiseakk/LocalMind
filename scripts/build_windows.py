@@ -15,7 +15,7 @@ import platform
 import sys
 from release_support import (VERSION, source_identity, validate_resume, payload_manifest,
                              validate_payload_sources, validate_payload_layout, copy_committed_sources,
-                             write_source_archive, write_checksums, sha256)
+                             write_source_archive, write_checksums, sha256, validate_ui_payload)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -105,6 +105,7 @@ def main():
     if not args.resume:
         marker.write_text(json.dumps(dependency_stage(identity, runtime, archive), indent=2), encoding='utf-8')
     copy_committed_sources(ROOT, payload, source_info)
+    validate_ui_payload(payload)
     if args.offline_gguf:
         if (not args.offline_license or len(args.offline_license) > 200 or
                 not args.offline_model_name or len(args.offline_model_name) > 200):

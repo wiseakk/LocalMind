@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import threading
@@ -12,9 +13,9 @@ import time
 import uuid
 import httpx
 from .paths import APP_ROOT, MODELS, PRIVATE, atomic_json, ordinary_tree, python_runtime
-from .download_store import store
+from .download_store import store, ACTIVE, resource_key
 from .voice_diagnostics import MESSAGES, classify_voice_error
-from .resource_lock import model_download_lock, ResourceBusyError
+from .resource_lock import resource_download_lock, ResourceBusyError
 
 MANIFEST = json.loads((APP_ROOT / 'config/voice_resources.json').read_text(encoding='utf-8'))
 _controls = {}
@@ -23,6 +24,9 @@ _probes = {}
 _sources = {}
 _closing = False
 _lock = threading.Lock()
+# Downloads never hold this slot. Only the bounded native load/synthesis probe
+# uses it; independent downloads can continue while a probe waits or runs.
+_probe_slot = threading.Lock()
 ASR_PROFILES = {'cpu-fast': 'small', 'balanced': 'small', 'gpu-quality': 'medium'}
 
 
@@ -116,14 +120,14 @@ def start(kind, profile='balanced'):
     job = {'id': key, 'kind': kind, 'model': 'Русская речь · ' + ASR_PROFILES[profile] if kind == 'asr' else 'Silero · xenia',
            'profile': profile if kind == 'asr' else None,
            'destination': str(MODELS / 'whisper' / ASR_PROFILES[profile] if kind == 'asr' else MODELS / 'silero'),
-           'status': 'starting', 'completed': 0, 'total': 0, 'error': None, 'layers': {}}
+           'status': 'starting', 'completed': 0, 'total': 0, 'error': None, 'layers': {},
+           'created_at': time.time(), 'resumable': True}
     with _lock:
         if _closing:
             raise ValueError('LocalMind завершает работу. Новая подготовка недоступна.')
-        if any(store.snapshot(existing).get('kind') == kind and
-               (kind != 'asr' or ASR_PROFILES[store.snapshot(existing).get('profile', 'balanced')] == ASR_PROFILES[profile])
-               for existing in _controls):
-            raise ValueError('Подготовка этого ресурса уже выполняется. Смотрите «Загрузки».')
+        for existing in store.snapshot():
+            if existing.get('status') in ACTIVE and resource_key(existing) == resource_key(job):
+                return existing
         store.insert(job)
         _controls[key] = cancel
         try:
@@ -133,7 +137,7 @@ def start(kind, profile='balanced'):
         except RuntimeError:
             _controls.pop(key, None)
             _threads.pop(key, None)
-            store.update(key, status='failed', error='Не удалось запустить подготовку. Повторите позже.')
+            store.terminal_failure(key, error='Не удалось запустить подготовку. Повторите позже.')
             raise ValueError('Не удалось запустить подготовку. Повторите позже.') from None
     return store.snapshot(key)
 
@@ -193,6 +197,128 @@ def stop_all():
     for thread in threads:
         if thread is not threading.current_thread():
             thread.join(timeout=max(0, deadline - time.monotonic()))
+    if any(thread.is_alive() for thread in threads if thread is not threading.current_thread()):
+        raise RuntimeError('Не удалось завершить подготовку голосовых ресурсов.')
+
+
+def _partial_path(target):
+    return ordinary_tree(target.with_suffix(target.suffix + '.partial'))
+
+
+def _download_asset(key, asset, target, cancel, completed, total):
+    """Resume a pinned asset; an unverified partial is never a ready model.
+
+    Range responses must describe exactly the requested suffix. A server that
+    ignores Range is safely restarted with wb. Interrupted transfers stay on
+    disk; only known-invalid leftovers are discarded.
+    """
+    partial = _partial_path(target)
+    expected = asset['bytes']
+    offset = partial.stat().st_size if partial.is_file() else 0
+    if offset > expected:
+        partial.unlink()
+        offset = 0
+    if offset == expected:
+        if file_digest(partial, cancel) == asset['sha256']:
+            if cancel.is_set():
+                raise InterruptedError()
+            os.replace(partial, target)
+            return
+        partial.unlink()
+        offset = 0
+    bundled = ordinary_tree(APP_ROOT / 'offline-assets' / asset['path'])
+    if bundled.is_file():
+        context = bundled.open('rb')
+    else:
+        headers = {'Accept-Encoding': 'identity'}
+        if offset:
+            headers['Range'] = 'bytes=' + str(offset) + '-'
+        context = httpx.stream('GET', asset['url'], headers=headers,
+            timeout=httpx.Timeout(30, connect=5, read=5), follow_redirects=True, trust_env=False)
+    try:
+        with context as source:
+            with _lock:
+                if cancel.is_set() or _closing:
+                    raise InterruptedError()
+                _sources[key] = source
+            if bundled.is_file():
+                source.seek(offset)
+                chunks = iter(lambda: source.read(1048576), b'')
+            else:
+                source.raise_for_status()
+                if source.status_code == 200:
+                    # Range ignored, or a fresh response. Never append a whole
+                    # representation to the previously downloaded prefix.
+                    offset = 0
+                elif source.status_code == 206:
+                    content_range = source.headers.get('Content-Range', '')
+                    match = re.fullmatch(r'bytes (\d+)-(\d+)/(\d+)', content_range)
+                    if not match or tuple(map(int, match.groups())) != (offset, expected - 1, expected):
+                        raise ValueError('Сервер вернул неверный диапазон ресурса.')
+                else:
+                    raise ValueError('Сервер вернул неподходящий ответ загрузки.')
+                if source.headers.get('Content-Encoding', 'identity').lower() != 'identity':
+                    raise ValueError('Сервер изменил представление ресурса.')
+                length = source.headers.get('Content-Length')
+                if length is not None and (not length.isdecimal() or int(length) != expected - offset):
+                    raise ValueError('Размер ответа не совпадает с манифестом.')
+                chunks = source.iter_bytes(1048576)
+            count = offset
+            store.update(key, status='downloading', total=total, completed=completed + count)
+            with partial.open('ab' if offset else 'wb') as output:
+                for chunk in chunks:
+                    if cancel.is_set():
+                        raise InterruptedError()
+                    count += len(chunk)
+                    if count > expected:
+                        # Invalidate after closing the handle (also on Windows).
+                        raise _InvalidPartial('Размер ресурса не совпадает с манифестом.')
+                    output.write(chunk)
+                    store.update(key, status='downloading', total=total, completed=completed + count)
+                output.flush()
+                os.fsync(output.fileno())
+            if count != expected:
+                # A truncated response can be resumed; no publication or probe.
+                raise OSError('Загрузка ресурса прервана до получения всех байтов.')
+            if file_digest(partial, cancel) != asset['sha256']:
+                raise _InvalidPartial('Контрольная сумма ресурса не совпадает.')
+            if cancel.is_set():
+                raise InterruptedError()
+            os.replace(partial, target)
+    except _InvalidPartial:
+        partial.unlink(missing_ok=True)
+        raise
+    finally:
+        with _lock:
+            _sources.pop(key, None)
+        if partial.is_file() and partial.stat().st_size == 0:
+            partial.unlink()
+
+
+class _InvalidPartial(ValueError):
+    """Known-invalid bytes are discarded; recoverable transfers are retained."""
+
+
+def _verified_stamp(kind, profile, assets):
+    try:
+        stamp = json.loads(ordinary_tree(PRIVATE / (verification_key(kind, profile) + '-verified.json')).read_text(encoding='utf-8'))
+        return stamp.get('manifest') == manifest_digest() and stamp.get('files') == signatures(assets)
+    except (OSError, ValueError):
+        return False
+
+
+def _serial_probe(key, kind, cancel, profile):
+    # A queued native probe is independently cancellable and owns no network
+    # connection. Native resource-worker processes never overlap in this app.
+    while not _probe_slot.acquire(timeout=.1):
+        if cancel.is_set():
+            raise InterruptedError()
+    try:
+        if cancel.is_set():
+            raise InterruptedError()
+        return _run_probe(key, kind, cancel, profile)
+    finally:
+        _probe_slot.release()
 
 
 def _run_probe(key, kind, cancel, profile):
@@ -228,66 +354,47 @@ def _prepare(key, kind, cancel, profile='balanced'):
     try:
         if cancel.is_set():
             raise InterruptedError()
-        if kind == 'asr':
-            locks.enter_context(model_download_lock(MODELS, ASR_PROFILES[profile]))
+        locks.enter_context(resource_download_lock(MODELS, resource_key({'id': key, 'kind': kind, 'profile': profile})))
         assets = assets_for(kind, profile)
         total, completed = sum(a['bytes'] for a in assets), 0
         MODELS.mkdir(parents=True, exist_ok=True)
-        if shutil.disk_usage(MODELS).free < total + 100 * 1048576:
-            raise OSError('Недостаточно места')
+        pending = []
+        needed = 0
         for asset in assets:
             if cancel.is_set():
                 raise InterruptedError()
             target = ordinary_tree(MODELS / asset['path'])
             target.parent.mkdir(parents=True, exist_ok=True)
-            if not target.is_file() or file_digest(target, cancel) != asset['sha256']:
-                partial = ordinary_tree(target.with_suffix(target.suffix + '.partial'))
-                bundled = ordinary_tree(APP_ROOT / 'offline-assets' / asset['path'])
-                count, digest = 0, hashlib.sha256()
-                try:
-                    # Offline and online consume the exact same pinned manifest.
-                    if bundled.is_file():
-                        stream = bundled.open('rb')
-                        chunks = iter(lambda: stream.read(1048576), b'')
-                        context = stream
-                    else:
-                        context = httpx.stream('GET', asset['url'], timeout=httpx.Timeout(30, connect=5, read=5), follow_redirects=True, trust_env=False)
-                    with context as source, partial.open('wb') as output:
-                        with _lock:
-                            if cancel.is_set():
-                                raise InterruptedError()
-                            _sources[key] = source
-                        if not bundled.is_file():
-                            source.raise_for_status()
-                            chunks = source.iter_bytes(1048576)
-                        for chunk in chunks:
-                            if cancel.is_set():
-                                raise InterruptedError()
-                            count += len(chunk)
-                            if count > asset['bytes']:
-                                raise ValueError('Размер ресурса не совпадает с манифестом')
-                            digest.update(chunk); output.write(chunk)
-                            store.update(key, status='downloading', total=total, completed=completed + count)
-                    if count != asset['bytes'] or digest.hexdigest() != asset['sha256']:
-                        raise ValueError('Контрольная сумма ресурса не совпадает')
-                    os.replace(partial, target)
-                finally:
-                    with _lock:
-                        _sources.pop(key, None)
-                    partial.unlink(missing_ok=True)
+            valid = (target.is_file() and target.stat().st_size == asset['bytes']
+                     and file_digest(target, cancel) == asset['sha256'])
+            if not valid:
+                partial = _partial_path(target)
+                retained = partial.stat().st_size if partial.is_file() else 0
+                needed += max(0, asset['bytes'] - retained) if retained <= asset['bytes'] else asset['bytes']
+                pending.append((asset, target))
+        # Installed, verified resources do not require space for another copy.
+        if pending and shutil.disk_usage(MODELS).free < needed + 100 * 1048576:
+            raise OSError('Недостаточно места')
+        pending_paths = {a['path'] for a, _ in pending}
+        for asset in assets:
+            if cancel.is_set():
+                raise InterruptedError()
+            if asset['path'] in pending_paths:
+                _download_asset(key, asset, ordinary_tree(MODELS / asset['path']), cancel, completed, total)
             completed += asset['bytes']
             store.update(key, completed=completed, total=total)
         if cancel.is_set():
             raise InterruptedError()
-        store.update(key, status='verifying')
-        # Always use private python.exe, never the frozen GUI launcher.
-        result = _run_probe(key, kind, cancel, profile)
-        if result.returncode:
-            try:
-                code = json.loads(result.stdout)['code']
-            except (ValueError, KeyError):
-                code = 'library_incompatible'
-            raise RuntimeError(code)
+        if not _verified_stamp(kind, profile, assets):
+            store.update(key, status='verifying')
+            # Always use private python.exe, never the frozen GUI launcher.
+            result = _serial_probe(key, kind, cancel, profile)
+            if result.returncode:
+                try:
+                    code = json.loads(result.stdout)['code']
+                except (ValueError, KeyError):
+                    code = 'library_incompatible'
+                raise RuntimeError(code)
         with _lock:
             if cancel.is_set():
                 raise InterruptedError()
@@ -295,19 +402,23 @@ def _prepare(key, kind, cancel, profile='balanced'):
             ordinary_tree(PRIVATE / (stamp_key + '-failure.json')).unlink(missing_ok=True)
             store.update(key, status='succeeded', ready=True)
     except InterruptedError:
-        store.update(key, status='cancelled', error='Загрузка прервана. Можно повторить; проверенные файлы сохраняются.')
+        store.terminal_failure(key, status='cancelled', error='Загрузка прервана. Нажмите «Повторить»: загруженная часть сохранена.')
     except ResourceBusyError as exc:
-        store.update(key, status='failed', error=str(exc))
+        store.terminal_failure(key, error=str(exc))
     except Exception as exc:
         if cancel.is_set():
-            store.update(key, status='cancelled', error='Подготовка остановлена при завершении LocalMind. Проверенные файлы сохранены.')
+            store.terminal_failure(key, status='cancelled', error='Подготовка остановлена при завершении LocalMind. Загруженная часть сохранена.')
             return
         from .download_errors import record_download_error
         error = record_download_error(exc, 'voice_setup')
         if str(exc) in MESSAGES:
             error.update(code=str(exc), message=MESSAGES[str(exc)])
-            atomic_json(PRIVATE / (stamp_key + '-failure.json'), {'code': str(exc)})
-        store.update(key, status='failed', error=error['message'], diagnostic=error)
+            try:
+                atomic_json(PRIVATE / (stamp_key + '-failure.json'), {'code': str(exc)})
+            except (OSError, ValueError):
+                # The original failure must still terminate the visible job.
+                pass
+        store.terminal_failure(key, error=error['message'], diagnostic=error)
     finally:
         locks.close()
         with _lock:

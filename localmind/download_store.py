@@ -7,6 +7,19 @@ import time
 from .paths import DOWNLOADS, PRIVATE, atomic_json, ordinary_tree
 
 ACTIVE = ('queued', 'starting', 'downloading', 'verifying', 'cancelling')
+MAX_ACTIVE = 4
+
+
+def resource_key(job):
+    """Admission follows physical files, never a display name or UI profile."""
+    kind = job.get('kind')
+    if kind == 'asr':
+        return 'whisper:' + ('medium' if job.get('profile') == 'gpu-quality' else 'small')
+    if kind == 'tts':
+        return 'silero:ru'
+    if kind in ('llm', 'llm_offline') and job.get('model'):
+        return 'ollama:' + job['model']
+    return 'job:' + job['id']
 
 
 class JobStore:
@@ -92,6 +105,28 @@ class JobStore:
                 self.jobs[key] = previous
                 raise
 
+    def terminal_failure(self, key, *, status='failed', **fields):
+        """Release admission even when a failed worker cannot write its journal.
+
+        Progress/readiness updates remain transactional. Only a terminal error
+        may fall back to memory, with an explicit warning about persistence.
+        A later successful journal write persists this state; after a restart
+        an older active row is safely shown as interrupted, never auto-retried.
+        """
+        if status not in ('failed', 'cancelled', 'cancelled_unverified', 'interrupted'):
+            raise ValueError('Ожидается завершающее состояние ошибки.')
+        with self.lock:
+            try:
+                self.update(key, status=status, **fields)
+            except (OSError, ValueError):
+                message = ('Не удалось сохранить журнал загрузок. Освободите место и проверьте доступ к хранилищу; '
+                           'затем нажмите «Повторить».')
+                error = fields.get('error') or 'Подготовка остановлена.'
+                self.jobs[key].update(fields, status='failed', ready=False,
+                    error=error + ' ' + message, persistence_error=message,
+                    bytes_per_second=None, eta_seconds=None, updated_at=time.time())
+                self._samples.pop(key, None)
+
     def dismiss(self, key):
         with self.lock:
             job = self.snapshot(key)
@@ -102,11 +137,16 @@ class JobStore:
 
     def insert(self, job):
         with self.lock:
-            if any(j['status'] in ACTIVE for j in self.jobs.values()):
-                raise ValueError('Другая загрузка ещё выполняется.')
+            active = [j for j in self.jobs.values() if j['status'] in ACTIVE]
+            if any(resource_key(existing) == resource_key(job) for existing in active):
+                raise ValueError('Подготовка этого ресурса уже выполняется. Смотрите «Загрузки».')
+            if len(active) >= MAX_ACTIVE:
+                raise ValueError('Все места загрузки заняты. Дождитесь завершения одной из задач.')
             evicted = None
             if len(self.jobs) >= 32:
-                evicted_key = next(iter(self.jobs))
+                evicted_key = next((key for key, old in self.jobs.items() if old['status'] not in ACTIVE), None)
+                if evicted_key is None:
+                    raise ValueError('Журнал заполнен выполняющимися задачами.')
                 evicted = (evicted_key, self.jobs.pop(evicted_key))
             self.jobs[job['id']] = job
             try:

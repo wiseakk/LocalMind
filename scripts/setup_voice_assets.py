@@ -3,6 +3,7 @@
 Run only after reading docs/NEXT_VOICE.md. Inference uses fixed local files.
 """
 import argparse
+from contextlib import nullcontext
 import hashlib
 import json
 from pathlib import Path
@@ -12,6 +13,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from localmind.paths import MODELS
+from localmind.resource_lock import resource_download_lock
 CHATTERBOX_REVISION = '5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18'
 CHATTERBOX_FILES = ('ve.pt', 't3_mtl23ls_v3.safetensors', 's3gen.pt',
                     'grapheme_mtl_merged_expanded_v1.json', 'conds.pt', 'Cangjie5_TC.json')
@@ -52,9 +54,12 @@ def main():
     else:
         folder = MODELS / 'chatterbox-v3'
         urls = [(name, f'https://huggingface.co/ResembleAI/chatterbox/resolve/{CHATTERBOX_REVISION}/{name}') for name in CHATTERBOX_FILES]
-    folder.mkdir(parents=True, exist_ok=True)
-    manifest = [download(url, folder / name) for name, url in urls]
-    (folder / 'download-manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+    # The evaluation CLI writes the same Russian Silero file as desktop setup.
+    # Share its OS lock instead of racing the application's resumable transfer.
+    with (resource_download_lock(MODELS, 'silero:ru') if args.candidate == 'silero' else nullcontext()):
+        folder.mkdir(parents=True, exist_ok=True)
+        manifest = [download(url, folder / name) for name, url in urls]
+        (folder / 'download-manifest.json').write_text(json.dumps(manifest, indent=2), encoding='utf-8')
     print('Assets downloaded locally; hashes recorded. No inference or voice quality claim was made.')
 
 

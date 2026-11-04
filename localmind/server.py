@@ -38,11 +38,12 @@ from .voice import VoiceError, voice_status, transcribe_audio, synthesize_speech
 async def lifespan(app):
     from .voice import warm_tts, shutdown_tts, shutdown_stt
     from .window_tools import window_tools
-    from . import resource_setup
+    from . import resource_setup, offline_model
     from .speech_worker import worker as tts_worker
     from .asr_worker import worker as stt_worker
     store.reopen()
     resource_setup.reopen()
+    offline_model.reopen()
     tts_worker.reopen()
     stt_worker.reopen()
     catalog.set_personal_mode(file_access.known_app_launch_allowed())
@@ -57,7 +58,7 @@ async def lifespan(app):
         tts_worker.begin_shutdown()
         stt_worker.begin_shutdown()
         results = await asyncio.gather(*(asyncio.to_thread(close) for close in
-            (downloads.stop_all, benchmarks.stop_all, resource_setup.stop_all,
+            (downloads.stop_all, benchmarks.stop_all, resource_setup.stop_all, offline_model.stop_all,
              shutdown_tts, shutdown_stt, store.close)), return_exceptions=True)
         warm_task.cancel()
         window_tools.close()
@@ -66,6 +67,11 @@ async def lifespan(app):
 
 
 app = FastAPI(title='LocalMind', version='1.0.0', docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+
+
+@app.exception_handler(ConversationError)
+async def conversation_storage_error(request, exc):
+    return JSONResponse({'detail': str(exc)}, status_code=409)
 
 
 @app.exception_handler(RequestValidationError)
@@ -188,6 +194,10 @@ def authorize(key: str | None):
     if settings.key and not hmac.compare_digest(key or '', settings.key):
         raise HTTPException(401, 'Неверный ключ доступа')
 
+
+from .conversation_routes import install_conversation_routes
+install_conversation_routes(app, authorize, SERVER_INSTANCE)
+
 def _valid_authority(value: str) -> bool:
     try:
         parsed = urlsplit('http://' + value)
@@ -222,12 +232,13 @@ async def local_boundary(request: Request, call_next):
             authorize(request.headers.get('x-localmind-key'))
         except HTTPException as exc:
             return JSONResponse({'detail':exc.detail},status_code=exc.status_code)
-    if request.method == 'POST':
+    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
         if not _body_slots.acquire(blocking=False):
             return JSONResponse({'detail':'Слишком много одновременных загрузок'},status_code=429)
         try:
             maximum = (MAX_UPLOAD_BYTES + 65536 if request.url.path == '/api/transcribe' else
-                       MAX_FILE_BYTES + 65536 if request.url.path == '/api/attachments' else 65536)
+                       MAX_FILE_BYTES + 65536 if request.url.path == '/api/attachments' else
+                       3 * 1024 * 1024 + 65536 if request.url.path == '/api/conversations/import' else 65536)
             body = bytearray()
             async with asyncio.timeout(BODY_TIMEOUT_SECONDS):
                 async for chunk in request.stream():
@@ -295,6 +306,8 @@ def _entry(data: ChatRequest):
         # used to establish memory, permissions, targets or outcomes.
         conversation = conversations.acquire(data.conversation_id or conversations.create())
         try:
+            conversation.context = {'local_retrieval': data.local_retrieval,
+                                    'attachment_ids': list(data.attachment_ids)}
             context = document_context(conversation, data.attachment_ids, query=data.text,
                 max_characters=max(256, (generation.context_tokens - generation.response_tokens - 1200) * 2))
             prepared = prepare_reply(data.text, [], data.actions_authorized, data.response_length,
@@ -349,16 +362,10 @@ def create_conversation(x_localmind_key: Annotated[str | None, Header()] = None)
 @app.get('/api/conversations/{conversation_id}')
 def conversation_status(conversation_id: str, x_localmind_key: Annotated[str | None, Header()] = None):
     authorize(x_localmind_key)
-    conversation = None
     try:
-        conversation = conversations.acquire(conversation_id)
-        return {'conversation_id': conversation.id, 'server_instance': SERVER_INSTANCE,
-                'attachments': [doc.public() for doc in conversation.attachments.values()]}
+        return {**conversations.read(conversation_id), 'server_instance': SERVER_INSTANCE}
     except ConversationError as exc:
         raise HTTPException(409, str(exc)) from exc
-    finally:
-        if conversation:
-            conversations.release(conversation)
 
 
 @app.post('/api/attachments')
@@ -594,6 +601,11 @@ def chat_stream(data:ChatRequest, x_localmind_key: Annotated[str | None, Header(
                     break
             final=await asyncio.to_thread(entry.final.result,90)
             yield json.dumps({'type':'final','data':final},ensure_ascii=False)+'\n'
+        except ConversationError as exc:
+            # Persistence errors already contain a safe, actionable user message.
+            # The stream has started, so return an error event rather than hide
+            # a failed commit behind a generic reconnect suggestion.
+            yield json.dumps({'type':'error','detail':str(exc)},ensure_ascii=False)+'\n'
         except Exception:
             yield json.dumps({'type':'error','detail':'Не удалось получить ответ. Сохраните request_id для повторного запроса.'},ensure_ascii=False)+'\n'
     return StreamingResponse(events(),media_type='application/x-ndjson',headers={'X-Accel-Buffering':'no'})

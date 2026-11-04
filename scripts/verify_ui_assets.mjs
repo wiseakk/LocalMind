@@ -9,6 +9,7 @@ function visit(filename){
   filename=path.resolve(filename);assert.ok(filename.startsWith(root+path.sep),'Asset escapes static root');
   if(visited.has(filename))return;visited.add(filename);
   const bytes=fs.readFileSync(filename);assert.ok(bytes.length,'Empty asset: '+filename);
+  if(/\.(?:html|css|js|json)$/.test(filename))new TextDecoder('utf-8',{fatal:true}).decode(bytes);
   assets.push({path:path.relative(root,filename).replaceAll('\\','/'),bytes:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')});
   if(!/\.(html|css)$/.test(filename))return;
   const source=bytes.toString('utf8');
@@ -20,6 +21,9 @@ function visit(filename){
   }
 }
 visit(path.join(root,'index.html'));
+const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+assert.ok(html.includes('<span class="breadcrumb">Личное пространство</span>'),'Russian header must survive as source Unicode');
+assert.ok(!/\?{3,}|\ufffd/.test(html),'Damaged placeholder text in HTML');
 for(const name of ['Onest','Unbounded']){
   assert.equal(fs.readFileSync(path.join(root,'assets/fonts/'+name+'.ttf')).readUInt32BE(0),0x00010000);
   assert.ok(fs.readFileSync(path.join(root,'assets/fonts/'+name+'-OFL.txt'),'utf8').includes('SIL OPEN FONT LICENSE'));

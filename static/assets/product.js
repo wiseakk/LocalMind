@@ -16,20 +16,15 @@
     const label=$(id)?.closest('label');if(label){advanced.append(label);label.classList.add('expert-only');}
   }
   $('expertMode')?.addEventListener('change',event=>{document.documentElement.dataset.expert=String(event.target.checked);});
-  const modelDialog=document.createElement('dialog');modelDialog.id='modelsDialog';modelDialog.setAttribute('aria-labelledby','modelsTitle');
-  const head=document.createElement('div');head.className='dialog-heading';
-  const title=document.createElement('h2');title.id='modelsTitle';title.textContent='Модели';
-  const close=document.createElement('button');close.className='secondary';close.textContent='Закрыть';close.onclick=()=>modelDialog.close();head.append(title,close);modelDialog.append(head);
-  const panel=$('settings-model');
-  while(panel.firstChild)modelDialog.append(panel.firstChild);
-  const explain=document.createElement('p');explain.textContent='Активную модель можно сменить после проверки. Загрузка моделей доступна в разделе «Модели».';
-  const open=document.createElement('button');open.className='secondary';open.textContent='Выбрать или установить модель';panel.append(explain,open);
-  document.body.append(modelDialog);
-  const show=()=>{if($('settingsDialog').open)$('settingsDialog').close();modelDialog.showModal();window.localmindModels?.refresh();window.closeSidebar?.();};
-  $('modelsOpen').addEventListener('click',show);open.onclick=show;
-  // The old model badge listener opens settings; route it to the dedicated page.
-  $('model').addEventListener('click',()=>{if($('settingsDialog').open)$('settingsDialog').close();if(!modelDialog.open)show();});
-  modelDialog.addEventListener('close',()=>$('modelsOpen').focus());
+  // One set of model controls: both navigation entries open the same settings
+  // section. Moving its children into another dialog left this tab empty in RC2.
+  const show=event=>{
+    if(!$('settingsDialog').open)$('settingsOpen').click();
+    window.localmindSettingsOpener=event?.currentTarget||$('modelsOpen');
+    $('tab-model').click();window.localmindModels?.refresh();window.closeSidebar?.();
+  };
+  $('modelsOpen').addEventListener('click',show);
+  $('model').addEventListener('click',show);
   const voice=$('tab-voice');voice?.click();
   // Hidden legacy controls keep existing module references stable, never tab stops.
   for(const id of ['imageAttach','voiceMode','graphToggle','skyPanel'])if($(id))$(id).hidden=true;

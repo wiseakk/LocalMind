@@ -13,6 +13,11 @@ router = APIRouter(prefix='/api/setup')
 @router.get('')
 def setup_status():
     from .offline_model import manifest
+    from .product_state import read
+    try:
+        product = read()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(409, str(exc) if isinstance(exc, ValueError) else 'Настройки недоступны. Проверьте каталог данных.')
     try:
         tags = ollama_json('GET', 'tags').get('models', [])
         ollama = {'state': 'ready', 'active': manager.active,
@@ -25,9 +30,57 @@ def setup_status():
     except (OSError, ValueError):
         offline_model = None
     from .model_catalog import disk_status
-    return {'voice': resource_setup.status(), 'ollama': ollama, 'offline_model': offline_model,
+    return {**product, 'voice': resource_setup.status(), 'ollama': ollama, 'offline_model': offline_model,
             'offline_disk': disk_status() if offline_model else None,
             'offline_bundle': (APP_ROOT / 'offline-assets').is_dir()}
+
+
+class OnboardingRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+    completed: bool
+    profile: Literal['cpu-fast', 'balanced', 'gpu-quality'] = 'cpu-fast'
+    skip_asr: bool = False
+    skip_tts: bool = False
+
+
+class TourRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+    completed: bool = False
+    skipped: bool = False
+
+
+class PreferencesRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+    theme: Literal['dark', 'light'] | None = None
+    reduce_motion: bool | None = None
+    low_performance: bool | None = None
+    voice_profile: Literal['cpu-fast', 'balanced', 'gpu-quality'] | None = None
+    tts_voice: Literal['ru_RU-denis-medium', 'silero-v5_6-ru', 'chatterbox-v3-ru'] | None = None
+    speak: bool | None = None
+
+
+@router.get('/preferences')
+def product_preferences():
+    from .product_state import read
+    return setup_operation(read)
+
+
+@router.post('/onboarding')
+def save_onboarding(data: OnboardingRequest):
+    from .product_state import update
+    return setup_operation(lambda: update('onboarding', data.model_dump()))
+
+
+@router.post('/tour')
+def save_tour(data: TourRequest):
+    from .product_state import update
+    return setup_operation(lambda: update('tour', data.model_dump()))
+
+
+@router.post('/preferences')
+def save_product_preferences(data: PreferencesRequest):
+    from .product_state import update
+    return setup_operation(lambda: update('preferences', data.model_dump(exclude_none=True)))
 
 
 class ResourceRequest(BaseModel):

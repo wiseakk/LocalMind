@@ -71,7 +71,7 @@ def test_expired_request_id_is_not_executable_again():
         requests.close()
 
 
-def test_conversation_expiry_bounded_and_pinned():
+def test_conversation_cache_expiry_is_bounded_and_pinned_but_journal_survives():
     now = [0]
     store = ConversationStore(capacity=1, ttl=10, clock=lambda: now[0])
     key = store.create()
@@ -82,8 +82,10 @@ def test_conversation_expiry_bounded_and_pinned():
     store.release(current)
     now[0] = 31
     store.create()
-    with pytest.raises(ConversationError):
-        store.acquire(key)
+    restored = store.acquire(key)
+    assert restored.id == key
+    assert len(store._items) == 1
+    store.release(restored)
 
 
 def test_history_bound_reset_and_topic_prevents_old_app_pronoun(api):

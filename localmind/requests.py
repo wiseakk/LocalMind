@@ -130,6 +130,13 @@ class RequestStore:
                 if not final.get('action_results') and final.get('engine') in ('offline-error', 'cancelled'):
                     speech = final['answer']
                 final.update(output_channels(final['answer'], final.get('action_results', []), speech))
+            # A successful response means the turn is durably committed. Hold
+            # the conversation lock until this finishes; replays use this same
+            # Future even when the HTTP connection has already gone away.
+            if getattr(prepared, 'finish_turn', None):
+                finish = prepared.finish_turn
+                prepared.finish_turn = None
+                finish(final)
             entry.final.set_result(final)
         except Exception as exc:
             if not entry.initial.done():

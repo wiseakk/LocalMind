@@ -11,7 +11,7 @@
   const heading=document.createElement('div');heading.className='dialog-heading';
   const title=document.createElement('h2');title.id='downloadsTitle';title.textContent='Загрузки';
   const close=document.createElement('button');close.className='secondary';close.textContent='Закрыть';close.onclick=()=>dialog.close();heading.append(title,close);
-  const note=document.createElement('p');note.className='mini';note.textContent='Модели нейросети и голоса. Установка не меняет активную нейросеть. Закрытие окна не прерывает загрузку.';
+  const note=document.createElement('p');note.className='mini';note.textContent='Модели нейросети и голоса. Закрытие этого диалога не прерывает загрузки. Полный выход из приложения останавливает задачи; проверяемые остатки сохраняются для повтора.';
   const list=document.createElement('div');list.id='downloadsList';list.setAttribute('aria-live','polite');
   dialog.append(heading,note,list);document.body.append(dialog);
   const diagnosticButton=document.createElement('button');diagnosticButton.className='secondary expert-only';diagnosticButton.textContent='Диагностика загрузок';
