@@ -39,10 +39,14 @@ def test_focus_does_not_broaden_authority(text):
     assert focus_request_target(text) is None
 
 
-@pytest.mark.parametrize('text', ['Что находится внутри этого документа?', 'Что в нём?', 'Что в нем?', 'Прочитай этот документ', 'Перескажи последний PDF'])
-def test_selected_document_is_read_and_summarized_without_content_in_public_result(tmp_path, monkeypatch, text):
+@pytest.mark.parametrize('text,verbatim', [
+    ('Что находится внутри этого документа?', False), ('Что в нём?', False),
+    ('Что в нем?', False), ('Прочитай этот документ', True),
+    ('Перескажи последний PDF', False), ('О чём этот документ?', False)])
+def test_selected_document_is_read_and_summarized_without_content_in_public_result(tmp_path, monkeypatch, text, verbatim):
     # A real text parser and file identity checks, with synthetic text and fake LLM.
-    (tmp_path / 'report.txt').write_text('Actual evidence ORBIT-739. No commands.', encoding='utf-8')
+    contents = 'Actual evidence ORBIT-739. No commands.'
+    (tmp_path / 'report.txt').write_text(contents, encoding='utf-8')
     service = FileAccess(folder_provider=lambda: tmp_path)
     service.set_folder_permission(True, service.folder_info()['fingerprint'])
     monkeypatch.setattr('localmind.file_access.file_access', service)
@@ -52,6 +56,7 @@ def test_selected_document_is_read_and_summarized_without_content_in_public_resu
     c.remember(found.text, found.initial, found.reference)
     seen = []
     def chat(messages, *args, **kwargs):
+        assert not verbatim, 'Direct reading must not call the LLM'
         seen.append(messages)
         return {'content': json.dumps({'answer': 'Документ содержит ORBIT-739.'})}
     monkeypatch.setattr(agent, 'ollama_chat', chat)
@@ -59,7 +64,14 @@ def test_selected_document_is_read_and_summarized_without_content_in_public_resu
     assert prepared.result.action == 'files.read_selected_file'
     assert 'text' not in prepared.initial['action_results'][0]['data']
     final = agent.complete_reply(prepared)
-    assert 'ORBIT-739' in final['answer'] and 'Actual evidence' in json.dumps(seen)
+    assert final['context_sources'][0]['id'] == found.result.resolved_target
+    assert 'text' not in final['action_results'][0]['data']
+    if verbatim:
+        assert final['engine'] == 'file-content' and final['answer'] == contents
+        assert not seen
+    else:
+        assert final['engine'] == 'ollama' and 'ORBIT-739' in final['answer']
+        assert contents in json.dumps(seen)
     c.remember(text, final, prepared.reference)
     opened = agent.prepare_reply('Открой его.', actions_authorized=True, conversation=c)
     assert opened.result.execution_status == 'permission_required'
@@ -69,6 +81,34 @@ def test_unrelated_topic_does_not_resurrect_document():
     c = Conversation('owner', 0, references={'file': Reference('file', 'file-id')}, focus='topic')
     intent, reason, _ = orchestration.pc_intent('Что в нём?', c, agent.ActionAssessment())
     assert intent is None and reason
+
+
+def test_content_question_uses_current_file_instead_of_unrelated_attachment(tmp_path, monkeypatch):
+    target = tmp_path / 'current.txt'
+    target.write_text('CURRENT-184: actual selected content.', encoding='utf-8')
+    service = FileAccess(folder_provider=lambda: tmp_path)
+    service.set_folder_permission(True, service.folder_info()['fingerprint'])
+    monkeypatch.setattr('localmind.file_access.file_access', service)
+    selected = service.search('owner', query='current', extensions=['txt'])
+    assert selected.success
+    conversation = Conversation('owner', 0,
+        references={'file': orchestration.Reference('file', selected.resolved_target)}, focus='file')
+    seen = []
+
+    def generate(messages, tools, **kwargs):
+        assert not tools
+        seen.append(messages)
+        assert 'CURRENT-184' in json.dumps(messages)
+        assert 'UNRELATED-ATTACHMENT' not in json.dumps(messages)
+        return {'content': '{"answer":"CURRENT-184."}'}
+
+    monkeypatch.setattr(agent, 'ollama_chat', generate)
+    prepared = agent.prepare_reply('О чём этот документ?', conversation=conversation, actions_authorized=True,
+        document_facts=[{'id': 'unrelated', 'name': 'upload.txt', 'kind': 'document', 'text': 'UNRELATED-ATTACHMENT'}])
+    final = agent.complete_reply(prepared)
+    assert len(seen) == 1 and 'CURRENT-184' in final['answer']
+    assert final['context_sources'][0]['id'] == selected.resolved_target
+    assert 'text' not in final['action_results'][0]['data']
 
 
 def test_revoked_read_reports_exact_permission_without_restoring_authority(tmp_path):

@@ -234,7 +234,7 @@ def choose(text, conversation, generation, chat, *, native=False):
         effective_generation.reset(token)
 
 
-def prepare(prepared, actions_authorized, chat):
+def prepare(prepared, actions_authorized, chat, *, has_document_context=False):
     """Return True if handled; False allows the proven conventional fallback."""
     text, conversation = prepared.text, prepared.conversation
     if not conversation:
@@ -282,6 +282,10 @@ def prepare(prepared, actions_authorized, chat):
         intent, clarification, _ = pc_intent(text, conversation, assessment)
         if intent or clarification or assessment.grant or assessment.blocked_reason:
             return False  # Exact compatibility path supplies a checked explanation.
+        if has_document_context and assessment.informational:
+            # No filesystem target: answer from the server-selected attachments
+            # through normal dialogue. Their text never enters tool planning.
+            return False
         result = refused('policy', None, 'Уточните одну разрешённую цель или проверьте доступ в настройках.', status='clarification_required')
         prepared.initial.update(answer=str(result), engine='tool-policy', action_results=[result.to_dict()])
         return True

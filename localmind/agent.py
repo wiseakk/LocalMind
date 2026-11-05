@@ -680,7 +680,7 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
         return prepared
     if llm_first and conversation:
         from .llm_planner import prepare as prepare_tools
-        if prepare_tools(prepared, actions_authorized, ollama_chat):
+        if prepare_tools(prepared, actions_authorized, ollama_chat, has_document_context=bool(document_facts)):
             return prepared
     if conversation:
         from .orchestration import compound_parts, validate_sequence

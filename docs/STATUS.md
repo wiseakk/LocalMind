@@ -1,5 +1,51 @@
 # RC2 — сборка и окончательная проверка 2026-11-04
 
+## 2026-11-05 — две регрессии pytest на базе fd26eee
+
+Исходное воспроизведение затронутых трёх наборов: 62 passed, 2 failed.
+Вопрос «Что написано в документе?» попадал в READ-envelope без файловой цели
+и завершался tool-policy до обычного dialogue. Planner теперь знает только
+факт наличия серверного контекста вложений и возвращает информационный запрос
+без файловой цели в стандартный маршрут. Текст настоящего вложения проходит
+inference_attachments и budget_messages, а final получает attachment_sources
+из обработанных document_facts. Формальное добавление метаданных не делалось.
+
+Устаревший realworld-тест разделяет прямое чтение без LLM и вопросы/пересказ
+с LLM. _verbatim_file_read, prepare_file_read, отказоустойчивость успешного
+чтения, голосовые модули и контроллер безопасности не менялись.
+
+Проверено в существующем Windows-окружении Python 3.14.5 соседнего проекта
+LocalMind_MVP_01/.venv (его файлы/зависимости не изменялись):
+
+- Сначала test_attachments, test_realworld_followups,
+  test_speech_agent_reliability, test_explicit_file_reads,
+  test_access_policy, test_vision_attachments: 396 passed, 1 skipped.
+- Затем полный python -m pytest -q -rs: 1420 passed, 2 skipped,
+  35 subtests passed, 33.86 s. Skip: test_desktop_shell — PySide6 отсутствует
+  в этом интерпретаторе; test_access_policy — том не предоставил 8.3 alias.
+  Это фактические результаты текущего окружения, не прежние 1437/7 владельца.
+  Лог: .test-artifacts/document-regressions-full-pytest.txt.
+- Регрессии проверяют фактический текст, переданный генератору, ID и имя
+  источника в HTTP и final stream, отсутствие команд/полномочий из документа,
+  отсутствие фиктивных источников без вложений, приоритет текущего файла над
+  посторонним вложением и сохранение отказа на запрещённое чтение/удаление.
+  Существующие проверки ложного отказа модели и прямого чтения также прошли.
+- Финальный diff проверен самостоятельно; git diff --check: PASS.
+
+Ollama/OS-действия в регрессиях подменены; это не реальный inference-тест.
+DevCrew и сборка установщика не запускались. Микрофон/GPU/Qt в этой задаче не
+проверялись; вывод о полной готовности релиза не делается. Запуск исходников
+после подготовки зависимостей: python start.py. Offline-сценарий и
+troubleshooting: docs/RC3_HANDOFF.md; 60+ вопросов с ответами:
+docs/DEFENSE_QA.md.
+
+Коммит не создан: git add отказал при создании
+C:/Users/ExampleUser/Desktop/LocalMind_RC3/.git/index.lock (Permission denied).
+По прямому указанию владельца изменения оставлены без обхода sandbox.
+HEAD: fd26eee28ff0d80fc3c2ce746321c753579bd8d1. Изменены только
+localmind/agent.py, localmind/llm_planner.py, tests/test_attachments.py,
+tests/test_realworld_followups.py, docs/DECISIONS.md, docs/STATUS.md.
+
 Milestone release build: SUCCESS, аппаратная приёмка заблокирована средой.
 Установщик, Source.zip и provenance собраны из одного source-коммита
 31fad862e248f729208f90f6e08551058ab42d10 на release/1.0.0-rc2, предок
