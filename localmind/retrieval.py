@@ -38,7 +38,8 @@ def _terms(text):
 
 
 class LocalRetrieval:
-    def __init__(self, sources=None):
+    def __init__(self, sources=None, *, policy=None):
+        self._policy = policy
         if sources is None:
             config = ROOT / 'config' / 'retrieval_sources.json'
             if config.exists():
@@ -66,6 +67,13 @@ class LocalRetrieval:
                 raise RetrievalError('Поддерживаются только UTF-8 .txt и .md.')
             self._sources[item['id']] = {'label': item['label'], 'path': path}
 
+    @property
+    def policy(self):
+        if self._policy is None:
+            from .file_access import file_access
+            return file_access.personal_mode
+        return self._policy
+
     def _metadata(self, source_id):
         item = self._sources.get(source_id)
         if item is None:
@@ -77,7 +85,10 @@ class LocalRetrieval:
 
     def _read(self, source_id):
         path, stamp, fingerprint = self._metadata(source_id)
-        with _locked_path(path):
+        with self.policy._lock, _locked_path(path):
+            # Exact configured-source consent may supply the scope, never
+            # override mandatory exclusions or a later user prohibition.
+            self.policy.check_file(path, 'read', legacy=True)
             if self._metadata(source_id) != (path, stamp, fingerprint):
                 raise RetrievalError('Источник изменился во время проверки.')
             with path.open('rb') as stream:
@@ -99,7 +110,7 @@ class LocalRetrieval:
                     grant = self._grants.get(source_id)
                     entries.append({'id': source_id, 'label': item['label'], 'filename': path.name,
                                     'path': str(path), 'fingerprint': fingerprint,
-                                    'allowed': bool(grant and grant[0] == fingerprint), 'available': True})
+                                    'allowed': bool(grant and grant[0] == fingerprint and grant[2] == self.policy.generation), 'available': True})
                 except (OSError, ValueError, RuntimeError):
                     self._grants.pop(source_id, None)
                     entries.append({'id': source_id, 'label': item['label'], 'available': False, 'allowed': False})
@@ -108,7 +119,7 @@ class LocalRetrieval:
     def set_permission(self, source_id, allowed, fingerprint=None):
         if not isinstance(source_id, str) or type(allowed) is not bool:
             raise RetrievalError('Разрешение должно быть явным логическим значением.')
-        with self._lock:
+        with self._lock, self.policy._lock:
             if source_id not in self._sources:
                 raise RetrievalError('Неизвестный источник.')
             if not allowed:
@@ -121,7 +132,7 @@ class LocalRetrieval:
                 _, _, checked, digest, _ = self._read(source_id)
                 if checked != current:
                     raise RetrievalError('Источник изменился; проверь разрешение повторно.')
-                self._grants[source_id] = current, digest
+                self._grants[source_id] = current, digest, self.policy.generation
             except (OSError, UnicodeError, ValueError, RuntimeError) as exc:
                 self._grants.pop(source_id, None)
                 raise RetrievalError('Не удалось безопасно разрешить текстовый источник.') from exc
@@ -136,9 +147,12 @@ class LocalRetrieval:
         with self._lock:
             for source_id, grant in list(self._grants.items()):
                 try:
-                    path, stamp, fingerprint, digest, text = self._read(source_id)
-                    if grant != (fingerprint, digest):
-                        raise RetrievalError('Источник заменён или изменён.')
+                    with self.policy._lock:
+                        if grant[2] != self.policy.generation:
+                            raise RetrievalError('Политика доступа изменилась. Разрешите источник повторно.')
+                        path, stamp, fingerprint, digest, text = self._read(source_id)
+                        if grant[:2] != (fingerprint, digest):
+                            raise RetrievalError('Источник заменён или изменён.')
                     # Bounded non-overlapping passages with exact line provenance.
                     lines, passage, start = text.splitlines(), [], 1
                     passages = []

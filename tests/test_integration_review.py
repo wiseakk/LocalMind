@@ -14,7 +14,10 @@ from localmind.requests import RequestStore
 
 
 @pytest.fixture
-def review_client(monkeypatch):
+def review_client(monkeypatch, tmp_path):
+    # Mock installed application images live in workspace scratch; keep their
+    # simulated installation distinct from LocalMind's protected production tree.
+    monkeypatch.setattr(apps, '_protected_app_roots', lambda: (tmp_path / 'assistant-install',))
     store = RequestStore()
     monkeypatch.setattr(server, 'store', store)
     yield TestClient(server.app, base_url='http://127.0.0.1:8765',

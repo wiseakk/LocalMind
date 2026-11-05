@@ -46,7 +46,9 @@ for(const file of ['interface.js','home.js','access.js','product.js','downloads.
     w.dispatchEvent(new w.CustomEvent('localmind-playback',{detail:{active:false}}));
     assert.equal(d.querySelector('#stopAudio').hidden,true);
     assert.ok(d.querySelector('#settings-advanced #key'));
-    assert.equal(d.querySelector('#desktopAccessMode').value,'normal');
+    assert.equal(d.querySelector('[name="accessMode"]:checked').value,'restricted');
+    assert.ok(d.querySelector('#accessDialog'));
+    assert.ok(d.querySelector('#capabilitiesOpen'));
     assert.ok(d.querySelector('#homeStatus'));
     console.log('PASS product navigation, settings keyboard order, setup repair, downloads and active playback controls');
   }finally{w.close();}

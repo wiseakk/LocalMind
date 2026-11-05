@@ -7,7 +7,7 @@ HWND in the same process cannot inherit an old selection.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager, ExitStack
+from contextlib import contextmanager, ExitStack, nullcontext
 import ctypes
 from ctypes import wintypes as w
 from dataclasses import dataclass, replace
@@ -18,7 +18,7 @@ import threading
 import time
 import uuid
 
-from .apps import AppError, _launch_guard, catalog
+from .apps import AppError, _launch_guard, catalog, KNOWN_ALIASES, executable_identity
 from .results import ActionResult, refused
 from .generation import check_cancelled, cancellation
 from .windows_state import VerifiedWindow, _inspect_windows, inspect_application, inspect_applications
@@ -30,6 +30,7 @@ class AppTarget:
     name: str
     path: Path
     fingerprint: str
+    safe_close: bool = False
 
 
 @dataclass
@@ -40,6 +41,7 @@ class WindowSelection:
     marker: int
     expires: float
     close_requested: bool = False
+    policy_generation: str | None = None
 
 
 class NativeWindowBackend:
@@ -156,7 +158,7 @@ class NativeWindowBackend:
 
 class WindowTools:
     def __init__(self, *, backend=None, target_provider=None, app_ids=None,
-                 clock=time.monotonic, capacity=128, ttl=900):
+                 clock=time.monotonic, capacity=128, ttl=900, policy=None):
         self.backend = backend or NativeWindowBackend()
         self.target_provider = target_provider or self._catalog_target
         self.app_ids = app_ids or self._catalog_ids
@@ -165,13 +167,34 @@ class WindowTools:
         self._lock = threading.RLock()
         self._property = 'LocalMind.Window.' + uuid.uuid4().hex
         self._builtin_resolver = None
+        # Explicit test providers remain isolated from the production singleton.
+        self._policy = policy if policy is not None else (lambda: catalog.policy) if target_provider is None else None
+
+    @property
+    def policy(self):
+        return self._policy() if callable(self._policy) else self._policy
+
+    def _check_policy(self, app, operation):
+        if self.policy is None:
+            return
+        try:
+            if app.id in catalog._entries:
+                catalog.check_permission(app.id, operation)
+            else:
+                identifiers = (app.id, str(app.path).casefold(), app.path.stem.casefold(),
+                               *KNOWN_ALIASES.get(app.path.stem.casefold(), ()), *executable_identity(app.path))
+                if app.id in ('calculator', 'notepad'):
+                    identifiers += ('builtin:' + app.id,)
+                self.policy.check_app(identifiers, operation)
+        except ValueError as exc:
+            raise AppError(str(exc)) from exc
 
     def configure_builtin_resolver(self, resolver):
         self._builtin_resolver = resolver
 
     def _catalog_ids(self):
         catalog.aliases()  # Discover once; launch permission is not inferred.
-        return [item['id'] for item in catalog.entries() if item['allowed']] + ['calculator', 'notepad']
+        return [item['id'] for item in catalog.entries() if any(item['permissions'].values())] + ['calculator', 'notepad']
 
     @contextmanager
     def _catalog_target(self, app_id):
@@ -182,19 +205,21 @@ class WindowTools:
             with _launch_guard(path):
                 if self._builtin_resolver(app_id) != path:
                     raise AppError('Цель системного приложения изменилась.')
-                yield AppTarget(app_id, app_id, path, str(path.stat().st_mtime_ns))
+                yield AppTarget(app_id, app_id, path, str(path.stat().st_mtime_ns), safe_close=app_id == 'calculator')
             return
-        with catalog._lock:
+        with catalog.policy._lock, catalog._lock:
             entry = catalog._entries.get(app_id)
             if entry is None:
                 raise AppError('Приложение отсутствует в каталоге.')
-            if not catalog.is_allowed(app_id):
-                raise AppError('Сначала разреши приложение в настройках.')
             if entry.launch_type == 'steam':
                 raise AppError('Окно игры Steam ещё не связано с проверенным исполняемым файлом.')
             with _launch_guard(entry.target):
                 current = catalog._revalidate(app_id)
-                yield AppTarget(current.id, current.name, current.target, current.fingerprint)
+                # A basename such as calc.exe is user-controlled. Only the
+                # exact OS-resolved calculator image has the safe-close status.
+                calculator = self._builtin_resolver('calculator') if self._builtin_resolver else None
+                yield AppTarget(current.id, current.name, current.target, current.fingerprint,
+                                safe_close=calculator is not None and current.target == calculator)
 
     def _prune(self):
         for key, selection in list(self._selections.items()):
@@ -209,8 +234,9 @@ class WindowTools:
                 self._selections.pop(key, None)
 
     def _record(self, app, native):
+        generation = self.policy.generation if self.policy is not None else None
         for record in self._selections.values():
-            if record.app == app and (
+            if record.app == app and record.policy_generation == generation and (
                 record.native.hwnd, record.native.pid, record.native.created, record.native.thread_id
             ) == (native.hwnd, native.pid, native.created, native.thread_id):
                 # Confirm marker too: a recycled HWND must not refresh an ID.
@@ -222,16 +248,17 @@ class WindowTools:
         if self.backend.operate(app.path, native, self._property, marker, 'stamp') != 'stamped':
             return None
         record = WindowSelection('win-' + uuid.uuid4().hex, app, native, marker, self.clock() + self.ttl)
+        record.policy_generation = generation
         self._selections[record.id] = record
         return record
 
     @staticmethod
     def _public(record):
         return {'window_id': record.id, 'app_id': record.app.id, 'application': record.app.name,
-                'title': record.native.title, 'close_supported': record.app.path.name.casefold() in ('calc.exe', 'calculator.exe', 'calculatorapp.exe')}
+                'title': record.native.title, 'close_supported': record.app.safe_close}
 
     def list_running(self, app_id=None):
-        with self._lock:
+        with (self.policy._lock if self.policy is not None else nullcontext()), self._lock:
             self._prune()
             windows, unknown, background = [], [], []
             all_ids = [app_id] if app_id else self.app_ids()
@@ -245,6 +272,19 @@ class WindowTools:
                 for key in ids:
                     try:
                         app = guards.enter_context(self.target_provider(key))
+                        # Read-only window selection needs at least one declared
+                        # operation, but never upgrades launch into close.
+                        if self.policy is not None:
+                            permitted = False
+                            for operation in ('launch', 'focus', 'close'):
+                                try:
+                                    self._check_policy(app, operation)
+                                    permitted = True
+                                    break
+                                except AppError:
+                                    pass
+                            if not permitted:
+                                raise AppError('Приложение запрещено политикой доступа.')
                         image_key = os.path.normcase(str(app.path))
                         if image_key in seen_paths:
                             continue
@@ -307,6 +347,7 @@ class WindowTools:
         check_cancelled()
         try:
             with self.target_provider(app_id) as target:
+                self._check_policy(target, 'launch')
                 original = target
         except (AppError, OSError, ValueError):
             # Some launch types (Steam) have no verifiable window image. Their
@@ -355,20 +396,26 @@ class WindowTools:
         """
         try:
             with self.target_provider(app_id) as target:
+                self._check_policy(target, 'focus')
                 original = target
                 if expected_target is not None and original != expected_target:
                     return refused('apps.focus', app_id, 'Цель приложения изменилась после запуска.', status='stale_target')
-        except (AppError, OSError, ValueError):
+        except AppError as exc:
+            return refused('apps.focus', app_id, str(exc), status='permission_required')
+        except (OSError, ValueError):
             return refused('apps.focus', app_id, 'Проверь разрешение приложения и его исполняемый файл в каталоге.', status='permission_required')
         deadline = self.clock() + min(max(timeout, 0), 10)
         while True:
             check_cancelled()
             try:
                 with self.target_provider(app_id) as current:
+                    self._check_policy(current, 'focus')
                     if current != original:
                         return refused('apps.focus', app_id, 'Цель приложения изменилась. Выбери приложение повторно.', status='stale_target')
                     window_id, error = self.select_app_window(app_id)
-            except (AppError, OSError, ValueError):
+            except AppError as exc:
+                return refused('apps.focus', app_id, str(exc), status='stale_target')
+            except (OSError, ValueError):
                 return refused('apps.focus', app_id, 'Разрешение или цель приложения изменились.', status='stale_target')
             if window_id:
                 return self.focus_window(window_id)
@@ -383,18 +430,28 @@ class WindowTools:
                 time.sleep(.1)
 
     def _operate(self, window_id, operation):
+        result = self._operate_checked(window_id, operation)
+        if self.policy is not None:
+            self.policy.record(operation, result.resolved_target or 'window', result.execution_status, reason=result.error)
+        return result
+
+    def _operate_checked(self, window_id, operation):
         action = {'focus': 'apps.focus_window', 'close': 'apps.close_window_safely',
                   'minimize': 'apps.minimize_window', 'restore': 'apps.restore_window',
                   'verify': 'apps.verify_selection'}[operation]
         if not isinstance(window_id, str) or len(window_id) > 80:
             return refused(action, None, 'Нужен проверенный идентификатор окна.', status='stale_target')
-        with self._lock:
+        with (self.policy._lock if self.policy is not None else nullcontext()), self._lock:
             self._prune()
             selection = self._selections.get(window_id)
             if selection is None:
                 return refused(action, None, 'Выбор окна устарел. Найди окно повторно.', status='stale_target')
             try:
+                if self.policy is not None and selection.policy_generation != self.policy.generation:
+                    self._selections.pop(window_id, None)
+                    return refused(action, selection.app.id, 'Политика доступа изменилась. Выбери окно повторно.', status='stale_target')
                 with self.target_provider(selection.app.id) as app:
+                    self._check_policy(app, 'close' if operation == 'close' else 'focus')
                     if app != selection.app:
                         return refused(action, app.id, 'Приложение или разрешение изменилось. Выбери окно повторно.', status='stale_target')
                     if operation == 'close':
@@ -404,7 +461,11 @@ class WindowTools:
                                 'Закрой его вручную; диалоги сохранения останутся под твоим контролем.', status='unsupported_safe_close')
                         if selection.close_requested:
                             return refused(action, app.id, 'Запрос закрытия уже отправлен. Проверь окно; повторять его не буду.', status='close_pending')
-                    state = self.backend.operate(app.path, selection.native, self._property, selection.marker, operation)
+                    with self.policy._lock if self.policy is not None else nullcontext():
+                        if self.policy is not None and selection.policy_generation != self.policy.generation:
+                            return refused(action, app.id, 'Политика доступа изменилась. Выбери окно повторно.', status='stale_target')
+                        self._check_policy(app, 'close' if operation == 'close' else 'focus')
+                        state = self.backend.operate(app.path, selection.native, self._property, selection.marker, operation)
                     if state == 'stale':
                         self._selections.pop(window_id, None)
                         return refused(action, app.id, 'Окно изменилось. Выбери его повторно.', status='stale_target')
@@ -437,7 +498,9 @@ class WindowTools:
                                    status='activation_denied' if state == 'foreground_denied' else
                                    'restore_pending' if state == 'restore_pending' else 'inspection_unavailable'),
                                    data=facts)
-            except (AppError, OSError, ValueError, AttributeError):
+            except AppError as exc:
+                return refused(action, selection.app.id, str(exc), status='denied')
+            except (OSError, ValueError, AttributeError):
                 return refused(action, selection.app.id, 'Не удалось повторно проверить окно и разрешение. Действие отменено.', status='unavailable')
 
     def focus_window(self, window_id):
@@ -458,7 +521,7 @@ class WindowTools:
 
     def close(self):
         """Release only this instance's markers during orderly API shutdown."""
-        with self._lock:
+        with (self.policy._lock if self.policy is not None else nullcontext()), self._lock:
             for selection in self._selections.values():
                 try:
                     with self.target_provider(selection.app.id) as current:

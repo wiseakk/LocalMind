@@ -19,10 +19,12 @@ class ActionJournal:
             except (OSError, ValueError):
                 pass
 
-    def record(self, name, target, decision, result=None):
+    def record(self, name, target, decision, result=None, *, reason=None, rule=None, policy_revision=None):
         with self.lock:
             self.rows.append({'at': datetime.now(timezone.utc).isoformat(), 'tool': name,
                               'target': target, 'decision': decision,
+                              'reason': reason or (result.error if result else None),
+                              'rule': rule, 'policy_revision': policy_revision,
                               'execution_status': result.execution_status if result else None,
                               'observed_state': result.observed_state if result else None,
                               'success': result.success if result else False})

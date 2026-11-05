@@ -329,8 +329,21 @@ def open_app(app: str) -> ActionResult:
         with _launch_guard(target):
             if resolve_windows_app(app) != target:
                 return refused('open_app', app, 'Цель приложения изменилась. Запуск отменён.')
-            result = launch_coordinator.launch(target, app,
-                lambda: subprocess.Popen([str(target)], shell=False, close_fds=True))
+            # Built-ins share identifiers with discovered copies. A catalog
+            # alias can never bypass a deny on Notepad or Calculator.
+            from .file_access import file_access, FileAccessError
+            from .apps import KNOWN_ALIASES, executable_identity
+            identifiers = (app, 'builtin:' + app, str(target).casefold(), target.stem.casefold(),
+                           *APP_ALIASES.get(app, ()), *KNOWN_ALIASES.get(target.stem.casefold(), ()),
+                           *executable_identity(target))
+            with file_access.personal_mode._lock:
+                try:
+                    file_access.personal_mode.check_app(identifiers, 'launch')
+                except FileAccessError as exc:
+                    return refused('open_app', app, str(exc), status='denied')
+                result = launch_coordinator.launch(target, app,
+                    lambda: subprocess.Popen([str(target)], shell=False, close_fds=True))
+                file_access.personal_mode.record('launch', app, result.execution_status, reason=result.error)
     except (OSError, AppError):
         return refused('open_app', app, 'Не удалось открыть приложение.', status='failed')
     return replace(result, duration_ms=round((time.monotonic() - started) * 1000))

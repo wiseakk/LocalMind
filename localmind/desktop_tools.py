@@ -9,24 +9,33 @@ WORKSPACES = {'study': {'name': 'Учёба', 'aliases': ('учёба', 'уче�
 
 def open_settings(args, owner):
     from .file_access import file_access
-    if not file_access.personal_mode.enabled():
-        return refused('system.open_settings', None, 'Сначала включите расширенный доступ в настройках.')
     page = SETTINGS_PAGES.get(args['page_id'])
     if not page or os.name != 'nt':
         return refused('system.open_settings', None, 'Эта страница настроек недоступна.')
-    os.startfile(page[1])  # Fixed Windows settings URI; does not change a setting.
+    with file_access.personal_mode._lock:
+        try:
+            file_access.personal_mode.check_operation('settings')
+        except ValueError as exc:
+            return refused('system.open_settings', args['page_id'], str(exc))
+        os.startfile(page[1])  # Fixed Windows settings URI; does not change a setting.
     return ActionResult(False, 'system.open_settings', args['page_id'], 'request_accepted',
                         status_text=f'Windows получила запрос открыть «{page[0]}». Появление страницы не подтверждено.')
 
 
 def open_bookmark(args, owner):
     from .file_access import file_access
-    if not file_access.personal_mode.enabled():
-        return refused('browser.open_bookmark', None, 'Открытие внешних сайтов доступно в расширенном режиме.')
+    from .apps import _open_fixed_bookmark, AppError
     bookmark = BOOKMARKS.get(args['bookmark_id'])
     if not bookmark or os.name != 'nt':
         return refused('browser.open_bookmark', None, 'Закладка недоступна.')
-    os.startfile(bookmark[1])
+    with file_access.personal_mode._lock:
+        try:
+            file_access.personal_mode.check_operation('bookmark')
+            _open_fixed_bookmark(args['bookmark_id'])
+        except AppError as exc:
+            return refused('browser.open_bookmark', args['bookmark_id'], str(exc))
+        except ValueError as exc:
+            return refused('browser.open_bookmark', args['bookmark_id'], str(exc))
     return ActionResult(False, 'browser.open_bookmark', args['bookmark_id'], 'request_accepted',
                         status_text='Запрос открытия выбранной закладки передан браузеру. Содержимое вкладки не проверено.')
 

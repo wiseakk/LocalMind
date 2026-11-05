@@ -307,13 +307,27 @@ async function loadApps(refreshCatalog=false) {
     if (!apps.length) $('appsList').textContent='Безопасные приложения не обнаружены. Доступны проверенные встроенные приложения.';
     for(const app of apps) {
       const row=document.createElement('div');row.className='app-entry';
-      const label=document.createElement('label');label.className='check';const check=document.createElement('input');check.type='checkbox';check.checked=app.allowed;
-      const title=document.createElement('span');title.textContent=app.name; label.append(check,title);
+      const title=document.createElement('strong');title.textContent=app.name;
       const path=document.createElement('small');path.textContent=app.target;
+      const permissions=document.createElement('div');permissions.className='app-permissions';
+      for(const [operation,text] of [['launch','Запуск'],['focus','Фокус окна'],['close','Безопасное закрытие']]){
+        const label=document.createElement('label');label.className='check';
+        const check=document.createElement('input');check.type='checkbox';check.checked=Boolean(app.permissions?.[operation]??(operation==='launch'&&app.allowed));
+        check.setAttribute('aria-label',text+': '+app.name);label.append(check,text);permissions.append(label);
+        check.addEventListener('change',async()=>{
+            check.disabled=true;const grantRevision=++appsRevision,requested=check.checked;
+          try{
+            const data=await(await checked(await fetch('/api/apps/permission',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({app_id:app.id,allowed:requested,fingerprint:app.fingerprint,operation})}))).json();
+            const effective=data.apps?.find(row=>row.id===app.id);
+            if(effective){app.permissions=effective.permissions;app.allowed=effective.allowed;check.checked=Boolean(effective.permissions?.[operation]);if(requested&&!check.checked)showError('Действие остаётся запрещено контроллером. Проверьте правила и защищённые области в «Возможностях LocalMind».');}
+            else{app.permissions={...app.permissions,[operation]:check.checked};if(operation==='launch')app.allowed=check.checked;}
+            if(grantRevision===appsRevision)window.localmindScene?.observeApps(apps);else await loadApps();
+          }catch(error){check.checked=!check.checked;showError(error.message)}finally{check.disabled=false;$('rescan').disabled=false;}
+        });
+      }
       const choose=document.createElement('button');choose.className='text-button';choose.textContent='Подставить точное название';
       choose.addEventListener('click',()=>{$('message').value='Открой '+app.id;$('appsDialog').close();$('message').focus()});
-      check.addEventListener('change',async()=>{check.disabled=true;const grantRevision=++appsRevision;try{await checked(await fetch('/api/apps/permission',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({app_id:app.id,allowed:check.checked,fingerprint:app.fingerprint})}));app.allowed=check.checked;if(grantRevision===appsRevision)window.localmindScene?.observeApps(apps);else await loadApps();}catch(error){check.checked=!check.checked;showError(error.message)}finally{check.disabled=false;$('rescan').disabled=false;}});
-      row.append(label,path,choose);$('appsList').append(row);
+      row.append(title,path,permissions,choose);$('appsList').append(row);
     }
   } catch(error) {if(revision===appsRevision)$('appsList').textContent=error.message;} finally{if(revision===appsRevision)$('rescan').disabled=false;}
 }

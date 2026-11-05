@@ -2,11 +2,12 @@
 
 Discovery metadata never becomes a command line. Only a local PE executable with
 no arguments can be selected; the source and executable are checked again before
-each launch. Permissions are deliberately session-only and start denied.
+each launch. The owner-bound policy persists exact image grants and independently
+controls launch, focus and safe close; model output cannot create a grant.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 import ctypes
 from dataclasses import dataclass, replace
 import json
@@ -37,6 +38,10 @@ def normalize_name(value: str) -> str:
 
 # GUI application names are aliases only after an executable was discovered.
 KNOWN_ALIASES = {
+    'notepad': ('notepad', 'блокнот', 'ноутпад'),
+    'calc': ('calculator', 'калькулятор'),
+    'calculator': ('calculator', 'калькулятор'),
+    'calculatorapp': ('calculator', 'калькулятор'),
     'code': ('Visual Studio Code', 'VS Code', 'vscode', 'вс код'),
     'obsidian': ('Obsidian', 'обсидиан'),
     'discord': ('Discord', 'дискорд'),
@@ -80,7 +85,12 @@ def _safe_local_path(raw: str | Path) -> Path:
     path = Path(text)
     if not path.is_absolute():
         raise AppError('Нужен абсолютный локальный путь.')
+    if any(part.rstrip(' .') != part for part in path.parts if part != path.anchor):
+        raise AppError('Неоднозначный путь приложения запрещён.')
     try:
+        for item in (path, *path.parents):
+            if _is_reparse(item):
+                raise AppError('Ссылки и reparse points приложения запрещены.')
         resolved = path.resolve(strict=True)
         if not resolved.is_file():
             raise AppError('Файл приложения не найден.')
@@ -220,6 +230,40 @@ def _known_roots() -> list[Path]:
             finally:
                 ctypes.WinDLL('ole32').CoTaskMemFree(pointer)
     return roots
+
+
+def _installation_roots():
+    """Windows-provided installation areas, not model-supplied directories."""
+    if os.name != 'nt':
+        return ()
+    from ctypes import wintypes as w
+    shell, ole = ctypes.WinDLL('shell32'), ctypes.WinDLL('ole32')
+    shell.SHGetKnownFolderPath.argtypes = [ctypes.c_void_p, w.DWORD, w.HANDLE, ctypes.POINTER(ctypes.c_void_p)]
+    ole.CoTaskMemFree.argtypes = [ctypes.c_void_p]
+    roots = []
+    for value in ('905e63b6-c1bf-494e-b29c-65b732d3d21a',  # ProgramFiles
+                  '7c5a40ef-a0fb-4bfc-874a-c0f2e0b9fa8e',  # ProgramFilesX86
+                  'f1b32785-6fba-4fcf-9d55-7b8e7f157091'):  # current LocalAppData
+        guid, pointer = _GUID(value), ctypes.c_void_p()
+        if shell.SHGetKnownFolderPath(ctypes.byref(guid), 0, None, ctypes.byref(pointer)) >= 0:
+            try:
+                roots.append(Path(ctypes.wstring_at(pointer)).resolve(strict=True))
+            finally:
+                ole.CoTaskMemFree(pointer)
+    return tuple(roots)
+
+
+def _protected_app_roots():
+    from .paths import APP_ROOT, DATA_ROOT
+    return APP_ROOT, DATA_ROOT
+
+
+def executable_identity(path):
+    try:
+        identity = path.stat()
+        return (f'fileidentity:{identity.st_dev}:{identity.st_ino}',)
+    except OSError:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -603,22 +647,33 @@ def _entry(source: AppSource, digest_cache=None) -> AppEntry:
 
 @contextmanager
 def _launch_guard(target: Path):
-    """Hold the Windows image against writes/deletion during CreateProcess."""
+    """Hold image and every ancestor against replacement during CreateProcess."""
+    from .file_access import _hold, FileAccessError
     handle = None
-    if os.name == 'nt':
-        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
-        kernel.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_ulong, ctypes.c_ulong,
-                                      ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_void_p]
-        kernel.CreateFileW.restype = ctypes.c_void_p
-        kernel.CloseHandle.argtypes = [ctypes.c_void_p]
-        handle = kernel.CreateFileW(str(target), 0x80000000, 1, None, 3, 0x80, None)
-        if handle == ctypes.c_void_p(-1).value:
-            raise AppError('Приложение занято или изменяется; запуск отменён.')
-    try:
-        yield
-    finally:
-        if handle is not None:
-            kernel.CloseHandle(handle)
+    with ExitStack() as ancestors:
+        try:
+            for parent in reversed(target.parents):
+                ancestors.enter_context(_hold(parent, True))
+            if os.name == 'nt':
+                kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+                kernel.CreateFileW.argtypes = [ctypes.c_wchar_p, ctypes.c_ulong, ctypes.c_ulong,
+                                              ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_void_p]
+                kernel.CreateFileW.restype = ctypes.c_void_p
+                kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+                handle = kernel.CreateFileW(str(target), 0x80000000, 1, None, 3, 0x80, None)
+                if handle in (None, ctypes.c_void_p(-1).value):
+                    handle = None
+                    raise AppError('Приложение занято или изменяется; запуск отменён.')
+            # OS executables legitimately have WinSxS hardlinks. Image identity
+            # and digest are checked by callers; file-document hardlink rules
+            # must not prevent launching the OS-resolved Notepad/Calculator.
+            _safe_local_path(target)
+            yield
+        except FileAccessError as exc:
+            raise AppError('Папка приложения занята, содержит ссылку или изменяется; запуск отменён.') from exc
+        finally:
+            if handle is not None:
+                kernel.CloseHandle(handle)
 
 
 class _ActivatedProcess:
@@ -678,16 +733,17 @@ def _activate_packaged(app_id):
 
 class AppCatalog:
     def __init__(self, source_provider: Callable[[], Iterable[AppSource]] = discover_sources,
-                 refresh_interval: float = 0):
+                 refresh_interval: float = 0, *, policy=None):
+        from .personal_permissions import PersonalMode
+        self._policy = policy if policy is not None else PersonalMode()
         self._source_provider = source_provider
         self._entries: dict[str, AppEntry] = {}
-        self._permissions: dict[str, str] = {}
         self._lock = threading.RLock()
         self._refresh_lock = threading.Lock()
         self._refresh_interval = refresh_interval
         self._last_refresh = 0.0
         self._refreshed = False
-        self._personal_mode = False
+        self._stale_ids = set()
         self._portable_roots = ()
         self._statistics = {'sources': {}, 'rejected': 0, 'duplicates': 0, 'truncated': False,
                             'unavailable_providers': [], 'duration_ms': 0, 'applications': 0}
@@ -713,18 +769,73 @@ class AppCatalog:
             self._portable_roots = tuple(dict.fromkeys(resolved))
 
     def set_personal_mode(self, enabled):
-        """Called only by the explicit user permission-profile endpoint."""
+        """Compatibility endpoint cannot create broad application permissions."""
         if type(enabled) is not bool:
             raise AppError('Неверный профиль разрешений.')
-        with self._lock:
-            self._personal_mode = enabled
 
-    def is_allowed(self, app_id):
-        with self._lock:
-            entry = self._entries.get(app_id)
-            if entry is None:
+    @property
+    def policy(self):
+        return self._policy() if callable(self._policy) else self._policy
+
+    @staticmethod
+    def identifiers(entry):
+        identifiers = (entry.id, str(entry.target).casefold(), entry.target.stem.casefold(),
+                       *entry.aliases, *executable_identity(entry.target),
+                       'image:' + str(entry.target).casefold() + '|' + entry.fingerprint)
+        if entry.target.stem.casefold() in ('notepad', 'calc'):
+            from .agent import resolve_windows_app
+            builtin = 'notepad' if entry.target.stem.casefold() == 'notepad' else 'calculator'
+            if resolve_windows_app(builtin) == entry.target:
+                identifiers += ('builtin:' + builtin,)
+        return identifiers
+
+    def check_permission(self, app_id, operation='launch'):
+        entry = self._entries.get(app_id)
+        if entry is None:
+            raise AppError('Приложение отсутствует в каталоге.')
+        if not self.is_allowed(app_id, operation):
+            try:
+                self.policy.check_app(self.identifiers(entry), operation)
+            except ValueError as exc:
+                raise AppError(str(exc)) from exc
+            raise AppError('Эта цель не является проверенным установленным приложением.')
+        return entry
+
+    @staticmethod
+    def _target_permitted(entry):
+        from .personal_permissions import ordinary_path, known_folder, foreign_profile_roots
+        try:
+            profile = known_folder('profile')
+            # Program Files is outside Users; a sibling profile is never an
+            # installed-application permission, even after a picker grant.
+            if entry.target.is_relative_to(profile.parent) and not entry.target.is_relative_to(profile):
                 return False
-            individual = self._permissions.get(app_id) == entry.fingerprint
+            if any(entry.target == root or entry.target.is_relative_to(root) for root in foreign_profile_roots()):
+                return False
+            if any(entry.target == root or entry.target.is_relative_to(root) for root in _protected_app_roots()):
+                return False
+            parts = {part.casefold() for part in entry.target.parts}
+            if parts.intersection({'.ssh', '.aws', '.azure', '.gnupg', '.kube', '.git',
+                                   'credentials', 'vault', 'vaults', 'protect', 'crypto'}):
+                return False
+            if any(entry.target.is_relative_to(root) for root in _installation_roots()):
+                return True
+            if ordinary_path(entry.target):
+                return True
+            # The two fixed built-ins are the only system-directory exception.
+            if entry.target.stem.casefold() in ('notepad', 'calc'):
+                from .agent import resolve_windows_app
+                builtin = 'notepad' if entry.target.stem.casefold() == 'notepad' else 'calculator'
+                return resolve_windows_app(builtin) == entry.target
+        except (OSError, ValueError):
+            return False
+        return False
+
+    def is_allowed(self, app_id, operation='launch'):
+        with self.policy._lock, self._lock:
+            entry = self._entries.get(app_id)
+            if entry is None or app_id in self._stale_ids or not self._target_permitted(entry):
+                return False
             ordinary = True
             # A malicious Start Menu link must not turn a downloaded temporary
             # binary into an automatically approved installed application.
@@ -736,7 +847,15 @@ class AppCatalog:
                             ordinary = False
                     except (OSError, ValueError):
                         ordinary = False
-            return bool(individual or (self._personal_mode and ordinary))
+            installed = any(origin in ('shortcuts', 'app_paths', 'uninstall', 'start_apps', 'steam')
+                            for origin in entry.sources)
+            installed = installed and any(entry.target.is_relative_to(root) for root in _installation_roots())
+            identifiers = self.identifiers(entry)
+            installed = installed or any(item.startswith('builtin:') for item in identifiers)
+            allowed = self.policy.app_allowed(identifiers, operation)
+            if self.policy.mode == 'full_user' and not (ordinary and installed):
+                return bool(allowed and self.policy.explicit_app_allowed(self.identifiers(entry), operation))
+            return bool(allowed)
 
     def statistics(self):
         with self._lock:
@@ -806,28 +925,31 @@ class AppCatalog:
                 continue
         with self._lock:
             self._entries = found
-            self._permissions = {key: fingerprint for key, fingerprint in self._permissions.items()
-                                 if key in found and found[key].fingerprint == fingerprint}
+            self._stale_ids.clear()
             self._refreshed = True
             self._last_refresh = time.monotonic()
             report['applications'] = len(found)
             report['duration_ms'] = round((self._last_refresh - started) * 1000, 2)
             self._statistics = report
             self._steam_requested.intersection_update(found)
-            return self.entries()
+        return self.entries()
 
     def entries(self) -> list[dict]:
-        with self._lock:
+        with self.policy._lock, self._lock:
             return [{'id': item.id, 'name': item.name, 'target': str(item.target),
                      'aliases': list(item.aliases), 'fingerprint': item.fingerprint,
-                     'allowed': self.is_allowed(item.id), 'sources': list(item.sources),
+                     'policy_identifiers': list(self.identifiers(item)),
+                     'allowed': self.is_allowed(item.id),
+                     'permissions': {operation: self.is_allowed(item.id, operation)
+                                     for operation in ('launch', 'focus', 'close')},
+                     'sources': list(item.sources),
                      'launch_type': item.launch_type, 'launch_id': item.launch_id, 'icon': item.icon}
                     for item in sorted(self._entries.values(), key=lambda item: item.name.casefold())]
 
     def aliases(self) -> dict[str, tuple[str, ...]]:
+        if not self._refreshed:
+            self.refresh()
         with self._lock:
-            if not self._refreshed:
-                self.refresh()
             return {key: item.aliases for key, item in self._entries.items()}
 
     def resolve_alias(self, name: str) -> list[str]:
@@ -843,32 +965,37 @@ class AppCatalog:
             if current.fingerprint != entry.fingerprint or current.target != entry.target:
                 raise AppError('Цель приложения изменилась. Обнови каталог и разрешение.')
         except (AppError, OSError, ValueError) as exc:
-            self._permissions.pop(app_id, None)
+            self._stale_ids.add(app_id)
             raise AppError('Цель приложения изменилась. Обнови каталог и разрешение.') from exc
         return replace(current, id=entry.id, aliases=entry.aliases, sources=entry.sources)
 
-    def set_permission(self, app_id: str, allowed: bool, fingerprint: str) -> list[dict]:
-        with self._lock:
+    def set_permission(self, app_id: str, allowed: bool, fingerprint: str, operation=None) -> list[dict]:
+        operations = ('launch', 'focus', 'close') if operation is None else (operation,)
+        if type(allowed) is not bool or any(op not in ('launch', 'focus', 'close') for op in operations):
+            raise AppError('Неизвестная операция приложения.')
+        with self.policy._lock, self._lock:
             if not allowed:
-                self._permissions.pop(app_id, None)
+                entry = self._entries.get(app_id)
+                if entry is not None:
+                    self.policy.set_app_permissions(self.identifiers(entry), operations, False)
                 return self.entries()
             entry = self._revalidate(app_id)
             if fingerprint != entry.fingerprint:
                 raise AppError('Каталог изменился. Выбери приложение повторно.')
-            self._permissions[app_id] = entry.fingerprint
+            self.policy.set_app_permissions(self.identifiers(entry), operations, True)
             return self.entries()
 
     def launch(self, app_id: str) -> dict:
         started = time.perf_counter()
         target = app_id
         try:
-            with self._lock:
+            with self.policy._lock, self._lock:
                 entry = self._revalidate(app_id)
                 target = entry.name
-                if not self.is_allowed(app_id):
-                    raise AppError('Сначала разреши это приложение в настройках.')
+                self.check_permission(app_id)
                 with _launch_guard(entry.target):
                     self._revalidate(app_id)
+                    self.check_permission(app_id)
                     if entry.launch_type == 'steam':
                         from .results import ActionResult
                         if app_id in self._steam_requested:
@@ -890,14 +1017,103 @@ class AppCatalog:
                         # never generalize relaunch to arbitrary background apps.
                         result = launch_coordinator.launch(entry.target, target, spawn,
                             activate_background=entry.launch_type == 'win32' and entry.target.name.casefold() == 'obsidian.exe')
+                self.policy.record('launch', app_id, result.execution_status, reason=result.error)
             return {**result.to_dict(), 'duration_ms': round((time.perf_counter() - started) * 1000, 2)}
         except (AppError, OSError) as exc:
             # Exception text is controlled here, OS errors/paths are not reflected.
             error = str(exc) if isinstance(exc, AppError) else 'Windows отклонила запуск приложения.'
+            self.policy.record('launch', app_id, 'denied', reason=error)
             return {'success': False, 'action': 'open_app', 'resolved_target': target,
                     'execution_status': 'not_executed', 'observed_state': None,
                     'error': error, 'mode': 'REAL', 'duration_ms': round((time.perf_counter() - started) * 1000, 2),
                     'status_text': error}
 
 
-catalog = AppCatalog(refresh_interval=2)
+def _owner_policy():
+    from .file_access import file_access
+    return file_access.personal_mode
+
+
+def _associated_executable(suffix):
+    """Read only the executable; registry command templates are never executed.
+
+    https://learn.microsoft.com/en-us/windows/win32/api/shlwapi/nf-shlwapi-assocquerystringw
+    ASSOCSTR_EXECUTABLE (2), fixed open verb, bounded caller-owned buffer.
+    """
+    if os.name != 'nt' or not (re.fullmatch(r'\.[a-z0-9]{1,16}', suffix) or suffix == 'https'):
+        raise AppError('Ассоциация документа недоступна.')
+    from ctypes import wintypes as w
+    api = ctypes.WinDLL('shlwapi')
+    api.AssocQueryStringW.argtypes = [w.DWORD, ctypes.c_int, w.LPCWSTR, w.LPCWSTR,
+                                     w.LPWSTR, ctypes.POINTER(w.DWORD)]
+    api.AssocQueryStringW.restype = ctypes.c_long
+    buffer, size = ctypes.create_unicode_buffer(32768), w.DWORD(32768)
+    if api.AssocQueryStringW(0, 2, suffix, 'open', buffer, ctypes.byref(size)) != 0:
+        raise AppError('Не удалось проверить приложение для открытия документа.')
+    return validate_executable(buffer.value)
+
+
+def _open_document(path, *, app_catalog=None, association_resolver=None):
+    """Internal adapter: FileAccess must hold the checked document and policy.
+
+    The only argument is that exact local document path. No association command
+    string, model arguments, shell verb execution or ShellExecute is accepted.
+    """
+    from .file_access import FileAccessError, _checked, READABLE_EXTENSIONS
+    service = app_catalog if app_catalog is not None else catalog
+    resolver = association_resolver or _associated_executable
+    path = _checked(path)
+    if path.suffix.casefold() not in READABLE_EXTENSIONS:
+        raise FileAccessError('Этот тип документа нельзя безопасно открыть.')
+    try:
+        target = resolver(path.suffix.casefold())
+        service.aliases()
+        with service.policy._lock, service._lock:
+            matches = [entry for entry in service._entries.values() if entry.target == target and entry.launch_type == 'win32']
+            if not matches:
+                from .agent import resolve_windows_app
+                if target == resolve_windows_app('notepad'):
+                    with _launch_guard(target):
+                        if target != resolve_windows_app('notepad'):
+                            raise AppError('Цель Блокнота изменилась.')
+                        service.policy.check_app(('builtin:notepad', 'notepad', 'блокнот', str(target).casefold(),
+                                                  *executable_identity(target)), 'launch')
+                        subprocess.Popen([str(target), str(path)], shell=False, close_fds=True)
+                        service.policy.record('launch_document', 'notepad', 'request_accepted')
+                    return
+                raise AppError('Приложение для этого документа отсутствует в проверенном каталоге. Обнови каталог и разреши его запуск.')
+            # Deduplication normally leaves one image. All duplicate identities
+            # must permit launch; one alias cannot bypass a policy denial.
+            for entry in matches:
+                service._revalidate(entry.id)
+                service.check_permission(entry.id, 'launch')
+            with _launch_guard(target):
+                for entry in matches:
+                    service._revalidate(entry.id)
+                    service.check_permission(entry.id, 'launch')
+                subprocess.Popen([str(target), str(path)], shell=False, close_fds=True, cwd=str(target.parent))
+                service.policy.record('launch_document', matches[0].id, 'request_accepted')
+    except (AppError, OSError) as exc:
+        raise FileAccessError(str(exc) if isinstance(exc, AppError) else 'Windows отклонила открытие документа.') from exc
+
+
+def _open_fixed_bookmark(bookmark_id):
+    from .desktop_tools import BOOKMARKS
+    bookmark = BOOKMARKS.get(bookmark_id)
+    if bookmark is None:
+        raise AppError('Закладка не разрешена.')
+    target = _associated_executable('https')
+    catalog.aliases()
+    with catalog.policy._lock, catalog._lock:
+        entries = [entry for entry in catalog._entries.values() if entry.target == target and entry.launch_type == 'win32']
+        if not entries:
+            raise AppError('Разреши браузер для этой закладки в проверенном каталоге приложений.')
+        with _launch_guard(target):
+            for entry in entries:
+                catalog._revalidate(entry.id)
+                catalog.check_permission(entry.id, 'launch')
+            subprocess.Popen([str(target), bookmark[1]], shell=False, close_fds=True, cwd=str(target.parent))
+            catalog.policy.record('launch_bookmark', entries[0].id, 'request_accepted')
+
+
+catalog = AppCatalog(refresh_interval=2, policy=_owner_policy)

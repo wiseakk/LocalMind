@@ -106,7 +106,7 @@ class FileMutations:
         self.access, self.clock, self.ttl = access, clock, ttl
         self._pending = {}
 
-    def _target(self, scope, relative):
+    def _target(self, scope, relative, operation):
         if not isinstance(relative, str) or not 1 <= len(relative) <= 512:
             raise FileAccessError('Нужно точное относительное имя файла.')
         fragment = Path(relative)
@@ -125,6 +125,7 @@ class FileMutations:
             _checked(path)
             if not path.is_file():
                 raise FileAccessError('Изменять каталоги нельзя.')
+        self.access.personal_mode.check_file(path, operation)
         return path
 
     def prepare(self, owner, operation, scope, relative_path, content='', destination=None):
@@ -139,11 +140,11 @@ class FileMutations:
                 raise FileAccessError('Содержимое должно быть обычным текстом до 256 КиБ.')
             if operation in ('delete', 'move') and content:
                 raise FileAccessError('Удаление и перемещение не принимают новое содержимое.')
-            with self.access._lock:
+            with self.access._lock, self.access.personal_mode._lock:
                 self._pending = {key: value for key, value in self._pending.items() if self.clock() < value.deadline}
                 if len(self._pending) >= 128:
                     raise FileAccessError('Слишком много ожидающих подтверждений.')
-                path = self._target(scope, relative_path)
+                path = self._target(scope, relative_path, operation)
                 if operation in ('create', 'overwrite') and path.suffix.casefold() not in TEXT_MUTABLE:
                     raise FileAccessError('Создание и перезапись поддерживаются для текстовых документов.')
                 with _parents_held(path):
@@ -154,7 +155,7 @@ class FileMutations:
                     else:
                         with _hold(_checked(path)):
                             expected = _fingerprint(path)
-                    target = self._target(scope, destination) if operation == 'move' else None
+                    target = self._target(scope, destination, operation) if operation == 'move' else None
                     if target is not None:
                         if target == path or target.exists():
                             raise FileAccessError('Перемещение не заменяет существующий файл.')
@@ -173,20 +174,23 @@ class FileMutations:
                     return ActionResult(False, action, key, 'confirmation_required',
                         status_text=f'Требуется подтверждение: {operation} — {path}' + (f' → {target}' if target else ''), data=data)
         except (OSError, ValueError, RuntimeError) as exc:
-            return refused(action, None, str(exc) if isinstance(exc, FileAccessError) else 'Не удалось безопасно подготовить операцию.')
+            reason = str(exc) if isinstance(exc, FileAccessError) else 'Не удалось безопасно подготовить операцию.'
+            self.access.personal_mode.record('prepare_mutation', str(scope), 'denied', reason, 'mutation_validation')
+            return refused(action, None, reason)
 
     def confirm(self, owner, confirmation_id, approved):
         action = 'files.confirm_mutation'
         try:
             if type(approved) is not bool:
                 raise FileAccessError('Нужно явное подтверждение операции.')
-            with self.access._lock:
+            with self.access._lock, self.access.personal_mode._lock:
                 pending = self._pending.get(confirmation_id)
                 if pending is None or pending.owner != owner:
                     raise FileAccessError('Подтверждение отсутствует или принадлежит другому разговору.')
                 # Consume before any side effect, including a failed attempt.
                 self._pending.pop(confirmation_id)
                 if not approved:
+                    self.access.personal_mode.record(pending.operation, pending.path, 'cancelled', 'Операция отменена.', 'exact_confirmation')
                     return refused(action, confirmation_id, 'Операция отменена.', status='cancelled')
                 if self.clock() >= pending.deadline:
                     raise FileAccessError('Подтверждение истекло. Подготовь операцию повторно.')
@@ -196,13 +200,13 @@ class FileMutations:
                 root = roots.get(pending.scope)
                 if root is None or (pending.path != root and root not in pending.path.parents):
                     raise FileAccessError('Разрешение отозвано.')
-                path = self._target(pending.scope, str(pending.path.relative_to(root)))
+                path = self._target(pending.scope, str(pending.path.relative_to(root)), pending.operation)
                 with ExitStack() as stack:
                     stack.enter_context(_parents_held(path))
                     if _identity(_checked(path.parent)) != pending.parent_identity:
                         raise FileAccessError('Родительская папка изменилась.')
                     if pending.destination:
-                        destination = self._target(pending.scope, str(pending.destination.relative_to(root)))
+                        destination = self._target(pending.scope, str(pending.destination.relative_to(root)), pending.operation)
                         stack.enter_context(_parents_held(destination))
                         if destination.exists() or _identity(destination.parent) != pending.destination_parent_identity:
                             raise FileAccessError('Цель перемещения изменилась.')
@@ -211,6 +215,9 @@ class FileMutations:
                             # Hash the locked handle, not a pathname reopened after validation.
                             if _stream_fingerprint(stream, path.suffix.casefold()) != pending.expected:
                                 raise FileAccessError('Файл изменился после запроса подтверждения.')
+                        self.access.personal_mode.check_file(path, pending.operation)
+                        if pending.destination:
+                            self.access.personal_mode.check_file(pending.destination, pending.operation)
                         if pending.operation in ('create', 'overwrite'):
                             stream.seek(0)
                             stream.write(pending.content)
@@ -243,7 +250,9 @@ class FileMutations:
                     data={'operation': pending.operation, 'path': str(path),
                           'destination': str(pending.destination) if pending.destination else None})
         except (OSError, ValueError, RuntimeError) as exc:
-            return refused(action, confirmation_id, str(exc) if isinstance(exc, FileAccessError) else 'Операция не выполнена или её результат не подтверждён.')
+            reason = str(exc) if isinstance(exc, FileAccessError) else 'Операция не выполнена или её результат не подтверждён.'
+            self.access.personal_mode.record('confirm_mutation', confirmation_id, 'denied', reason, 'exact_confirmation')
+            return refused(action, confirmation_id, reason)
 
 
 file_mutations = FileMutations(file_access)

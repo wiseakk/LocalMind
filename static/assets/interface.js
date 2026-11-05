@@ -110,7 +110,8 @@
   // restore its opener too, including when the opener lives in the mobile rail.
   for(const [id,opener] of [['settingsDialog','settingsOpen'],['appsDialog','appsOpen'],['filesDialog','filesOpen'],['devicesDialog','devicesOpen'],['helpDialog','helpOpen']]){
     byId(id).addEventListener('close',()=>{
-      const target=id==='settingsDialog'&&window.localmindSettingsOpener||byId(opener);
+      const target=(id==='settingsDialog'&&window.localmindSettingsOpener)||(id==='appsDialog'&&window.localmindAppsOpener)||byId(opener);
+      if(id==='appsDialog')window.localmindAppsOpener=null;
       if(id==='settingsDialog')window.localmindSettingsOpener=null;
       if(!document.querySelector('dialog[open]'))(window.matchMedia?.('(max-width:760px)').matches?byId('sidebarToggle'):target).focus();
     });

@@ -1211,3 +1211,29 @@ LocalMind_MVP_01/.venv; это CPython 3.14, не runtime будущей сбо�
 Логи: .test-artifacts/rc3-verification/; диагностическая копия:
 .test-artifacts/rc3-ui-copy-check.json. Восстановительный снимок изменений:
 .test-artifacts/rc3-builder-recovery/builder-working-snapshot.zip (не релиз).
+
+## 2026-11-04 — новая система доступа RC3, реализация
+
+Добавлены restricted/full_user, единая SID/schema-политика с атомарным
+сохранением и безопасной миграцией, preview/apply русских правил, отдельный
+экран возможностей, операции приложений, журнал причин/ревизий, проверки
+ассоциаций и источников retrieval. GUI-движок, LLM и голос не переписаны.
+Ручной чек-лист, запуск, offline-сценарий и troubleshooting: ACCESS_POLICY.md.
+
+Промежуточный полный прогон Windows CPython 3.11: 1164 passed, 7 skipped,
+35 subtests, одна StarletteDeprecationWarning. Проверки синтаксиса JS,
+DOM и 86 локальных assets проходят. После финальных уточнений проверок
+политики и авторизации журнала выполняется повторный полный gate.
+В текущем checkout независимый review перепроверил исправления обходов через
+shared alias, retrieval, ассоциации, имя calc.exe, relocated profile и
+сбой журнала; воспроизведённых открытых P0/P1 не осталось.
+
+Реальный `.venv/Scripts/python.exe -m localmind.desktop` запущен с отдельными
+данными workspace и портом 8879: Chromium отказал на named-platform-channel-pipe,
+Access is denied (0x5); окно LocalMind для UI-приёмки не появилось.
+Playwright со своим работающим сервером на 8878: 32 теста обнаружены,
+worker не стартовал (spawn EPERM). Browser access host также unavailable.
+Sandbox/ACL не ослаблялись. Оба тестовых процесса остановлены.
+Реальные DPI/GUI, микрофон, GPU/CPU inference, слышимый TTS и offline demo
+не подтверждены; другой диск и 8.3 aliases требуют ручного прогона.
+Функция не объявляется готовой до этого прогона.

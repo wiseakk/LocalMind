@@ -692,6 +692,19 @@ function makeCanvasDom(){
       checkbox.click();await pause(10);assert.equal(allowed,false);assert.equal(mutations[2].allowed,false);
     }finally{dom.window.close()}
   });
+  await run('application grant shows the controllers effective denial instead of checked permission',async()=>{
+    const app={id:'editor',name:'Editor',target:'C:/Editor.exe',allowed:false,fingerprint:'exact-fingerprint',permissions:{launch:false,focus:false,close:false}};
+    const dom=makeDom(async(url)=>{
+      if(url==='/api/apps')return Response.json({apps:[app]});
+      if(url==='/api/apps/permission')return Response.json({ok:true,apps:[app]});
+      return Response.json({server_instance:'test',devices:[],apps:[],voice:{}});
+    }),d=dom.window.document;
+    try{
+      await pause(10);const check=d.querySelector('#appsList input');check.click();await pause(10);
+      assert.equal(check.checked,false);assert.equal(check.disabled,false);
+      assert.ok(d.querySelector('#errorText').textContent.includes('контроллером'));
+    }finally{dom.window.close();}
+  });
   await run('transcribe validation arrays show bounded messages without reflecting input or ctx and recover controls',async()=>{
     let clock=0,attempt=0;
     const dom=makeDom(async url=>{

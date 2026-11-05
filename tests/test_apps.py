@@ -12,7 +12,10 @@ from localmind.windows_state import ApplicationState, LaunchCoordinator
 
 
 @pytest.fixture(autouse=True)
-def supported_fixtures(monkeypatch):
+def supported_fixtures(monkeypatch, tmp_path):
+    # Synthetic applications are user apps, separate from the assistant's own
+    # installation even though restricted Windows test scratch is in the repo.
+    monkeypatch.setattr(apps, '_protected_app_roots', lambda: (tmp_path / 'assistant-install',))
     monkeypatch.setattr(apps, 'SUPPORTED_GUI_EXECUTABLES',
                         apps.SUPPORTED_GUI_EXECUTABLES | {'editor', 'first', 'second'})
     monkeypatch.setattr(apps, 'launch_coordinator',
@@ -243,6 +246,164 @@ def test_stale_source_at_permission_time_is_rejected(tmp_path):
     metadata[0] = 'new'
     with pytest.raises(apps.AppError):
         catalog.set_permission(entry['id'], True, entry['fingerprint'])
+
+
+def test_policy_app_operations_are_independent_and_persistent(tmp_path):
+    from localmind.personal_permissions import PersonalMode
+    executable = make_exe(tmp_path / 'editor.exe')
+    state = tmp_path / 'permissions.json'
+    policy = PersonalMode(state)
+    catalog = apps.AppCatalog(lambda: [source(executable)], policy=policy)
+    [entry] = catalog.refresh()
+    catalog.set_permission(entry['id'], True, entry['fingerprint'], operation='launch')
+    assert catalog.entries()[0]['permissions'] == {'launch': True, 'focus': False, 'close': False}
+    restarted = apps.AppCatalog(lambda: [source(executable)], policy=PersonalMode(state))
+    [row] = restarted.refresh()
+    assert row['permissions'] == {'launch': True, 'focus': False, 'close': False}
+    make_exe(executable, b'changed image')
+    assert not restarted.refresh()[0]['allowed']
+
+
+def test_catalog_notepad_deny_blocks_builtin_alias(tmp_path, monkeypatch):
+    from localmind import agent
+    from localmind.file_access import file_access
+    from localmind.personal_permissions import PersonalMode
+    executable = make_exe(tmp_path / 'notepad.exe')
+    policy = PersonalMode()
+    catalog = apps.AppCatalog(lambda: [source(executable, name='Notepad')], policy=policy)
+    [entry] = catalog.refresh()
+    catalog.set_permission(entry['id'], False, entry['fingerprint'], operation='launch')
+    monkeypatch.setattr(file_access, 'personal_mode', policy)
+    monkeypatch.setattr(agent.platform, 'system', lambda: 'Windows')
+    monkeypatch.setattr(agent, 'resolve_windows_app', lambda _: executable)
+    with mock.patch.object(agent.subprocess, 'Popen') as spawn:
+        assert not agent.open_app('notepad').success
+        spawn.assert_not_called()
+
+
+def test_legacy_personal_flag_never_grants_applications(tmp_path):
+    executable = make_exe(tmp_path / 'editor.exe')
+    catalog = apps.AppCatalog(lambda: [source(executable)])
+    [entry] = catalog.refresh()
+    catalog.set_personal_mode(True)
+    assert not catalog.is_allowed(entry['id'])
+
+
+@pytest.mark.parametrize('filename', ['notepad.exe', 'calc.exe', 'calculator.exe'])
+def test_builtin_name_cannot_authorize_an_unrelated_executable(tmp_path, filename):
+    executable = make_exe(tmp_path / filename)
+    catalog = apps.AppCatalog(lambda: [source(executable)])
+    [entry] = catalog.refresh()
+    assert not catalog.is_allowed(entry['id'])
+    with mock.patch.object(apps.subprocess, 'Popen') as spawn:
+        assert not catalog.launch(entry['id'])['success']
+        spawn.assert_not_called()
+
+
+def test_reparse_executable_is_not_catalogued(tmp_path):
+    executable = make_exe(tmp_path / 'editor.exe')
+    linked = tmp_path / 'linked.exe'
+    try:
+        linked.symlink_to(executable)
+    except OSError:
+        pytest.skip('Creating symlinks requires Windows Developer Mode or privilege')
+    assert apps.AppCatalog(lambda: [source(linked)]).refresh() == []
+
+
+def test_document_association_cannot_bypass_application_policy(tmp_path):
+    from localmind.file_access import FileAccessError
+    executable = make_exe(tmp_path / 'editor.exe')
+    document = tmp_path / 'document & harmless.txt'
+    document.write_text('test fixture')
+    catalog = apps.AppCatalog(lambda: [source(executable)])
+    [entry] = catalog.refresh()
+    resolver = lambda suffix: executable
+    with mock.patch.object(apps.subprocess, 'Popen') as spawn:
+        with pytest.raises(FileAccessError):
+            apps._open_document(document, app_catalog=catalog, association_resolver=resolver)
+        spawn.assert_not_called()
+        catalog.set_permission(entry['id'], True, entry['fingerprint'], operation='launch')
+        apps._open_document(document, app_catalog=catalog, association_resolver=resolver)
+        assert spawn.call_args.args == ([str(executable), str(document)],)
+        assert spawn.call_args.kwargs['shell'] is False
+        catalog.set_permission(entry['id'], False, entry['fingerprint'], operation='launch')
+        with pytest.raises(FileAccessError):
+            apps._open_document(document, app_catalog=catalog, association_resolver=resolver)
+        assert spawn.call_count == 1
+
+
+def test_full_user_requires_installation_evidence_or_persistent_image_grant(tmp_path, monkeypatch):
+    from localmind.personal_permissions import PersonalMode, FILE_OPERATIONS
+    install = tmp_path / 'Programs'
+    install.mkdir()
+    installed = make_exe(install / 'editor.exe')
+    downloaded = make_exe(tmp_path / 'downloaded.exe')
+    monkeypatch.setattr(apps, '_installation_roots', lambda: (install,))
+    providers = lambda: [apps.replace(source(installed, name='Installed'), origin='shortcuts'),
+                         apps.replace(source(downloaded, name='Downloaded'), origin='shortcuts')]
+    state = tmp_path / 'permissions.json'
+    policy = PersonalMode(state, root_provider=lambda: [str(tmp_path)])
+    policy.configure('full_user', [], list(FILE_OPERATIONS))
+    catalog = apps.AppCatalog(providers, policy=policy)
+    rows = {row['name']: row for row in catalog.refresh()}
+    assert rows['Installed']['allowed']
+    assert not rows['Downloaded']['allowed']
+    catalog.set_permission(rows['Downloaded']['id'], True, rows['Downloaded']['fingerprint'], operation='launch')
+    restarted = apps.AppCatalog(providers, policy=PersonalMode(state, root_provider=lambda: [str(tmp_path)]))
+    rows = {row['name']: row for row in restarted.refresh()}
+    assert rows['Downloaded']['allowed']
+
+
+def test_relocated_foreign_profile_cannot_be_an_installed_app(tmp_path, monkeypatch):
+    from localmind import personal_permissions
+    relocated = tmp_path / 'RelocatedProfiles' / 'OtherSid'
+    relocated.mkdir(parents=True)
+    executable = make_exe(relocated / 'editor.exe')
+    monkeypatch.setattr(personal_permissions, 'foreign_profile_roots', lambda: (relocated,))
+    monkeypatch.setattr(apps, '_installation_roots', lambda: (tmp_path,))
+    catalog = apps.AppCatalog(lambda: [apps.replace(source(executable), origin='shortcuts')])
+    [entry] = catalog.refresh()
+    catalog.set_permission(entry['id'], True, entry['fingerprint'])
+    assert not catalog.is_allowed(entry['id'])
+    with mock.patch.object(apps.subprocess, 'Popen') as spawn:
+        assert not catalog.launch(entry['id'])['success']
+        spawn.assert_not_called()
+
+
+def test_combined_app_grant_is_one_atomic_policy_commit(tmp_path, monkeypatch):
+    executable = make_exe(tmp_path / 'editor.exe')
+    catalog = apps.AppCatalog(lambda: [source(executable)])
+    [entry] = catalog.refresh()
+    before = catalog.policy.public()
+    saved = []
+
+    def failed_save():
+        saved.append(catalog.policy.public()['apps'])
+        raise OSError('synthetic full disk')
+
+    monkeypatch.setattr(catalog.policy, '_save', failed_save)
+    with pytest.raises(OSError):
+        catalog.set_permission(entry['id'], True, entry['fingerprint'])
+    assert len(saved) == 1
+    assert {grant['operation'] for grant in saved[0]} == {'launch', 'focus', 'close'}
+    assert catalog.policy.public()['apps'] == before['apps']
+    assert catalog.policy.generation == before['revision']
+    assert not catalog.is_allowed(entry['id'])
+
+
+def test_hardlinked_app_alias_cannot_bypass_explicit_deny(tmp_path):
+    import os
+    first = make_exe(tmp_path / 'first.exe')
+    second = tmp_path / 'second.exe'
+    try:
+        os.link(first, second)
+    except OSError:
+        pytest.skip('Hardlinks unavailable on this filesystem')
+    catalog = apps.AppCatalog(lambda: [source(first, name='First'), source(second, name='Second')])
+    rows = {row['name']: row for row in catalog.refresh()}
+    catalog.set_permission(rows['First']['id'], False, rows['First']['fingerprint'], operation='launch')
+    catalog.set_permission(rows['Second']['id'], True, rows['Second']['fingerprint'], operation='launch')
+    assert not catalog.is_allowed(rows['Second']['id'])
 
 
 @pytest.mark.skipif(apps.os.name != 'nt', reason='Windows native read-only discovery')

@@ -62,7 +62,7 @@ def tools(tmp_path):
     def target_provider(app_id):
         if not permission['allowed'] or app_id != 'calculator':
             raise AppError('permission missing')
-        yield AppTarget(app_id, 'Calculator', path, permission['fingerprint'])
+        yield AppTarget(app_id, 'Calculator', path, permission['fingerprint'], safe_close=True)
 
     result = WindowTools(backend=backend, target_provider=target_provider,
                          app_ids=lambda: ['calculator'])
@@ -81,6 +81,20 @@ def test_window_ids_are_opaque_and_title_never_selects(tools):
     assert key.startswith('win-') and '99' != key
     assert service.focus_window('display only').execution_status == 'stale_target'
     assert service.focus_window(key).observed_state == 'foreground_window'
+
+
+def test_policy_change_invalidates_window_and_denies_close_independently(tools):
+    from localmind.personal_permissions import PersonalMode
+    service, backend, _ = tools
+    policy = PersonalMode()
+    service._policy = policy
+    old_key = selected(service)
+    policy.set_app_permission(('calculator',), 'close', False)
+    assert service.focus_window(old_key).execution_status == 'stale_target'
+    key = selected(service)
+    assert service.focus_window(key).success
+    assert not service.close_window_safely(key).success
+    assert 'close' not in backend.operations
 
 
 def test_read_only_selection_returns_verified_app_and_window_without_mutation(tools):
@@ -392,12 +406,29 @@ def test_document_apps_are_not_closed_without_reliable_data_safety(tools):
     @contextmanager
     def document_target(app_id):
         with provider(app_id) as target:
-            yield replace(target, path=Path('Obsidian.exe'))
+            yield replace(target, path=Path('Obsidian.exe'), safe_close=False)
 
     service.target_provider = document_target
     key = selected(service)
     result = service.close_window_safely(key)
     assert not result.success and result.execution_status == 'unsupported_safe_close'
+    assert 'close' not in backend.operations
+
+
+def test_editor_renamed_calc_does_not_gain_safe_close(tools):
+    service, backend, _ = tools
+    provider = service.target_provider
+
+    @contextmanager
+    def renamed_editor(app_id):
+        with provider('calculator') as target:
+            yield replace(target, id='editor', name='Editor renamed calc.exe', safe_close=False)
+
+    service.target_provider = renamed_editor
+    result = service.list_running()
+    assert result.data['windows'][0]['close_supported'] is False
+    key = result.data['windows'][0]['window_id']
+    assert service.close_window_safely(key).execution_status == 'unsupported_safe_close'
     assert 'close' not in backend.operations
 
 

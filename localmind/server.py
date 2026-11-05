@@ -11,6 +11,7 @@ import uuid
 from typing import Annotated, Literal
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
+from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
@@ -140,6 +141,26 @@ class PersonalModeRequest(BaseModel):
     portable_roots: list[Annotated[str, Field(min_length=1, max_length=1024)]] = Field(default_factory=list, max_length=16)
     server_instance: str = Field(min_length=32, max_length=32)
 
+class PolicyRevisionRequest(BaseModel):
+    model_config = {'extra': 'forbid', 'strict': True}
+    revision: str = Field(min_length=32, max_length=32)
+    server_instance: str = Field(min_length=32, max_length=32)
+
+class AccessPolicyRequest(PolicyRevisionRequest):
+    mode: Literal['restricted', 'full_user']
+    roots: list[Annotated[str, Field(min_length=1, max_length=1024)]] = Field(default_factory=list, max_length=16)
+    operations: list[Literal['search', 'read', 'open', 'create', 'overwrite', 'move', 'delete']] = Field(max_length=7)
+
+class RulePreviewRequest(PolicyRevisionRequest):
+    text: str = Field(min_length=1, max_length=2000)
+    scope: str | None = Field(default=None, min_length=1, max_length=1024)
+
+class RuleApplyRequest(PolicyRevisionRequest):
+    draft_id: str = Field(min_length=20, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
+
+class RuleRemoveRequest(PolicyRevisionRequest):
+    rule_id: str = Field(min_length=24, max_length=24, pattern=r'^[a-f0-9]+$')
+
 class FileSearchRequest(ConversationRequest):
     query: str = Field(default='', max_length=500)
     extensions: list[str] | None = Field(default=None, max_length=8)
@@ -168,6 +189,7 @@ class PermissionRequest(BaseModel):
     app_id: str = Field(min_length=1, max_length=100)
     allowed: bool
     fingerprint: str = Field(min_length=32, max_length=256)
+    operation: Literal['launch', 'focus', 'close'] | None = None
 
 class SpeechRequest(BaseModel):
     text: str = Field(min_length=1, max_length=1200)
@@ -505,8 +527,89 @@ def personal_permissions(x_localmind_key: Annotated[str | None, Header()] = None
     return {**file_access.personal_info(), 'server_instance': SERVER_INSTANCE}
 
 
+@app.get('/api/access-policy')
+def access_policy(x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    return {**file_access.personal_info(), 'server_instance': SERVER_INSTANCE}
+
+
+def _policy_revision(data):
+    if data.server_instance != SERVER_INSTANCE or data.revision != file_access.personal_mode.generation:
+        raise HTTPException(409, 'Сервер или политика изменились. Обнови экран возможностей и повтори просмотр.')
+
+
+def _policy_changed():
+    file_access._sync_policy()
+    return {**file_access.personal_info(), 'server_instance': SERVER_INSTANCE}
+
+
+@app.post('/api/access-policy')
+def set_access_policy(data: AccessPolicyRequest, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    try:
+        with file_access._lock, file_access.personal_mode._lock:
+            _policy_revision(data)
+            file_access.personal_mode.configure(data.mode, data.roots, data.operations)
+            return _policy_changed()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(409, str(exc) if isinstance(exc, ValueError) else 'Не удалось сохранить политику. Изменения не применены.') from exc
+
+
+@app.post('/api/access-policy/preview')
+def preview_access_rule(data: RulePreviewRequest, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    try:
+        # Catalog methods take policy -> catalog locks. Capture metadata before
+        # entering the file transaction so preview never discovers under it.
+        entries = catalog.entries()
+        with file_access._lock, file_access.personal_mode._lock:
+            _policy_revision(data)
+            folders = {}
+            basenames = {}
+            for row in file_access.personal_info()['roots']:
+                folders[row['path']] = row['path']
+                name = Path(row['path']).name.casefold()
+                basenames.setdefault(name, []).append(row['path'])
+            for name, paths in basenames.items():
+                if len(paths) == 1:
+                    folders[name] = paths[0]
+            try:
+                downloads = file_access.folder_provider()
+                folders['Загрузки'], folders['Downloads'] = str(downloads), str(downloads)
+            except (OSError, ValueError):
+                pass
+            return file_access.personal_mode.preview(data.text, scope=data.scope, apps=entries, folders=folders)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(409, str(exc) if isinstance(exc, ValueError) else 'Не удалось проверить правило.') from exc
+
+
+@app.post('/api/access-policy/apply')
+def apply_access_rule(data: RuleApplyRequest, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    try:
+        with file_access._lock, file_access.personal_mode._lock:
+            _policy_revision(data)
+            file_access.personal_mode.apply(data.draft_id)
+            return _policy_changed()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(409, str(exc) if isinstance(exc, ValueError) else 'Не удалось сохранить правило. Изменения не применены.') from exc
+
+
+@app.post('/api/access-policy/remove-rule')
+def remove_access_rule(data: RuleRemoveRequest, x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
+    try:
+        with file_access._lock, file_access.personal_mode._lock:
+            _policy_revision(data)
+            file_access.personal_mode.remove_rule(data.rule_id)
+            return _policy_changed()
+    except (OSError, ValueError) as exc:
+        raise HTTPException(409, str(exc) if isinstance(exc, ValueError) else 'Не удалось сохранить правило.') from exc
+
+
 @app.get('/api/actions')
-def action_log():
+def action_log(x_localmind_key: Annotated[str | None, Header()] = None):
+    authorize(x_localmind_key)
     from .action_journal import journal
     return {'actions': journal.snapshot()}
 
@@ -522,7 +625,7 @@ def set_personal_permissions(data: PersonalModeRequest, x_localmind_key: Annotat
         catalog.set_personal_mode(False)
         file_access.set_personal_mode(data.enabled, data.roots)
         catalog.configure_portable_roots(data.portable_roots if data.enabled else [])
-        catalog.set_personal_mode(data.enabled)
+        catalog.set_personal_mode(file_access.known_app_launch_allowed())
         return file_access.personal_info()
     except (FileAccessError, AppError, OSError) as exc:
         raise HTTPException(409, str(exc) if isinstance(exc, ValueError) else 'Не удалось сохранить разрешения.') from exc
@@ -687,8 +790,11 @@ def refresh_apps(x_localmind_key:Annotated[str | None,Header()]=None):
 def permission(data:PermissionRequest,x_localmind_key:Annotated[str | None,Header()]=None):
     authorize(x_localmind_key)
     try:
-        catalog.set_permission(data.app_id,data.allowed,data.fingerprint)
-        return {'ok':True}
+        if data.operation is None:
+            entries = catalog.set_permission(data.app_id,data.allowed,data.fingerprint)
+        else:
+            entries = catalog.set_permission(data.app_id,data.allowed,data.fingerprint,operation=data.operation)
+        return {'ok':True, 'apps': entries}
     except AppError as exc:
         raise HTTPException(409,str(exc)) from exc
 
