@@ -315,6 +315,8 @@ def prepare(prepared, actions_authorized, chat):
                     journal.record(intent.name, target, 'executed', result)
                 except (OSError, ValueError):
                     prepared.initial['audit_warning'] = 'Результат получен, но журнал не сохранён. Не повторяйте действие автоматически.'
+        from .agent import prepare_file_read
+        result = prepare_file_read(prepared, result)
         elapsed = round((time.monotonic() - action_started) * 1000)
         action_duration += elapsed
         result = replace(result, duration_ms=elapsed)
@@ -333,10 +335,6 @@ def prepare(prepared, actions_authorized, chat):
                 prepared.reference = Reference('application', intent.arguments['app_id'])
             elif intent.name == 'set_light':
                 prepared.reference = Reference('device', intent.arguments['device_id'])
-            if intent.name in ('files.read_selected_file', 'files.read_file') and result.data and isinstance(result.data.get('text'), str):
-                prepared.document_facts = [{'id': result.resolved_target, 'name': result.data.get('filename', 'Файл'),
-                                           'text': result.data['text'], 'kind': 'document'}]
-                prepared.dialogue = True
         # No dependent action follows an unobserved result, error or confirmation.
         if not result.success or result.execution_status != 'observed':
             break

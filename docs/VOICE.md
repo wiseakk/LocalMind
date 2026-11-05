@@ -1,3 +1,55 @@
+# Диагностика запуска исходников — 2026-11-05
+
+Сообщение «Компоненты голоса отсутствуют» приходит из `resource_setup.start`,
+до загрузки моделей. Проверка ASR ищет `faster_whisper` и `av`, проверка Silero
+ищет `torch` и `numpy` **в Python сервера**. Текст про восстановление установщиком
+показывается также в source-режиме. Наличие файлов модели не устанавливает библиотеки.
+`setup_windows.ps1` без `-Voice` ставит только базовые зависимости; `-Voice`
+добавляет Whisper/PyAV/Piper, но не объявляет Torch для стандартного Silero.
+TTS worker может выбрать `.voice-envs/silero`, тогда как setup проверяет Python
+сервера; проверять нужно обе среды. Этот патч не меняет установку/проверку голоса.
+
+Проверено без установки голосовых библиотек и без скачивания моделей:
+
+- `python` = `C:\Users\ExampleUser\AppData\Local\Programs\Python\Python311\python.exe`.
+- Отсутствуют `faster_whisper`, `av`, `ctranslate2`, `numpy`, `torch`, `piper`
+  (пакеты `faster-whisper`, `av`, `ctranslate2`, `numpy`, `torch`, `piper-tts`).
+  Piper — альтернативный TTS, для стандартного Silero он не требуется.
+- До работы Builder отсутствовали `.venv`, `.voice-envs/silero`, `runtime/core`.
+  Builder создал локальную `.venv` только для базовых зависимостей и тестов.
+- В текущем `LOCALAPPDATA\LocalMind\models`: small — отсутствуют все 4 файла
+  манифеста; medium — присутствуют 4/4; Silero — присутствует 1/1.
+  Наличие не подтверждает целостность, совместимость или готовность inference.
+- Ошибки native/DLL не установлены: библиотеки отсутствуют, импортировать нечего.
+  Микрофон, GPU, CPU inference и воспроизведение в этом задании не проверялись.
+  Это диагностика текущего интерпретатора, а не доказательство среды ранее
+  запущенного пользователем процесса.
+
+Из корня проекта выполните тем же интерпретатором, которым запускаете сервер
+(замените `python` на `.\.venv\Scripts\python.exe`, если сервер работает в ней):
+
+```powershell
+python -B -c "import sys,importlib.util as u; print(sys.executable); print({n: u.find_spec(n) is not None for n in ('faster_whisper','av','ctranslate2','numpy','torch','piper')})"
+python -B -c "import av,ctranslate2,faster_whisper; print('av',av.__version__); print('ctranslate2',ctranslate2.__version__); print('faster-whisper',faster_whisper.__version__)"
+python -B -c "import torch,numpy; print('torch',torch.__version__); print('numpy',numpy.__version__)"
+```
+
+Первая команда отличает отсутствие модулей от отсутствия моделей. Если модуль
+найден, но импорт падает с `ImportError`/`OSError`/`WinError`, сохраните traceback:
+это отдельная ошибка native/DLL, её нельзя исправить скачиванием модели.
+Если существует `.voice-envs/silero/Scripts/python.exe`, повторите первую и
+третью команды этим Python. Команды ничего не устанавливают и не скачивают.
+
+Наличие файлов моделей независимо от библиотек (проверка только метаданных):
+
+```powershell
+python -B -c "import json; from localmind.paths import APP_ROOT,MODELS; m=json.loads((APP_ROOT/'config/voice_resources.json').read_text(encoding='utf-8')); print('models:',MODELS); print({a['path']: (MODELS/a['path']).is_file() for a in m['assets']})"
+```
+
+После осознанной установки недостающих библиотек загрузка выбранной модели —
+отдельное действие с сетью, описанное ниже. Автоматическая установка тяжёлого
+Torch или моделей в рамках этой диагностики не выполнялась.
+
 # Голос в RC2
 
 Только small (быстрый, CPU/int8) и medium (качественный, CUDA/float16,

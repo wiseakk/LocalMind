@@ -82,17 +82,72 @@ def test_summary_executes_read_and_sends_extracted_content(monkeypatch, text):
     assert 'text' not in result['action_results'][0]['data']
 
 
-@pytest.mark.parametrize('data', [None, {}, {'filename': 'claimed-facts.pdf', 'text': '  '}])
-def test_empty_extraction_never_generates_summary(monkeypatch, data):
+@pytest.mark.parametrize('data', [None, {}, {'text': 23}, {'filename': 'claimed-facts.pdf', 'text': '  '}])
+@pytest.mark.parametrize('llm_first', [False, True])
+def test_empty_extraction_never_generates_summary(monkeypatch, data, llm_first):
     registry = CapabilityRegistry()
     registry.tools['files.read_selected_file'] = Capability('files.read_selected_file', ('file_id',), 'test', '',
         lambda a, o: ActionResult(True, 'files.read_selected_file', a['file_id'], 'observed', 'text_extracted',
             data=data))
     monkeypatch.setattr(agent, 'registry', registry)
+    monkeypatch.setattr('localmind.llm_planner.registry', registry)
+    from localmind.action_journal import ActionJournal
+    from localmind.capabilities import ToolIntent
+    monkeypatch.setattr('localmind.llm_planner.journal', ActionJournal())
+    monkeypatch.setattr('localmind.llm_planner.choose', lambda *a, **k:
+                        ([ToolIntent('files.read_selected_file', {'file_id': 'file-safe'})], 'schema'))
+    monkeypatch.setattr('localmind.model_manager.manager.native_tools_supported', lambda *a: False)
     monkeypatch.setattr(agent, 'ollama_chat', lambda *a, **k: pytest.fail('Must not infer content without extraction'))
     c = Conversation('owner', 0, references={'file': Reference('file', 'file-safe')}, focus='file')
-    result = agent.complete_reply(agent.prepare_reply('О чём этот документ?', actions_authorized=True, conversation=c))
+    result = agent.complete_reply(agent.prepare_reply('О чём этот документ?', actions_authorized=True, conversation=c,
+                                                     llm_first=llm_first, compose_actions=False))
     assert result['action_results'][0]['execution_status'] == 'extraction_failed'
+
+
+@pytest.mark.parametrize('execution_status,observed_state', [('process_created', 'text_extracted'), ('observed', None)])
+def test_unconfirmed_extraction_cannot_claim_read_success(monkeypatch, execution_status, observed_state):
+    registry = CapabilityRegistry()
+    registry.tools['files.read_selected_file'] = Capability('files.read_selected_file', ('file_id',), 'test', '',
+        lambda a, o: ActionResult(True, 'files.read_selected_file', a['file_id'], execution_status, observed_state,
+                                 data={'text': 'UNCONFIRMED-CONTENT'}))
+    monkeypatch.setattr(agent, 'registry', registry)
+    monkeypatch.setattr(agent, 'ollama_chat', lambda *a, **k: pytest.fail('No confirmed text'))
+    c = Conversation('owner', 0, references={'file': Reference('file', 'file-safe')}, focus='file')
+    result = agent.complete_reply(agent.prepare_reply('Прочитай этот файл', actions_authorized=True, conversation=c))
+    assert not result['action_results'][0]['success']
+    assert 'UNCONFIRMED-CONTENT' not in json.dumps(result)
+
+
+def test_verbatim_read_preserves_text_and_discloses_extraction_truncation(monkeypatch):
+    contents = 'Строка с проверенным содержимым.\n' * 100
+    registry = CapabilityRegistry()
+    registry.tools['files.read_selected_file'] = Capability('files.read_selected_file', ('file_id',), 'test', '',
+        lambda a, o: ActionResult(True, 'files.read_selected_file', a['file_id'], 'observed', 'text_extracted',
+                                 data={'text': contents, 'truncated': True}))
+    monkeypatch.setattr(agent, 'registry', registry)
+    monkeypatch.setattr(agent, 'ollama_chat', lambda *a, **k: pytest.fail('Plain reading requires no model'))
+    c = Conversation('owner', 0, references={'file': Reference('file', 'file-safe')}, focus='file')
+    result = agent.complete_reply(agent.prepare_reply('Прочитай этот документ', actions_authorized=True,
+                                                     conversation=c, response_length='short'))
+    assert contents in result['answer'] and 'неполный' in result['answer']
+    assert result['answer'] == result['speech_text'] == result['display_text']
+    assert result['context_sources'][0]['truncated']
+
+
+def test_ordinary_chat_still_streams_without_file_buffering(monkeypatch):
+    deltas = []
+    def chat(*args, **kwargs):
+        callback = agent.text_delta.get()
+        assert callback == deltas.append
+        callback('Обычный ')
+        callback('ответ.')
+        return {'content': json.dumps({'answer': 'Обычный ответ.'})}
+    monkeypatch.setattr(agent, 'ollama_chat', chat)
+    prepared = agent.prepare_reply('Расскажи про RSA')
+    prepared.on_delta = deltas.append
+    final = agent.complete_reply(prepared)
+    assert deltas == ['Обычный ', 'ответ.']
+    assert final['answer'] == 'Обычный ответ.'
 
 
 @pytest.mark.parametrize('text', ['Кратко опиши файл', 'Сделай выводы из этого PDF', 'Расскажи мне о документе'])
@@ -140,6 +195,6 @@ def test_compound_retains_filename_speech_separate_from_display(monkeypatch, tai
     assert 'две тысячи двадцать шестой год' in result['speech_text']
     if tail == 'прочитай его':
         assert prepared.initial['speech_deferred'] is True
-        assert 'Бюджет составляет' in result['speech_text']
+        assert 'An extracted fact: budget 739 rubles.' in result['speech_text']
     else:
         assert calls == [{'app_id': 'obsidian'}]
