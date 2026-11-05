@@ -735,7 +735,7 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
                 prepared.reference = reference
             if result.success:
                 prepared.reference = reference
-                if intent.name in ('files.find_latest_pdf_in_downloads', 'files.search') and result.data and result.data.get('file_id'):
+                if intent.name in ('files.find_latest_pdf_in_downloads', 'files.search', 'files.read_file') and result.data and result.data.get('file_id'):
                     prepared.reference = Reference('file', result.data['file_id'])
                 elif intent.name == 'apps.open':
                     prepared.reference = Reference('application', intent.arguments['app_id'])
@@ -743,15 +743,15 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
             # selected path, timestamp or window observation.
             prepared.compose_actions = False
             base['actions'] = [str(result)]
-            if intent.name == 'files.read_selected_file' and result.success:
+            if intent.name in ('files.read_selected_file', 'files.read_file') and result.success:
                 extracted = result.data.get('text') if isinstance(result.data, dict) else None
                 if (result.observed_state != 'text_extracted' or not isinstance(extracted, str)
                         or not extracted.strip()):
-                    result = refused(intent.name, intent.arguments['file_id'],
+                    result = refused(intent.name, result.resolved_target,
                                      'Не удалось извлечь текст документа. Содержание не установлено.', status='extraction_failed')
                     base['actions'] = [str(result)]
                 else:
-                    prepared.document_facts = [{'id': intent.arguments['file_id'], 'name': result.data.get('filename', 'Файл'),
+                    prepared.document_facts = [{'id': result.resolved_target, 'name': result.data.get('filename', 'Файл'),
                         'text': extracted, 'characters': len(extracted),
                         'truncated': result.data.get('truncated', False), 'kind': 'document'}]
                     prepared.dialogue = True

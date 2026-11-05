@@ -4,7 +4,7 @@ Model tools select approved scope IDs; only explicit settings can approve roots.
 Personal mode broadens reads/opening, never writes, scripts or OS privileges.
 """
 from contextlib import contextmanager, ExitStack
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import ctypes
 from ctypes import wintypes as w
@@ -507,6 +507,41 @@ class FileAccess:
             self.personal_mode.record('search', str(scope), 'denied')
             reason = str(exc) if isinstance(exc, FileAccessError) else 'Не удалось полностью и безопасно прочитать область поиска.'
             return refused(action, None, reason, status='permission_required' if 'разреш' in reason.casefold() or 'выключен' in reason else 'denied')
+
+    def read_file(self, owner, scope, relative_path):
+        """Exact scoped read; scope/relative_path must be grounded by the caller."""
+        action = 'files.read_file'
+        try:
+            if not isinstance(owner, str) or not owner or not isinstance(relative_path, str) or not 1 <= len(relative_path) <= 1024:
+                raise FileAccessError('Некорректная цель чтения.')
+            relative = Path(relative_path)
+            if (relative.is_absolute() or relative.drive or '..' in relative.parts
+                    or ':' in relative_path or '\x00' in relative_path):
+                raise FileAccessError('Нужен точный относительный путь внутри разрешённой области.')
+            with self._lock, self.personal_mode._lock:
+                self._sync_policy()
+                roots = self.personal_mode.roots()
+                if scope not in roots:
+                    raise FileAccessError('Область чтения не разрешена. Проверь настройки доступа.')
+                path = roots[scope] / relative
+                if roots[scope] not in path.parents or path.suffix.casefold() not in READABLE_EXTENSIONS:
+                    raise FileAccessError('Нужен поддерживаемый документ внутри разрешённой области.')
+                self.personal_mode.check_file(path, 'read')
+                with _locked_path(path):
+                    _checked(path)
+                    self.personal_mode.check_file(path, 'read')
+                    if path.stat().st_size > 10 * 1024 * 1024:
+                        raise FileAccessError('Для извлечения текста выбери документ до 10 МиБ.')
+                    stamp, digest = _fingerprint(path)
+                    if len(self._selected) >= 256:
+                        raise FileAccessError('Слишком много выбранных файлов. Начни новый сеанс доступа.')
+                    selected = SelectedFile(secrets.token_urlsafe(24), owner, path, stamp, digest)
+                    self._selected[selected.id] = selected
+                    return replace(self.read_selected(owner, selected.id), action=action)
+        except (OSError, ValueError, RuntimeError) as exc:
+            reason = str(exc) if isinstance(exc, FileAccessError) else 'Не удалось безопасно прочитать указанный файл.'
+            self.personal_mode.record('read', str(scope), 'denied', reason)
+            return refused(action, None, reason, status='permission_required' if 'разреш' in reason.lower() else 'denied')
 
     def read_selected(self, owner, file_id, query='', budget=12000):
         from .attachments import AttachmentError, extract_document, choose_document_text

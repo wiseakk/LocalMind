@@ -1212,6 +1212,55 @@ LocalMind_MVP_01/.venv; это CPython 3.14, не runtime будущей сбо�
 .test-artifacts/rc3-ui-copy-check.json. Восстановительный снимок изменений:
 .test-artifacts/rc3-builder-recovery/builder-working-snapshot.zip (не релиз).
 
+## 2026-11-05 — исправление адресного чтения и layout возможностей
+
+База: 24e5d84adc59fcf6c5e0d3c46ed09fc3f6a0ac27. Изменение ограничено
+файловым routing/planner/адаптером, CSS экрана возможностей и регрессиями.
+Сохранение разрешений в API/PersonalMode работало; чтение по явному пути не
+попадало в envelope и не доходило до проверки этих прав. Обе заявленные формы
+теперь связываются с files.read_file (ID сохранённого корня + точный
+относительный путь). Read проверяется контроллером до I/O и повторно под
+удерживаемыми Windows handles; текст передаётся в document_facts для ответа,
+а не в публичные action_results. Политика, SID, deny и обязательные исключения
+не менялись. Не требуется дополнительно включать полный доступ.
+
+Проверено на Windows, Python 3.14.5 из существующего окружения соседнего
+проекта (его файлы/зависимости не изменялись); данные всех тестов синтетические
+в .test-artifacts, пользовательская LocalMind_QA и её политика не изменялись.
+
+- Связанные Python-тесты: 223 passed, 1 skipped, 35 subtests passed.
+  Skip: тест 8.3 alias — том не предоставил короткое имя для фикстуры.
+  Набор: test_explicit_file_reads, test_llm_desktop, test_file_access,
+  test_personal_files, test_access_policy, test_access_policy_http,
+  test_realworld_followups, test_conversations_next,
+  test_speech_agent_reliability, test_agent. Полный pytest не запускался.
+- Новые 26 регрессий: обе формулировки, настоящий абсолютный Windows-путь
+  с пробелами, exact/schema/native/offline-fallback, сохранение и перезагрузка
+  restricted-политики через HTTP, отказ вне корня, deny/отзыв/no-read,
+  обязательные исключения, traversal/ADS/UNC, подмена моделью и подтверждение.
+  Ollama подменена фикстурой; проверка настоящего inference не заявляется.
+- node tests/access-dom.test.cjs и node tests/access-layout-dom.test.cjs: PASS.
+- node tests/access-layout-browser.cjs: PASS, изолированный Chromium без
+  сетевых запросов. 8 CSS viewport от 320 до 1280 px, в том числе эквиваленты
+  окна 1024 px при 125%/140%; длинные пути, границы текста, высота карточек и
+  нулевое горизонтальное переполнение. Скриншоты просмотрены. Первичный
+  sandbox-запуск браузера дал spawn EPERM; изолированный повтор с разрешённым
+  запуском процесса прошёл, системные настройки/ACL не менялись.
+- Самостоятельное code/security review и git diff --check: PASS.
+  Регрессия совместимости старого read_selected-контракта найдена связанными
+  тестами и исправлена; итоговый набор выше повторно прошёл.
+
+DevCrew, установщик, полный Python/DOM suite не запускались. Qt DPI,
+микрофон, GPU/CPU inference и физический offline-demo в этой задаче не
+проверялись. Это адресное исправление исходников, не новая проверка релиза.
+Запуск сервера после подготовки зависимостей: python start.py. Offline-demo
+после загрузки локальных моделей, troubleshooting и инструкции запуска:
+docs/RC3_HANDOFF.md; объяснения и 60+ вопросов защиты: docs/DEFENSE_QA.md.
+Если отказ сохраняется: перезапустить процесс с обновлёнными исходниками,
+проверить в «Возможности» сохранённый корень и read; deny сохраняет приоритет.
+Артефакты этого прогона: .test-artifacts/file-read-fix-python.txt и
+.test-artifacts/access-layout/{geometry.json,width-1280.png,width-731.png,width-390.png}.
+
 ## 2026-11-04 — новая система доступа RC3, реализация
 
 Добавлены restricted/full_user, единая SID/schema-политика с атомарным

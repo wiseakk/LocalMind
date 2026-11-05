@@ -27,7 +27,8 @@ class Capability:
 
     def schema(self):
         return {'type': 'object', 'additionalProperties': False,
-                'properties': {k: {'type': 'string', 'minLength': 1, 'maxLength': 128} for k in self.arguments},
+                'properties': {k: {'type': 'string', 'minLength': 1, 'maxLength':
+                    1024 if self.name == 'files.read_file' and k == 'relative_path' else 128} for k in self.arguments},
                 'required': list(self.arguments)}
 
 
@@ -68,6 +69,11 @@ def _read(args, owner):
     return file_access.read_selected(owner, args['file_id'])
 
 
+def _read_file(args, owner):
+    from .file_access import file_access
+    return file_access.read_file(owner, args['scope'], args['relative_path'])
+
+
 def _describe(args, owner):
     from .file_access import file_access
     info = file_access.selected_info(owner, args['file_id'])
@@ -96,6 +102,7 @@ class CapabilityRegistry:
             Capability('files.open_selected_file', ('file_id',), 'separate_exact_pdf_open_grant', 'Открыть выбранный неизменённый PDF.', _file),
             Capability('files.search', ('query', 'extension', 'scope', 'sort_by', 'order'), 'approved_read_scope', 'Поиск обычных файлов с фильтрами и порядком сортировки.', _search),
             Capability('files.read_selected_file', ('file_id',), 'approved_read_scope', 'Прочитать фактическое содержимое выбранного файла.', _read),
+            Capability('files.read_file', ('scope', 'relative_path'), 'approved_read_scope', 'Прочитать точно указанный файл в сохранённой разрешённой области.', _read_file),
             Capability('files.describe_selected_file', ('file_id',), 'approved_read_scope', 'Показать проверенное имя и путь выбранного файла.', _describe),
             Capability('files.prepare_mutation', ('operation', 'scope', 'filename', 'content', 'destination'), 'extended_and_separate_exact_confirmation', 'Подготовить изменение обычного файла в выбранной папке. Само изменение требует отдельной кнопки подтверждения.', prepare_mutation),
             Capability('system.open_settings', ('page_id',), 'extended_fixed_windows_page', 'Открыть страницу Экран или Звук; не изменяет настройки.', open_settings),
@@ -116,7 +123,7 @@ class CapabilityRegistry:
                     or intent.arguments['device_id'] not in DEVICES or intent.arguments.get('state') not in ('on', 'off')):
                 return False
         return bool(tool and type(intent.arguments) is dict and set(intent.arguments) == set(tool.arguments)
-                    and all(type(v) is str and (0 < len(v) <= 128 or
+                    and all(type(v) is str and (0 < len(v) <= (1024 if intent.name == 'files.read_file' and k == 'relative_path' else 128) or
                             intent.name == 'files.search' and k in ('query', 'extension') and v == '' or
                             intent.name == 'files.prepare_mutation' and k in ('content', 'destination') and len(v) <= 128)
                             for k, v in intent.arguments.items()))

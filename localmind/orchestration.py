@@ -71,6 +71,10 @@ def pc_intent(text, conversation, assessment):
     end = r'(?:[, ]+пожалуйста)?[.!]?'
     if command_negated(normalized) or re.search(r'[«»"`]|\b(?:если|когда)\b', normalized, re.I):
         return None, None, None
+    from .file_requests import read_request
+    explicit_read, read_error = read_request(normalized)
+    if explicit_read or read_error:
+        return explicit_read, read_error, None
     file_ref = conversation.references.get('file') if conversation.focus == 'file' else None
     document = r'(?:его|этот (?:файл|документ|PDF(?:-файл)?)|последний PDF(?:-файл)?|содержимое (?:файла|документа))'
     read = re.fullmatch(polite + r'(?:а\s+)?(?:что\s+(?:(?:этот|этот самый)\s+(?:файл|документ)\s+)?(?:внутри|содержит)|что\s+(?:находится\s+)?(?:внутри\s+(?:этого\s+(?:документа|файла)|него)|в\s+(?:нём|нем|этом (?:файле|документе)))|(?:прочитай|объясни|перескажи|суммируй|кратко\s+перескажи|расскажи(?:\s+кратко)?\s+про)\s+' + document + r'|(?:сделай|дай)\s+(?:краткое\s+)?(?:резюме|содержание|описание)\s+(?:этого\s+(?:PDF(?:-файла)?|документа|файла)|последнего\s+PDF(?:-файла)?)' + r')[?!.]*', normalized, re.I)

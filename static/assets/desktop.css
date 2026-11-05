@@ -215,31 +215,34 @@ html[data-low-performance="true"] #mic {animation:none;box-shadow:none}
 @media(max-height:650px) {.welcome {padding-top:16px}.welcome h1 {font-size:28px}.welcome>p {margin-block:10px}.suggestions button {padding:9px 12px}.composer-area {padding-top:8px;padding-bottom:12px}.sidebar .brand {margin-bottom:12px}.sidebar .nav {min-height:34px;padding-block:6px}.rail-nav {padding-top:4px;margin-top:4px}}
 
 /* Explicit permissions use static cards, native controls and ordinary scrolling. */
-#accessDialog {width:min(1000px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:92dvh;padding:28px;overflow-y:auto}
+#accessDialog {box-sizing:border-box;width:min(1000px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:92dvh;padding:24px;overflow-y:auto;overflow-x:hidden;overflow-wrap:anywhere}
+#accessDialog .dialog-heading>div,#accessForm {min-width:0}
 #accessDialog h2 {font-size:clamp(21px,3vw,30px)}
 #accessDialog h3 {font-size:17px;margin:0 0 12px}
 #accessDialog p {line-height:1.65;overflow-wrap:anywhere}
 #accessDialog textarea,#accessDialog select {width:100%;box-sizing:border-box;background:var(--input);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0}
 #accessDialog label {line-height:1.5}
 .access-current {padding:12px 16px;border-left:3px solid var(--accent);background:var(--selected);border-radius:0 8px 8px 0}
-.access-modes {display:grid;grid-template-columns:1fr 1fr;gap:14px;border:0;margin:22px 0;padding:0;min-width:0}
+.access-modes {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:14px;border:0;margin:18px 0;padding:0;min-width:0}
 .access-modes legend {margin-bottom:12px;font-weight:600}
-.access-mode {display:flex;align-items:flex-start;gap:12px;padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--panel);cursor:pointer;min-width:0}
+.access-mode {display:flex;align-items:flex-start;gap:12px;padding:16px;margin:0;border:1px solid var(--line);border-radius:12px;background:var(--panel);cursor:pointer;min-width:0}
 .access-mode.selected {background:var(--selected);border-color:var(--accent)}
-.access-mode input {margin-top:5px;flex:none}
+#accessDialog .access-mode input[type="radio"] {width:16px;height:16px;min-height:0;padding:0;margin:4px 0 0;flex:0 0 16px}
+.access-mode>span {min-width:0;flex:1;overflow-wrap:anywhere}
 .access-mode strong,.access-mode small {display:block}
-.access-mode strong {font-size:16px;margin-bottom:8px}
+.access-mode strong {font-size:16px;margin-bottom:6px}
 .access-mode small {font-size:12px;line-height:1.65;color:var(--muted)}
-.access-columns {display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.access-card {padding:20px;border:1px solid var(--line);border-radius:12px;margin:14px 0;background:var(--bg);min-width:0}
+.access-columns {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:14px}
+.access-card {padding:16px;border:1px solid var(--line);border-radius:12px;margin:14px 0;background:var(--bg);min-width:0}
 .access-columns>.access-card {margin:0}
-#accessOperations {display:grid;grid-template-columns:1fr 1fr;gap:4px;border:0;margin:0;padding:0}
+#accessOperations {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:4px 10px;border:0;min-width:0;margin:0;padding:0}
 #accessOperations .check {font-size:12px;min-height:34px;margin:0}
 .access-actions {display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:16px 0}
 .access-actions h3 {flex:1;margin:0!important}
+.access-actions>button {max-width:100%;white-space:normal;overflow-wrap:anywhere}
 .access-exclusions {border-left:3px solid var(--warm)}
 .access-exclusions>p:first-of-type {color:var(--warm);font-size:13px}
-.access-journal {max-height:300px;overflow:auto;font-size:12px;line-height:1.7}
+.access-journal {max-height:300px;overflow-y:auto;overflow-x:hidden;font-size:12px;line-height:1.7;overflow-wrap:anywhere}
 .access-log-entry {padding:10px 0;border-bottom:1px solid var(--line);margin:0}
 #accessRulePreview {margin-top:16px}
 #accessRuleInterpretation {white-space:pre-wrap}

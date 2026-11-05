@@ -99,8 +99,13 @@ def offers(text, conversation):
         add('files.search', {'query': {'type': 'string', 'maxLength': 128},
             'extension': _enum(('', 'pdf', 'txt', 'md', 'docx', 'csv', 'json', 'tsv')), 'scope': _enum(scopes),
             'sort_by': _enum(('modified', 'created', 'size', 'name')), 'order': _enum(('asc', 'desc'))})
+    from .file_requests import read_request
+    explicit_read, read_error = read_request(text)
+    if explicit_read:
+        add(explicit_read.name, {key: {**_enum([value]), 'maxLength': 1024 if key == 'relative_path' else 128}
+                                for key, value in explicit_read.arguments.items()})
     if current and current.kind == 'file':
-        if has(text, READ):
+        if has(text, READ) and not (explicit_read or read_error):
             add('files.read_selected_file', {'file_id': _enum([current.id])})
         if has(text, r'название|называется|имя'):
             add('files.describe_selected_file', {'file_id': _enum([current.id])})
@@ -320,8 +325,8 @@ def prepare(prepared, actions_authorized, chat):
                 prepared.reference = Reference('application', intent.arguments['app_id'])
             elif intent.name == 'set_light':
                 prepared.reference = Reference('device', intent.arguments['device_id'])
-            if intent.name == 'files.read_selected_file' and result.data and isinstance(result.data.get('text'), str):
-                prepared.document_facts = [{'id': intent.arguments['file_id'], 'name': result.data.get('filename', 'Файл'),
+            if intent.name in ('files.read_selected_file', 'files.read_file') and result.data and isinstance(result.data.get('text'), str):
+                prepared.document_facts = [{'id': result.resolved_target, 'name': result.data.get('filename', 'Файл'),
                                            'text': result.data['text'], 'kind': 'document'}]
                 prepared.dialogue = True
         # No dependent action follows an unobserved result, error or confirmation.
