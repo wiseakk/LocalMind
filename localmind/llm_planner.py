@@ -21,7 +21,7 @@ from .action_journal import journal
 OPEN = r'откр\w*|запус\w*|запуст\w*'
 FOCUS = r'вывед\w*|вывести|передний\s+план|сфокус\w*|активир\w*|поверх\s+окон'
 SEARCH = r'найди|найти|поищи|покажи\s+файл\w*'
-READ = r'прочит\w*|перескаж\w*|суммир\w*|внутри|содерж\w*|резюме'
+READ = r'прочит\w*|перескаж\w*|суммир\w*|внутри|содерж\w*|резюме|что\s+написано'
 
 
 class InvalidPlan(ValueError):
@@ -58,6 +58,16 @@ def offers(text, conversation):
     from .desktop_tools import SETTINGS_PAGES, BOOKMARKS, WORKSPACES
     if not actionable(text):
         return {}
+    from .file_requests import read_request, delete_request
+    for parser in (read_request, delete_request):
+        intent, error = parser(text)
+        if intent:
+            return {intent.name: {'type': 'object', 'additionalProperties': False,
+                    'properties': {key: {**_enum([value]), 'maxLength':
+                        1024 if key == 'relative_path' else 512 if key == 'filename' else 128}
+                        for key, value in intent.arguments.items()}, 'required': list(intent.arguments)}}
+        if error:
+            return {}
     aliases = _all_app_aliases()
     app_ids = [key for key, names in aliases.items() if any(_contains_alias(text, alias) for alias in (key, *names))]
     current = conversation.references.get(conversation.focus)
@@ -99,13 +109,8 @@ def offers(text, conversation):
         add('files.search', {'query': {'type': 'string', 'maxLength': 128},
             'extension': _enum(('', 'pdf', 'txt', 'md', 'docx', 'csv', 'json', 'tsv')), 'scope': _enum(scopes),
             'sort_by': _enum(('modified', 'created', 'size', 'name')), 'order': _enum(('asc', 'desc'))})
-    from .file_requests import read_request
-    explicit_read, read_error = read_request(text)
-    if explicit_read:
-        add(explicit_read.name, {key: {**_enum([value]), 'maxLength': 1024 if key == 'relative_path' else 128}
-                                for key, value in explicit_read.arguments.items()})
     if current and current.kind == 'file':
-        if has(text, READ) and not (explicit_read or read_error):
+        if has(text, READ):
             add('files.read_selected_file', {'file_id': _enum([current.id])})
         if has(text, r'название|называется|имя'):
             add('files.describe_selected_file', {'file_id': _enum([current.id])})
@@ -281,6 +286,9 @@ def prepare(prepared, actions_authorized, chat):
         prepared.initial.update(answer=str(result), engine='tool-policy', action_results=[result.to_dict()])
         return True
     if not intents:
+        from .file_requests import read_request, delete_request
+        if any(intent or error for intent, error in (read_request(text), delete_request(text))):
+            return False  # Exact user target still passes the live controller.
         prepared.initial.update(answer='Не удалось выбрать разрешённое действие. Уточните цель или проверьте доступ в настройках.', engine='tool-policy')
         return True
     outcomes, steps = [], []

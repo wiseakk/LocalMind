@@ -631,6 +631,12 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
         base['conversation_id'] = conversation.id
     prepared.generation = generation or defaults()
     base['generation'] = prepared.generation.to_dict()
+    from .file_requests import image_path_request
+    if image_path_request(text):
+        prepared.compose_actions = False
+        base.update(answer='Анализ изображения по пути на диске пока не поддерживается. Прикрепи изображение к сообщению.',
+                    engine='vision-unavailable')
+        return prepared
     if llm_first and conversation:
         from .llm_planner import prepare as prepare_tools
         if prepare_tools(prepared, actions_authorized, ollama_chat):
@@ -724,6 +730,8 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
             check_cancelled()
             result = (registry.execute(proposal, intent, conversation.id) if proposal else
                       refused(intent.name, None, 'План не прошёл проверку. Уточни одно действие и цель.'))
+            if result.execution_status == 'confirmation_required':
+                base.update(confirmation_required=True, pending_operation=result.data)
             base['steps'] = [{'intent': intent.name, 'selected_tool': intent.name,
                 'resolved_target': result.resolved_target, 'arguments': intent.arguments,
                 'permission_decision': 'allowed' if result.success else result.execution_status,

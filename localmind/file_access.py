@@ -527,6 +527,7 @@ class FileAccess:
                 if roots[scope] not in path.parents or path.suffix.casefold() not in READABLE_EXTENSIONS:
                     raise FileAccessError('Нужен поддерживаемый документ внутри разрешённой области.')
                 self.personal_mode.check_file(path, 'read')
+                _checked(path)  # Report absence after authorization, before Windows handle errors.
                 with _locked_path(path):
                     _checked(path)
                     self.personal_mode.check_file(path, 'read')
@@ -539,9 +540,10 @@ class FileAccess:
                     self._selected[selected.id] = selected
                     return replace(self.read_selected(owner, selected.id), action=action)
         except (OSError, ValueError, RuntimeError) as exc:
-            reason = str(exc) if isinstance(exc, FileAccessError) else 'Не удалось безопасно прочитать указанный файл.'
+            missing = isinstance(exc, FileNotFoundError)
+            reason = 'Указанный файл не найден.' if missing else str(exc) if isinstance(exc, FileAccessError) else 'Не удалось безопасно прочитать указанный файл.'
             self.personal_mode.record('read', str(scope), 'denied', reason)
-            return refused(action, None, reason, status='permission_required' if 'разреш' in reason.lower() else 'denied')
+            return refused(action, None, reason, status='not_found' if missing else 'permission_required' if 'разреш' in reason.lower() else 'denied')
 
     def read_selected(self, owner, file_id, query='', budget=12000):
         from .attachments import AttachmentError, extract_document, choose_document_text

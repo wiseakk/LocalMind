@@ -19,7 +19,7 @@ def saved_access(tmp_path, monkeypatch):
     root = desktop / 'LocalMind_QA'
     root.mkdir(parents=True)
     target = root / 'readme.txt'
-    target.write_text('Код проверки: ORBIT-739.', encoding='utf-8')
+    target.write_text('Код проверки: PELMEN-42.', encoding='utf-8')
     state = tmp_path / 'policy.json'
     access = FileAccess(lambda: desktop, opener=Mock(), persistence=state)
     access.personal_mode.configure('restricted', [str(root)], ['read', 'search', 'open'])
@@ -35,6 +35,8 @@ def saved_access(tmp_path, monkeypatch):
 
 
 def request(target, style):
+    if style == 'contents':
+        return f'Что написано в файле {target}?'
     return (f'Прочитай файл {target} и скажи код проверки.' if style == 'absolute' else
             'Прочитай содержимое файла readme.txt в папке LocalMind_QA на рабочем столе.')
 
@@ -55,7 +57,7 @@ def test_saved_restricted_grants_reach_reader_and_answer(saved_access, monkeypat
             return {'content': json.dumps({'calls': [{'tool': intent.name, 'arguments': intent.arguments}]})}
         if tools:
             return {'tool_calls': [{'function': {'name': intent.name, 'arguments': intent.arguments}}]}
-        return {'content': json.dumps({'answer': 'Код проверки: ORBIT-739.'})}
+        return {'content': json.dumps({'answer': 'Код проверки: PELMEN-42.'})}
 
     monkeypatch.setattr(agent, 'ollama_chat', chat)
     if route == 'native':
@@ -70,11 +72,11 @@ def test_saved_restricted_grants_reach_reader_and_answer(saved_access, monkeypat
     assert prepared.result.success and prepared.result.action == 'files.read_file'
     assert prepared.result.observed_state == 'text_extracted'
     assert prepared.reference.kind == 'file' and prepared.reference.id == prepared.result.resolved_target
-    assert prepared.document_facts[0]['text'] == 'Код проверки: ORBIT-739.'
+    assert prepared.document_facts[0]['text'] == 'Код проверки: PELMEN-42.'
     assert 'text' not in prepared.initial['action_results'][0]['data']
     final = agent.complete_reply(prepared)
-    assert 'ORBIT-739' in final['answer']
-    assert 'Код проверки: ORBIT-739.' in json.dumps(seen, ensure_ascii=False)
+    assert 'PELMEN-42' in final['answer']
+    assert 'Код проверки: PELMEN-42.' in json.dumps(seen, ensure_ascii=False)
     assert access.personal_mode.generation == revision and access.personal_mode.mode == 'restricted'
     assert any(row['operation'] == 'read' and row['decision'] == 'observed' for row in access.personal_info()['access_log'])
     assert not access.read_selected('other', prepared.reference.id).success
@@ -150,7 +152,7 @@ def test_exact_read_needs_no_search_or_open_grant(saved_access):
     intent, error = read_request(request(target, 'absolute'))
     assert not error
     result = registry.execute(intent, intent, 'owner')
-    assert result.success and 'ORBIT-739' in result.data['text']
+    assert result.success and 'PELMEN-42' in result.data['text']
     assert not access.open_selected('owner', result.resolved_target).success
 
 
@@ -171,7 +173,7 @@ def test_review_required_before_reading(saved_access, monkeypatch):
     reader.assert_not_called()
 
 
-@pytest.mark.parametrize('style', ['absolute', 'desktop'])
+@pytest.mark.parametrize('style', ['absolute', 'desktop', 'contents'])
 def test_http_saved_settings_and_chat_share_the_reloaded_policy(saved_access, monkeypatch, style):
     from fastapi.testclient import TestClient
     from types import SimpleNamespace
@@ -191,8 +193,8 @@ def test_http_saved_settings_and_chat_share_the_reloaded_policy(saved_access, mo
             assert set(available) == {'files.read_file'}
             args = {key: definition['enum'][0] for key, definition in available['files.read_file']['properties'].items()}
             return {'content': json.dumps({'calls': [{'tool': 'files.read_file', 'arguments': args}]})}
-        assert 'ORBIT-739' in json.dumps(messages, ensure_ascii=False)
-        return {'content': json.dumps({'answer': 'Код проверки: ORBIT-739.'})}
+        assert 'PELMEN-42' in json.dumps(messages, ensure_ascii=False)
+        return {'content': json.dumps({'answer': 'Код проверки: PELMEN-42.'})}
 
     monkeypatch.setattr(agent, 'ollama_chat', chat)
     client = TestClient(server.app, base_url='http://127.0.0.1', client=('127.0.0.1', 1234))
@@ -210,7 +212,7 @@ def test_http_saved_settings_and_chat_share_the_reloaded_policy(saved_access, mo
         assert response.status_code == 200, response.text
         body = response.json()
         assert body['engine'] == 'ollama' and body['planner_mode'] == 'schema'
-        assert 'ORBIT-739' in body['answer']
+        assert 'PELMEN-42' in body['answer']
         outcome = body['action_results'][0]
         assert outcome['success'] and outcome['action'] == 'files.read_file'
         assert outcome['resolved_target'] and outcome['data']['path'] == str(target)
@@ -218,3 +220,266 @@ def test_http_saved_settings_and_chat_share_the_reloaded_policy(saved_access, mo
         assert client.get('/api/access-policy').json()['operations'] == ['open', 'read', 'search']
     finally:
         store.close()
+
+
+READ_FORMS = ['Прочитай файл', 'Что написано в файле', 'Покажи содержимое файла',
+              'Что внутри файла', 'Что находится внутри файла', 'Что содержится в файле']
+
+
+def stub_planner(monkeypatch, route):
+    """Only Ollama is replaced; the registry and controller perform real I/O."""
+    def chat(messages, tools, **kwargs):
+        if 'calls' in kwargs.get('response_format', {}).get('properties', {}):
+            if route == 'empty':
+                return {'content': '{"calls":[]}'}
+            available = json.loads(messages[-1]['content'])['available']
+            assert len(available) == 1
+            name, schema = next(iter(available.items()))
+            args = {key: field['enum'][0] for key, field in schema['properties'].items()}
+            return {'content': json.dumps({'calls': [{'tool': name, 'arguments': args}]})}
+        assert 'PELMEN-42' in json.dumps(messages, ensure_ascii=False)
+        return {'content': '{"answer":"Код проверки: PELMEN-42."}'}
+    monkeypatch.setattr(agent, 'ollama_chat', chat)
+    if route == 'offline':
+        def unavailable(*args, **kwargs):
+            raise OSError('fixture planner unavailable')
+        monkeypatch.setattr(planner, 'choose', unavailable)
+
+
+@pytest.mark.parametrize('prefix', READ_FORMS)
+@pytest.mark.parametrize('state', ['allowed', 'missing', 'outside', 'no_read', 'deny'])
+@pytest.mark.parametrize('route', ['exact', 'schema', 'empty', 'offline'])
+def test_content_questions_use_exact_file_and_live_policy(saved_access, monkeypatch, prefix, state, route):
+    access, root, target = saved_access
+    # A stale selection must never replace the explicit target.
+    old = access.read_file('owner', access.personal_info()['roots'][0]['id'], target.name)
+    conversation = Conversation('owner', 0, references={'file': Reference('file', old.resolved_target)}, focus='file')
+    target = root / '1.txt'
+    target.write_text('Код проверки: PELMEN-42.', encoding='utf-8')
+    if state == 'missing':
+        target = root / 'missing' / '1.txt'
+    elif state == 'outside':
+        target = root.parent / '1.txt'
+        target.write_text('FORBIDDEN', encoding='utf-8')
+    elif state == 'no_read':
+        access.personal_mode.configure('restricted', [str(root)], ['search'])
+    elif state == 'deny':
+        draft = access.personal_mode.preview('Не трогай папку LocalMind_QA', folders={'LocalMind_QA': str(root)})
+        access.personal_mode.apply(draft['draft_id'])
+    if state in ('outside', 'no_read', 'deny'):
+        with pytest.raises(ValueError) as denied:
+            access.personal_mode.check_file(target, 'read')
+    stub_planner(monkeypatch, route)
+    prepared = agent.prepare_reply(f'{prefix} {target}?', actions_authorized=True, conversation=conversation,
+                                   llm_first=route != 'exact', compose_actions=False)
+    final = agent.complete_reply(prepared)
+    if state == 'allowed':
+        assert prepared.result.action == 'files.read_file' and prepared.result.success
+        assert prepared.result.observed_state == 'text_extracted'
+        assert prepared.result.data['path'] == str(target)
+        assert final['answer'] == 'Код проверки: PELMEN-42.'
+    else:
+        assert not prepared.dialogue and not prepared.document_facts
+        assert not prepared.result.success
+        if state == 'missing':
+            assert prepared.result.execution_status == 'not_found'
+            assert 'не найден' in final['answer']
+        else:
+            assert final['answer'] == str(denied.value)
+        assert 'PELMEN-42' not in final['answer']
+
+
+@pytest.fixture
+def mutations(saved_access, monkeypatch):
+    from localmind.file_mutations import FileMutations
+    access, _, _ = saved_access
+    service = FileMutations(access)
+    monkeypatch.setattr('localmind.file_mutations.file_mutations', service)
+    return service
+
+
+@pytest.mark.parametrize('route', ['exact', 'schema', 'empty', 'offline'])
+@pytest.mark.parametrize('state', ['allowed', 'missing', 'outside', 'no_delete', 'deny'])
+def test_delete_exact_path_prepares_or_returns_controller_reason(saved_access, mutations, monkeypatch, route, state):
+    access, root, _ = saved_access
+    nested = root / 'Notes with spaces'
+    nested.mkdir()
+    target = nested / 'delete me.txt'
+    target.write_text('original', encoding='utf-8')
+    # Same name in another granted root cannot be selected by the model.
+    other = root.parent / 'other'
+    other.mkdir()
+    duplicate = other / target.name
+    duplicate.write_text('other', encoding='utf-8')
+    access.personal_mode.configure('restricted', [str(root), str(other)], ['read', 'delete'])
+    if state == 'missing':
+        target = nested / 'missing' / 'delete me.txt'
+    elif state == 'outside':
+        target = root.parent / 'delete me.txt'
+        target.write_text('outside', encoding='utf-8')
+    elif state == 'no_delete':
+        access.personal_mode.configure('restricted', [str(root), str(other)], ['read'])
+    elif state == 'deny':
+        draft = access.personal_mode.preview('Не трогай папку LocalMind_QA', folders={'LocalMind_QA': str(root)})
+        access.personal_mode.apply(draft['draft_id'])
+    if state in ('outside', 'no_delete', 'deny'):
+        with pytest.raises(ValueError) as denied:
+            access.personal_mode.check_file(target, 'delete')
+    text = f'Удали файл {target}.'
+    conversation = Conversation('owner', 0)
+    stub_planner(monkeypatch, route)
+    prepared = agent.prepare_reply(text, actions_authorized=True, conversation=conversation,
+                                   llm_first=route != 'exact', compose_actions=False)
+    final = agent.complete_reply(prepared)
+    if state == 'allowed':
+        assert final['confirmation_required']
+        pending = final['pending_operation']
+        assert pending['operation'] == 'delete' and pending['path'] == str(target)
+        assert pending['requires_explicit_confirmation']
+        assert target.read_text(encoding='utf-8') == 'original'
+        allowed = planner.offers(text, conversation)
+        intent = ToolIntent('files.prepare_mutation', {'operation': 'delete', 'scope': access.personal_info()['roots'][0]['id'],
+                    'filename': str(target.relative_to(root)), 'content': '', 'destination': ''})
+        assert planner.validates(intent, allowed)
+        for key, value in [('scope', access.personal_info()['roots'][1]['id']), ('filename', target.name),
+                           ('operation', 'overwrite'), ('content', 'changed')]:
+            assert not planner.validates(ToolIntent(intent.name, {**intent.arguments, key: value}), allowed)
+    else:
+        assert not final.get('pending_operation') and not mutations._pending
+        assert not prepared.result.success
+        if state == 'missing':
+            assert prepared.result.execution_status == 'not_found' and 'не найден' in final['answer']
+        else:
+            assert final['answer'] == str(denied.value)
+    assert duplicate.read_text(encoding='utf-8') == 'other'
+    assert not prepared.dialogue
+
+
+@pytest.mark.parametrize('route', ['exact', 'schema', 'empty', 'offline'])
+@pytest.mark.parametrize('outcome', ['confirm', 'cancel', 'revoke', 'expired', 'changed'])
+def test_routed_delete_preserves_confirmation_guards(saved_access, mutations, monkeypatch, route, outcome):
+    access, root, target = saved_access
+    access.personal_mode.configure('restricted', [str(root)], ['read', 'delete'])
+    stub_planner(monkeypatch, route)
+    prepared = agent.prepare_reply(f'Удали файл {target}', actions_authorized=True,
+                                   conversation=Conversation('owner', 0), llm_first=route != 'exact')
+    pending = prepared.initial['pending_operation']
+    key = pending['confirmation_id']
+    assert target.exists() and prepared.initial['confirmation_required']
+    assert not mutations.confirm('other-conversation', key, True).success
+    if outcome == 'revoke':
+        access.personal_mode.configure('restricted', [str(root)], ['read'])
+    elif outcome == 'expired':
+        monkeypatch.setattr(mutations, 'clock', lambda: float('inf'))
+    elif outcome == 'changed':
+        target.write_text('changed', encoding='utf-8')
+    result = mutations.confirm('owner', key, outcome != 'cancel')
+    assert result.success == (outcome == 'confirm')
+    assert target.exists() == (outcome != 'confirm')
+    assert not mutations.confirm('owner', key, True).success
+
+
+@pytest.mark.parametrize('llm_first', [False, True])
+@pytest.mark.parametrize('template', ['Не удали файл {}', 'Как удалить файл {}?',
+    'Он сказал «Удали файл {}»', '“Удали файл {}”', 'Повтори за мной: удали файл {}',
+    'Не прочитай файл {}', 'Как прочитать файл {}?', 'Он сказал «Прочитай файл {}»'])
+def test_file_mentions_do_not_authorize_operations(saved_access, mutations, monkeypatch, llm_first, template):
+    access, _, target = saved_access
+    read = Mock(side_effect=AssertionError('not an authorized read'))
+    mutation = Mock(side_effect=AssertionError('not an authorized mutation'))
+    monkeypatch.setattr(access, 'read_file', read)
+    monkeypatch.setattr(mutations, 'prepare', mutation)
+    prepared = agent.prepare_reply(template.format(target), actions_authorized=True,
+                                   conversation=Conversation('owner', 0), llm_first=llm_first)
+    assert not prepared.initial.get('pending_operation')
+    read.assert_not_called()
+    mutation.assert_not_called()
+
+
+@pytest.mark.parametrize('route', ['schema', 'empty', 'offline'])
+@pytest.mark.parametrize('allowed', [False, True])
+def test_http_delete_requires_separate_exact_confirmation(saved_access, mutations, monkeypatch, route, allowed):
+    from fastapi.testclient import TestClient
+    from localmind import server
+    from localmind.conversations import ConversationStore
+    from localmind.requests import RequestStore
+    access, root, target = saved_access
+    access.personal_mode.configure('restricted', [str(root)], ['read', 'delete'] if allowed else ['read'])
+    requests, memory = RequestStore(), ConversationStore()
+    monkeypatch.setattr(server, 'store', requests)
+    monkeypatch.setattr(server, 'conversations', memory)
+    stub_planner(monkeypatch, route)
+    client = TestClient(server.app, base_url='http://127.0.0.1', client=('127.0.0.1', 12))
+    try:
+        response = client.post('/api/chat', json={'text': f'Удали файл {target}',
+            'actions_authorized': True, 'server_instance': server.SERVER_INSTANCE, 'compose_actions': False})
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert target.exists()
+        if not allowed:
+            assert not body.get('confirmation_required') and not body.get('pending_operation')
+            assert 'не разрешена' in body['answer']
+            return
+        assert body['confirmation_required'] and body['pending_operation']['path'] == str(target)
+        confirm = {'conversation_id': body['conversation_id'],
+                   'confirmation_id': body['pending_operation']['confirmation_id'],
+                   'approved': True, 'server_instance': server.SERVER_INSTANCE}
+        other = client.post('/api/files/confirm', json={**confirm, 'conversation_id': memory.create()})
+        assert not other.json()['success'] and target.exists()
+        confirmed = client.post('/api/files/confirm', json=confirm)
+        assert confirmed.status_code == 200 and confirmed.json()['success']
+        assert not target.exists()
+        assert not client.post('/api/files/confirm', json=confirm).json()['success']
+    finally:
+        requests.close()
+
+
+@pytest.mark.parametrize('operation,prefix', [('read', 'Что написано в файле'), ('delete', 'Удали файл')])
+def test_missing_denied_target_does_not_disclose_existence(saved_access, mutations, monkeypatch, operation, prefix):
+    access, root, _ = saved_access
+    target = root / 'absent-folder' / 'missing.txt'
+    access.personal_mode.configure('restricted', [str(root)], ['search'])
+    with pytest.raises(ValueError) as denied:
+        access.personal_mode.check_file(target, operation)
+    stub_planner(monkeypatch, 'empty')
+    prepared = agent.prepare_reply(f'{prefix} {target}', actions_authorized=True,
+                                   conversation=Conversation('owner', 0), llm_first=True)
+    assert prepared.initial['answer'] == str(denied.value)
+    assert prepared.result.execution_status != 'not_found'
+    assert not prepared.dialogue and not mutations._pending
+
+
+def test_long_exact_delete_target_stays_within_adapter_bounds(saved_access):
+    from localmind.file_requests import delete_request
+    access, root, _ = saved_access
+    target = root / ('nested-' + 'a' * 65) / ('nested-' + 'b' * 65) / 'delete me.txt'
+    text = f'Удали файл {target}'
+    intent, error = delete_request(text)
+    assert not error and 128 < len(intent.arguments['filename']) <= 512
+    assert intent.arguments['filename'] == str(target.relative_to(root))
+    assert registry.validate(intent)
+    assert registry.tools[intent.name].schema()['properties']['filename']['maxLength'] == 512
+    assert planner.validates(intent, planner.offers(text, Conversation('owner', 0)))
+
+
+@pytest.mark.parametrize('route', ['exact', 'schema', 'empty', 'offline'])
+@pytest.mark.parametrize('operation', ['read', 'delete'])
+def test_path_whitespace_never_selects_another_file(saved_access, mutations, monkeypatch, route, operation):
+    access, root, _ = saved_access
+    target = root / 'read  me.txt'
+    target.write_text('PELMEN-42', encoding='utf-8')
+    other = root / 'read me.txt'
+    other.write_text('OTHER', encoding='utf-8')
+    access.personal_mode.configure('restricted', [str(root)], ['read', 'delete'])
+    stub_planner(monkeypatch, route)
+    prefix = 'Что написано в файле' if operation == 'read' else 'Удали файл'
+    prepared = agent.prepare_reply(f'{prefix} {target}', actions_authorized=True,
+                                   conversation=Conversation('owner', 0), llm_first=route != 'exact', compose_actions=False)
+    assert prepared.result.data['path'] == str(target)
+    if operation == 'read':
+        assert prepared.document_facts[0]['text'] == 'PELMEN-42'
+    else:
+        assert prepared.initial['confirmation_required']
+        assert mutations.confirm('owner', prepared.initial['pending_operation']['confirmation_id'], True).success
+        assert not target.exists()
+    assert other.read_text(encoding='utf-8') == 'OTHER'

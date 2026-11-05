@@ -4,6 +4,8 @@ import io
 import json
 import struct
 import zlib
+from pathlib import Path
+from unittest.mock import Mock
 
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -114,6 +116,55 @@ def test_image_only_turn_reaches_production_message_builder(monkeypatch):
         assert Image.open(io.BytesIO(base64.b64decode(actual))).getpixel((1, 1))[0] > 200
         assert actual not in response.text
         assert response.json()['context_sources'][0]['id'] == image_id
+    finally:
+        requests.close()
+
+
+@pytest.mark.parametrize('llm_first', [False, True])
+@pytest.mark.parametrize('state', ['exists', 'missing', 'forbidden'])
+@pytest.mark.parametrize('prefix', ['Что изображено на картинке', 'Опиши изображение', 'Прочитай файл'])
+def test_disk_image_returns_honest_limit_without_io_or_generation(tmp_path, monkeypatch, llm_first, state, prefix):
+    from localmind.conversations import Conversation
+    target = tmp_path / '1234.png'
+    if state != 'missing':
+        target.write_bytes(picture())
+    inference = Mock(side_effect=AssertionError('no fabricated image analysis'))
+    reader = Mock(side_effect=AssertionError('disk image bytes must not be read'))
+    policy = Mock(side_effect=AssertionError('must not claim to check this file'))
+    monkeypatch.setattr(agent, 'ollama_chat', inference)
+    monkeypatch.setattr(Path, 'read_bytes', reader)
+    monkeypatch.setattr('localmind.file_access.file_access.read_file', reader)
+    monkeypatch.setattr('localmind.file_access.file_access.personal_mode.roots', policy)
+    if state == 'forbidden':
+        target = Path(r'C:\Windows\1234.png')
+    prepared = agent.prepare_reply(f'{prefix} {target}?', actions_authorized=True,
+                                   conversation=Conversation('owner', 0), llm_first=llm_first)
+    result = agent.complete_reply(prepared)
+    assert result['answer'] == ('Анализ изображения по пути на диске пока не поддерживается. '
+                                'Прикрепи изображение к сообщению.')
+    assert result['actions'] == result['action_results'] == []
+    assert not prepared.dialogue and not prepared.document_facts
+    inference.assert_not_called()
+    reader.assert_not_called()
+    policy.assert_not_called()
+
+
+def test_http_disk_image_does_not_generate_description(tmp_path, monkeypatch):
+    requests, memory = RequestStore(), ConversationStore()
+    monkeypatch.setattr(server, 'store', requests)
+    monkeypatch.setattr(server, 'conversations', memory)
+    inference = Mock(side_effect=AssertionError('no image inference without attachment'))
+    monkeypatch.setattr(agent, 'ollama_chat', inference)
+    target = tmp_path / '1234.png'
+    target.write_bytes(picture())
+    try:
+        client = TestClient(server.app, base_url='http://127.0.0.1', client=('127.0.0.1', 12))
+        response = client.post('/api/chat', json={'text': f'Что изображено на картинке {target}.',
+            'actions_authorized': True, 'server_instance': server.SERVER_INSTANCE})
+        assert response.status_code == 200, response.text
+        assert 'Прикрепи изображение' in response.json()['answer']
+        assert response.json()['action_results'] == []
+        inference.assert_not_called()
     finally:
         requests.close()
 

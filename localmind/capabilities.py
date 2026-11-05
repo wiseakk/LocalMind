@@ -28,7 +28,8 @@ class Capability:
     def schema(self):
         return {'type': 'object', 'additionalProperties': False,
                 'properties': {k: {'type': 'string', 'minLength': 1, 'maxLength':
-                    1024 if self.name == 'files.read_file' and k == 'relative_path' else 128} for k in self.arguments},
+                    1024 if self.name == 'files.read_file' and k == 'relative_path'
+                    else 512 if self.name == 'files.prepare_mutation' and k == 'filename' else 128} for k in self.arguments},
                 'required': list(self.arguments)}
 
 
@@ -123,7 +124,8 @@ class CapabilityRegistry:
                     or intent.arguments['device_id'] not in DEVICES or intent.arguments.get('state') not in ('on', 'off')):
                 return False
         return bool(tool and type(intent.arguments) is dict and set(intent.arguments) == set(tool.arguments)
-                    and all(type(v) is str and (0 < len(v) <= (1024 if intent.name == 'files.read_file' and k == 'relative_path' else 128) or
+                    and all(type(v) is str and (0 < len(v) <= (1024 if intent.name == 'files.read_file' and k == 'relative_path'
+                            else 512 if intent.name == 'files.prepare_mutation' and k == 'filename' else 128) or
                             intent.name == 'files.search' and k in ('query', 'extension') and v == '' or
                             intent.name == 'files.prepare_mutation' and k in ('content', 'destination') and len(v) <= 128)
                             for k, v in intent.arguments.items()))

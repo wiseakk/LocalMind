@@ -118,6 +118,7 @@ class FileMutations:
         path = roots[scope] / fragment
         if not ordinary_path(path) or path.suffix.casefold() not in MUTABLE:
             raise FileAccessError('Секретные, системные и исполняемые файлы не изменяются.')
+        self.access.personal_mode.check_file(path, operation)
         parent = _checked(path.parent)
         if parent != roots[scope] and roots[scope] not in parent.parents:
             raise FileAccessError('Цель вне разрешённой области.')
@@ -125,7 +126,6 @@ class FileMutations:
             _checked(path)
             if not path.is_file():
                 raise FileAccessError('Изменять каталоги нельзя.')
-        self.access.personal_mode.check_file(path, operation)
         return path
 
     def prepare(self, owner, operation, scope, relative_path, content='', destination=None):
@@ -174,9 +174,10 @@ class FileMutations:
                     return ActionResult(False, action, key, 'confirmation_required',
                         status_text=f'Требуется подтверждение: {operation} — {path}' + (f' → {target}' if target else ''), data=data)
         except (OSError, ValueError, RuntimeError) as exc:
-            reason = str(exc) if isinstance(exc, FileAccessError) else 'Не удалось безопасно подготовить операцию.'
+            missing = isinstance(exc, FileNotFoundError)
+            reason = 'Указанный файл не найден.' if missing else str(exc) if isinstance(exc, FileAccessError) else 'Не удалось безопасно подготовить операцию.'
             self.access.personal_mode.record('prepare_mutation', str(scope), 'denied', reason, 'mutation_validation')
-            return refused(action, None, reason)
+            return refused(action, None, reason, status='not_found' if missing else 'denied')
 
     def confirm(self, owner, confirmation_id, approved):
         action = 'files.confirm_mutation'
