@@ -13,6 +13,12 @@ READ_PREFIX = (
     r'что\s+(?:находится\s+)?внутри\s+(?:файла|документа))'
 )
 
+SUMMARY_PREFIX = (
+    r'(?:(?:о\s+ч[её]м|про\s+что)\s+(?:этот\s+)?(?:файл|документ)|'
+    r'(?:кратко\s+)?перескажи\s+(?:содержимое\s+)?(?:файл|документ)(?:а)?|'
+    r'расскажи\s+(?:о\s+(?:файле|документе)|про\s+(?:файл|документ)))'
+)
+
 
 def _target(text, prefix, suffix=''):
     match = re.fullmatch(
@@ -50,12 +56,29 @@ def _resolve_target(target, operation):
 
 
 def read_request(text):
-    target = _target(text, READ_PREFIX, r'(?:\s+и\s+скажи\s+код(?:\s+проверки)?)?')
+    target = _target(text, '(?:' + READ_PREFIX + '|' + SUMMARY_PREFIX + ')',
+                     r'(?:\s+и\s+скажи\s+код(?:\s+проверки)?)?')
     if target is None:
         return None, None
     resolved, error = _resolve_target(target, 'read')
     return (ToolIntent('files.read_file', {'scope': resolved[0], 'relative_path': resolved[1]})
             if resolved else None), error
+
+
+def latest_download_request(text):
+    """A bounded retrieval request, never a claim about actual download time."""
+    match = re.fullmatch(
+        r'(?:пожалуйста[, ]+)?(?:(?:найди|покажи)\s+)?'
+        r'(?:последний|новейший|самый\s+новый)\s+(?:скачанный\s+)?'
+        r'(?:pdf(?:[- ]файл)?|пдф(?:[- ]файл)?)'
+        r'(?:\s+в\s+(?:(?:папке|каталоге)\s+)?(?:downloads?|загрузк(?:и|ах)))?'
+        r'(?:[, ]+пожалуйста)?[.!?]?', text.strip(), re.I)
+    if not match:
+        return None
+    if text.strip().casefold().rstrip('.!') in ('найди последний pdf', 'найди последний pdf в загрузках'):
+        return ToolIntent('files.find_latest_pdf_in_downloads', {})
+    return ToolIntent('files.search', {'query': '', 'extension': 'pdf', 'scope': 'downloads',
+                                     'sort_by': 'modified', 'order': 'desc'})
 
 
 def delete_request(text):

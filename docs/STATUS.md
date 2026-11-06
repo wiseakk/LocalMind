@@ -1,5 +1,75 @@
 # RC2 — сборка и окончательная проверка 2026-11-04
 
+## 2026-11-06 — реальные команды RC3 и UI подтверждения
+
+База: 4282bfbbf15bb79cf7011a3e19696ca9dd77c14a. Исправлены четыре
+сообщённых сценария; голосовые модули, контроллер и сборщик не менялись.
+
+- «Про что/о чём файл <путь>», «Перескажи файл», «Расскажи о файле» сначала
+  получают подтверждённое содержимое через files.read_file и live-policy,
+  затем передают его LLM. «Прочитай файл» сохраняет verbatim без генерации.
+  Фактический отказ/отсутствие файла не отправляет запрос на пересказ;
+  существующий fallback ложного отказа модели сохраняет успешное чтение.
+- «Последний скачанный PDF файл в папке Download» и варианты Download,
+  Downloads, Загрузки идут через файловый инструмент. Сравниваются реальные
+  mtime; ответ явно сообщает, что время скачивания неизвестно. Пустая область
+  и запрет поиска не превращаются в выдуманный найденный документ. Planner
+  использует тот же краткий file_output, что и точный маршрут.
+- UI показывает точный путь/операцию, TTL, отдельные «Подтвердить удаление»
+  и «Отменить». Только клик отправляет approved boolean на /api/files/confirm
+  с исходными conversation_id, server_instance и одноразовым confirmation_id.
+  Чат «УДАЛИ» не подтверждает операцию. Двойной клик, replay status/final,
+  смена разговора/сервера, истечение и потерянный ответ не повторяют действие.
+  Backend повторно проверяет разрешения/identity/TTL как раньше.
+- Выбор нескольких окон Modrinth App вынесен в вертикальную сетку с переносом
+  длинных заголовков. Передаётся точный window_id выбранной кнопки, заголовок
+  остаётся недоверенным текстом; сам выбор не активирует/закрывает окно.
+
+Реальные проверки Windows Python 3.14.5 из существующей соседней .venv:
+
+- Затронутые Python-наборы: 447 passed. Новые 112 регрессий затем отдельно
+  повторно прошли. Каждый файловый сценарий проверен в restricted/full_user;
+  known folders в full_user указывают на синтетические тестовые папки.
+- Полный python -m pytest -q -rs: 1532 passed, 2 skipped,
+  35 subtests passed, 35.73 s. Skip: отсутствие PySide6 в тестовом
+  интерпретаторе и отсутствие 8.3 alias на томе.
+- Полный npm run test:dom: PASS, включая новый action-controls-dom.test.cjs.
+  Проверены подтверждение/отмена, неверный/устаревший контекст, потерянный
+  ответ без повтора, отзыв права, экранирование путей/заголовков и точный
+  выбор окна; существующая регрессия истории не восстанавливает live controls.
+- node tests/action-controls-browser.cjs: PASS, 6 CSS viewport 320–1280 px
+  (731 px также соответствует окну 1024 px при 140%). Проверены фактические
+  прямоугольники трёх кнопок окон и confirm/cancel: без наложений, переполнения,
+  с высотой >=44 px. Скриншоты 1280/390 просмотрены. Первый sandbox-запуск
+  Chromium дал spawn EPERM; разрешённый изолированный запуск прошёл. Страница
+  получает localhost-origin через route.fulfill, реальной сети/сервера нет.
+- Самостоятельное code/security review, node --check static/assets/app.js,
+  git diff --check: PASS. Правила deny, исключения и auth не изменены.
+
+Логи: .test-artifacts/rc3-routing-full-pytest.txt,
+.test-artifacts/rc3-routing-dom.txt; геометрия/скриншоты:
+.test-artifacts/action-controls/. Файловые тесты выполняют настоящее I/O
+только в .test-artifacts; Ollama, Modrinth и окна — фикстуры. Пользовательская
+LocalMind_QA/политика не менялись. Настоящий Modrinth, Qt DPI, микрофон/GPU,
+физический offline-demo не проверялись. DevCrew/установщик не запускались.
+
+Запуск исходников после подготовки зависимостей: python start.py. Offline-demo
+после загрузки локальных моделей и troubleshooting: docs/RC3_HANDOFF.md;
+60+ вопросов с объяснениями: docs/DEFENSE_QA.md. Если старая маршрутизация
+сохраняется, перезапустить именно процесс с этими исходниками. При отказе
+проверить сохранённую область/read/search/delete и deny; для удаления нажать
+кнопку подтверждения с точным путём. Это не сборка обновлённого установщика.
+
+Git-коммит не создан: git add заблокирован sandbox при создании
+C:/Users/ExampleUser/Desktop/LocalMind_RC3/.git/index.lock — Permission denied.
+По указанию владельца обход не выполнялся, изменения оставлены в worktree.
+HEAD остаётся 4282bfbbf15bb79cf7011a3e19696ca9dd77c14a. Изменены только:
+docs/DECISIONS.md, docs/STATUS.md, localmind/file_requests.py,
+localmind/llm_planner.py, localmind/orchestration.py, localmind/results.py,
+package.json, static/assets/app.js, static/assets/desktop.css,
+tests/test_command_routing_rc3.py, tests/action-controls-dom.test.cjs,
+tests/action-controls-browser.cjs.
+
 ## 2026-11-05 — две регрессии pytest на базе fd26eee
 
 Исходное воспроизведение затронутых трёх наборов: 62 passed, 2 failed.

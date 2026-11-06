@@ -68,6 +68,14 @@ h1 em {background:linear-gradient(110deg,var(--accent),var(--warm)); background-
   background:var(--panel); border-color:var(--line); color:var(--text);
 }
 .action-chip {animation:enter .14s}
+.window-choices {display:grid;grid-template-columns:minmax(0,1fr);gap:8px;margin-top:12px;min-width:0}
+.window-choices .window-choice {display:block;width:100%;max-width:100%;min-width:0;min-height:44px;height:auto;padding:10px 12px;white-space:normal;overflow-wrap:anywhere;line-height:1.5;text-align:left}
+.window-choice[aria-pressed="true"] {border-color:var(--accent);background:var(--selected)}
+.file-confirmation {min-width:0;margin-top:12px;white-space:normal;overflow-wrap:anywhere}
+.file-confirmation p {margin:8px 0;line-height:1.5}
+.file-confirmation pre {max-height:180px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.confirmation-actions {display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}
+.confirmation-actions button {min-height:44px;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 .action-chip.error,.error,.danger,.archive-notice,.attachment.error {
   color:var(--danger)!important; border-color:var(--danger-line); background:var(--danger-bg);
 }

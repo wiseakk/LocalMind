@@ -71,7 +71,7 @@ def pc_intent(text, conversation, assessment):
     end = r'(?:[, ]+пожалуйста)?[.!]?'
     if command_negated(normalized) or re.search(r'[«»“”"`]|\b(?:если|когда)\b', normalized, re.I):
         return None, None, None
-    from .file_requests import read_request, delete_request
+    from .file_requests import read_request, delete_request, latest_download_request
     # action_clause collapses whitespace for conversational grammar. A literal
     # path must retain every space, including when the planner is unavailable.
     file_text = re.sub(r'^(?:а\s+)?(?:теперь\s+)', '', text.strip(), flags=re.I)
@@ -79,6 +79,9 @@ def pc_intent(text, conversation, assessment):
         intent, error = parser(file_text)
         if intent or error:
             return intent, error, None
+    latest = latest_download_request(file_text)
+    if latest:
+        return latest, None, None
     file_ref = conversation.references.get('file') if conversation.focus == 'file' else None
     document = r'(?:его|этот (?:файл|документ|PDF(?:-файл)?)|последний PDF(?:-файл)?|содержимое (?:файла|документа))'
     read = re.fullmatch(polite + r'(?:а\s+)?(?:что\s+(?:(?:этот|этот самый)\s+(?:файл|документ)\s+)?(?:внутри|содержит)|что\s+(?:находится\s+)?(?:внутри\s+(?:этого\s+(?:документа|файла)|него)|в\s+(?:нём|нем|этом (?:файле|документе)))|(?:прочитай|объясни|перескажи|суммируй|кратко\s+перескажи|расскажи(?:\s+кратко)?\s+про)\s+' + document + r'|(?:сделай|дай)\s+(?:краткое\s+)?(?:резюме|содержание|описание)\s+(?:этого\s+(?:PDF(?:-файла)?|документа|файла)|последнего\s+PDF(?:-файла)?)' + r')[?!.]*', normalized, re.I)
@@ -87,6 +90,7 @@ def pc_intent(text, conversation, assessment):
         r'(?:этот\s+(?:документ|файл|PDF(?:-файл)?)|этого\s+(?:документа|файла|PDF(?:-файла)?)|его)|'
         r'(?:расскажи|объясни)\s+(?:о|про)\s+(?:этот|этом)\s+(?:документ|документе|файл|файле|PDF(?:-файл)?))[?!.]*', normalized, re.I)
     read = read or re.fullmatch(polite + r'(?:(?:сделай|дай)\s+(?:краткое\s+)?резюме|суммируй|перескажи)[?!.]*', normalized, re.I)
+    read = read or re.fullmatch(polite + r'(?:(?:о\s+ч[её]м|про\s+что)\s+(?:этот\s+)?(?:файл|документ)|перескажи\s+(?:файл|документ))[?!.]*', normalized, re.I)
     if read:
         if not file_ref:
             return None, 'Сначала выбери файл через поиск.', None

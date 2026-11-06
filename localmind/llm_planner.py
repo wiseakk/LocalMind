@@ -17,11 +17,12 @@ from .generation import defaults, effective_generation, text_delta, check_cancel
 from .intents import command_negated
 from .results import ActionResult, refused, output_channels, file_output
 from .action_journal import journal
+from .file_requests import SUMMARY_PREFIX, latest_download_request
 
 OPEN = r'откр\w*|запус\w*|запуст\w*'
 FOCUS = r'вывед\w*|вывести|передний\s+план|сфокус\w*|активир\w*|поверх\s+окон'
 SEARCH = r'найди|найти|поищи|покажи\s+файл\w*'
-READ = r'прочит\w*|перескаж\w*|суммир\w*|внутри|содерж\w*|резюме|что\s+написано'
+READ = r'прочит\w*|перескаж\w*|суммир\w*|внутри|содерж\w*|резюме|что\s+написано|' + SUMMARY_PREFIX
 
 
 class InvalidPlan(ValueError):
@@ -38,6 +39,8 @@ def actionable(text):
         return False
     if META_ACTION_CONTEXT.search(text):
         return False
+    if latest_download_request(text):
+        return True
     # Read-only questions about selected documents/devices remain possible.
     if INFO_PREFIX.search(text) and not has(text, READ):
         return False
@@ -59,7 +62,7 @@ def offers(text, conversation):
     if not actionable(text):
         return {}
     from .file_requests import read_request, delete_request
-    for parser in (read_request, delete_request):
+    for parser in (read_request, delete_request, lambda value: (latest_download_request(value), None)):
         intent, error = parser(text)
         if intent:
             return {intent.name: {'type': 'object', 'additionalProperties': False,
@@ -291,7 +294,7 @@ def prepare(prepared, actions_authorized, chat, *, has_document_context=False):
         return True
     if not intents:
         from .file_requests import read_request, delete_request
-        if any(intent or error for intent, error in (read_request(text), delete_request(text))):
+        if latest_download_request(text) or any(intent or error for intent, error in (read_request(text), delete_request(text))):
             return False  # Exact user target still passes the live controller.
         prepared.initial.update(answer='Не удалось выбрать разрешённое действие. Уточните цель или проверьте доступ в настройках.', engine='tool-policy')
         return True
@@ -349,6 +352,10 @@ def prepare(prepared, actions_authorized, chat, *, has_document_context=False):
     prepared.initial.update(answer='\n'.join(answers), status='\n'.join(answers), actions=answers,
                             action_results=outcomes, steps=steps, engine='llm-tools', action_ms=action_duration, latency_ms=duration)
     prepared.initial.update(output_channels(prepared.initial['answer'], outcomes))
+    if len(outcomes) == 1:
+        formatted = file_output(prepared.result)
+        if formatted:
+            prepared.initial.update(output_channels(formatted[0], outcomes, formatted[1]), answer=formatted[0])
     if evaluate_requested:
         prepared.initial['planner_evaluation'] = evaluate(outcomes, prepared.generation, chat)
     if prepared.dialogue:

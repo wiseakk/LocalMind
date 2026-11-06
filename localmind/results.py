@@ -49,7 +49,9 @@ def file_output(result):
         return None
     from .speech_text import filename_description
     if result.action in ('files.search', 'files.find_latest_pdf_in_downloads'):
-        return ('Выбран файл: ' + name + '. Подробности и другие совпадения — ниже.',
+        timing = (' Сравнение по времени изменения; время скачивания неизвестно.'
+                  if result.data.get('sort_by') == 'modified' or result.action == 'files.find_latest_pdf_in_downloads' else '')
+        return ('Выбран файл: ' + name + '.' + timing + ' Подробности и другие совпадения — ниже.',
                 'Найден ' + filename_description(name) + '.')
     if result.action == 'files.describe_selected_file':
         return name, filename_description(name)

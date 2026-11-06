@@ -16,6 +16,8 @@ let voiceEpoch = 0;
 let resetting = false;
 let appsRevision = 0;
 let transcriptController = null;
+// Runtime-only confirmations never survive navigation/restart or become chat text.
+const fileConfirmations = new Map();
 const headers = () => ({'X-LocalMind-Key': $('key').value});
 const jsonHeaders = () => ({...headers(), 'Content-Type':'application/json'});
 function state(text) { $('composerState').textContent = text; }
@@ -71,6 +73,60 @@ function pending(el) {
   for (let i=0;i<3;i++) p.append(document.createElement('i'));
   const label = document.createElement('span'); label.textContent = 'Формулирую ответ…'; p.append(label); el.append(p);
 }
+function syncActionControls() {
+  for(const button of document.querySelectorAll('[data-pc-action]')) {
+    const item=fileConfirmations.get(button.dataset.confirmationId);
+    const stale=button.dataset.actionOwner!==conversationId || button.dataset.actionInstance!==serverInstance;
+    button.disabled=busy || resetting || stale || Boolean(button.dataset.confirmationId&&(!item||item.phase!=='pending'||Date.now()>=item.expiresAt));
+  }
+}
+function renderFileConfirmation(chip, result, value) {
+  const data=result.data;
+  if(result.action!=='files.prepare_mutation'||result.execution_status!=='confirmation_required'||
+     !data?.requires_explicit_confirmation||typeof data.confirmation_id!=='string')return;
+  const owner=value.conversation_id||conversationId,instance=value.server_instance||serverInstance;
+  const key=data.confirmation_id;
+  let item=fileConfirmations.get(key);
+  if(!item){
+    item={owner,instance,phase:'pending',expiresAt:Date.now()+Math.max(0,Number(data.expires_in_seconds)||0)*1000};
+    fileConfirmations.set(key,item);
+    if(fileConfirmations.size>128)fileConfirmations.delete(fileConfirmations.keys().next().value);
+  }
+  const box=document.createElement('section');box.className='file-confirmation';box.setAttribute('aria-label','Подтверждение операции с файлом');
+  const title=document.createElement('strong');
+  const names={delete:'Удаление',overwrite:'Перезапись',create:'Создание',move:'Перемещение'};
+  title.textContent=(names[data.operation]||'Изменение файла')+' требует отдельного подтверждения';
+  const target=document.createElement('p');target.className='confirmation-target';target.textContent=data.path+(data.destination?' → '+data.destination:'');
+  const note=document.createElement('p');note.className='confirmation-result';note.setAttribute('role','status');
+  note.textContent=item.message||`Проверьте точный путь. Подтверждение действует ${data.expires_in_seconds} с. Сообщение в чате не подтверждает операцию.`;
+  box.append(title,target);
+  if(data.content){const content=document.createElement('pre');content.textContent=data.content;box.append(content);}
+  const actions=document.createElement('div');actions.className='confirmation-actions';
+  for(const [approved,label] of [[true,data.operation==='delete'?'Подтвердить удаление':'Подтвердить операцию'],[false,'Отменить']]){
+    const button=document.createElement('button');button.type='button';button.className=approved?'secondary':'text-button';button.textContent=label;
+    button.dataset.pcAction='confirmation';button.dataset.confirmationId=key;
+    button.dataset.actionOwner=owner;button.dataset.actionInstance=instance;
+    button.addEventListener('click',async()=>{
+      if(busy||resetting||item.phase!=='pending')return;
+      if(owner!==conversationId||instance!==serverInstance||Date.now()>=item.expiresAt){
+        item.phase='expired';item.message='Подтверждение истекло или разговор/сервер изменился. Запросите операцию заново.';
+        note.textContent=item.message;syncActionControls();return;
+      }
+      item.phase='sending';lock(true);note.textContent=approved?'Проверяем и выполняем подтверждённую операцию…':'Отменяем операцию…';
+      try{
+        // Exactly one explicit request. Never retry an ambiguous mutation response.
+        const response=await checked(await fetch('/api/files/confirm',{method:'POST',headers:jsonHeaders(),
+          body:JSON.stringify({conversation_id:owner,server_instance:instance,confirmation_id:key,approved})}));
+        const outcome=await response.json();item.phase='settled';
+        item.message=outcome.status_text||outcome.error||'Результат операции не подтверждён.';
+        chip.classList.toggle('error',!outcome.success&&outcome.execution_status!=='cancelled');
+      }catch(error){item.phase='unknown';item.message='Результат не подтверждён: '+error.message+'. Проверьте файл перед новым запросом.';}
+      finally{note.textContent=item.message;lock(false);state(item.message);}
+    });
+    actions.append(button);
+  }
+  box.append(actions,note);chip.append(box);
+}
 function renderStatus(el, value) {
   window.localmindScene?.toolResults(value.action_results);
   el.querySelectorAll('.action-chip').forEach(x=>x.remove());
@@ -94,14 +150,24 @@ function renderStatus(el, value) {
       const permission=document.createElement('button');permission.className='text-button';permission.textContent='Проверить разрешения файлов';
       permission.addEventListener('click',()=>{$('appsDialog').showModal();loadFilePermissions()});chip.append(permission);
     }
+    renderFileConfirmation(chip,result,value);
+    const choices=document.createElement('div');choices.className='window-choices';choices.setAttribute('role','group');choices.setAttribute('aria-label','Выбор конкретного окна');
     for(const window of result.data?.windows || []) {
-      const choose=document.createElement('button');choose.className='text-button';choose.textContent=`Выбрать: ${window.application} — ${window.title}`;
-      choose.addEventListener('click',async()=>{if(busy)return;try{
-        await checked(await fetch('/api/windows/select',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({conversation_id:conversationId,window_id:window.window_id})}));
+      const choose=document.createElement('button');choose.type='button';choose.className='window-choice secondary';choose.textContent=`Выбрать: ${window.application} — ${window.title}`;
+      choose.setAttribute('aria-pressed','false');choose.dataset.pcAction='window';
+      const owner=value.conversation_id||conversationId,instance=value.server_instance||serverInstance;
+      choose.dataset.actionOwner=owner;choose.dataset.actionInstance=instance;
+      choose.addEventListener('click',async()=>{if(busy||resetting)return;try{
+        if(owner!==conversationId||instance!==serverInstance)return;
+        lock(true);
+        await checked(await fetch('/api/windows/select',{method:'POST',headers:jsonHeaders(),body:JSON.stringify({conversation_id:owner,window_id:window.window_id})}));
+        for(const button of choices.querySelectorAll('button'))button.setAttribute('aria-pressed',String(button===choose));
         state('Окно выбрано. Можно сказать «покажи это окно».');
-      }catch(e){showError(e.message)}});chip.append(choose);
+      }catch(e){showError(e.message)}finally{lock(false)}});choices.append(choose);
     }
+    if(choices.childNodes.length)chip.append(choices);
   }
+  syncActionControls();
   if ((value.action_results || []).length) state('Готовлю ответ…');
   $('trace').textContent = JSON.stringify(value, null, 2); scrollEnd();
 }
@@ -111,6 +177,7 @@ function lock(value) {
   window.localmindScene?.setActivity(value?'generating':'idle');
   if($('interruptReply'))$('interruptReply').disabled=!value;
   document.querySelectorAll('[data-example]').forEach(b=>b.disabled=value);
+  syncActionControls();
 }
 async function sendText(value) {
   if (busy || voiceBusy || recording || resetting) return;
@@ -236,6 +303,7 @@ async function refresh() {
     const info = await (await checked(await fetch('/api/info', {headers:headers()}))).json();
     const restarted=serverInstance&&serverInstance!==info.server_instance;
     serverInstance=info.server_instance;
+    syncActionControls();
     if(restarted){
       // IDs and messages survive a restart. Runtime grants and retry envelopes do
       // not: the next request receives the new server instance explicitly.
@@ -615,7 +683,7 @@ function canSwitch(){
   if(busy||voiceBusy||recording||resetting||sessionCreation){state('Завершите или прервите текущий ответ / запись перед сменой разговора.');return false;}
   return true;
 }
-function transitionControls(value){resetting=value;updateConversationTitle();}
+function transitionControls(value){resetting=value;updateConversationTitle();syncActionControls();}
 function applyContext(item){if($('useLocalSources'))$('useLocalSources').checked=Boolean(item.context?.local_retrieval);}
 async function selectConversation(item,ownedTransaction=false){
   if(!ownedTransaction&&!canSwitch())return false;
