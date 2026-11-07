@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id);
-  const steps=['Добро пожаловать','Микрофон и распознавание','Голос','Нейросеть','Подготовка','Готово'];
+  const steps=['Добро пожаловать','Микрофон и распознавание','Голос','Нейросеть','Подготовка','Завершение'];
   const labels={ready:'Готово',dependency_missing:'Компоненты отсутствуют — восстановите установку',
     model_missing:'Модель ещё не загружена',path_invalid:'Проверьте каталог ресурсов',resource_corrupt:'Файлы требуют восстановления',
     library_incompatible:'Восстановите компоненты приложения',gpu_error:'Проверьте запуск на CPU',unverified:'Файлы найдены — нужна проверка'};
@@ -12,11 +12,12 @@
   const content=document.createElement('div');content.className='setup-content';
   const error=document.createElement('p');error.className='error';error.setAttribute('role','alert');error.hidden=true;
   const footer=document.createElement('div');footer.className='setup-actions';
-  const back=button('Назад',()=>{step--;render();});back.id='setupBack';
-  const next=button('Далее',async()=>{if(step===5)await finish();else{step++;render();if(step===4)poll();}});next.id='setupNext';
-  const later=button('Настроить позже',()=>finish(true));later.className='text-button';
+  const back=button('Назад',()=>move(-1));back.id='setupBack';
+  const next=button('Далее',()=>step===steps.length-1?finish():move(1));next.id='setupNext';
+  const later=button('Настроить позже',pauseSetup);later.className='text-button';
   footer.append(back,later,next);dialog.append(progress,heading,content,error,footer);document.body.append(dialog);
   let step=0,data=null,timer=null,loading=null,saving=false,profile='cpu-fast',skipASR=false,skipTTS=false;
+  let initialized=false,pendingProgress=Promise.resolve();
   const bytes=value=>typeof value==='number'?(value/1073741824).toFixed(1)+' ГиБ':'неизвестно';
   async function modelApi(path,body){
     const r=await fetch('/api/models'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-LocalMind-Key':$('key').value},...(body?{body:JSON.stringify(body)}:{})});
@@ -30,11 +31,35 @@
     const value=await r.json();if(!r.ok)throw Error(typeof value.detail==='string'?value.detail:'Настройка недоступна');return value;
   }
   function resource(kind){return data?.voice?.find(v=>v.kind===kind&&(kind!=='asr'||v.profile===profile));}
+  function resourceStatus(kind){
+    return labels[resource(kind)?.state]||(data?'Состояние ресурса не подтверждено':'Проверяем ресурсы');
+  }
   function resources(){return [{kind:'asr',profile,skip:skipASR},{kind:'tts',skip:skipTTS}];}
+  function progressValues(){return {step,profile,skip_asr:skipASR,skip_tts:skipTTS};}
+  function saveProgress(){
+    if(!initialized||data.onboarding?.completed)return pendingProgress;
+    const snapshot=progressValues();
+    pendingProgress=pendingProgress.catch(()=>{}).then(()=>api('/onboarding',snapshot));
+    pendingProgress.catch(showError);
+    return pendingProgress;
+  }
+  function move(delta){
+    step+=delta;
+    saveProgress();
+    render();
+    poll();
+  }
+  async function pauseSetup(){
+    if(saving)return;
+    saving=true;render();error.hidden=true;
+    try{await saveProgress();dialog.close();}
+    catch(e){showError(e);}
+    finally{saving=false;render();}
+  }
   function checkbox(text,checked,change){const label=document.createElement('label');label.className='check';const input=document.createElement('input');input.type='checkbox';input.checked=checked;input.onchange=()=>change(input.checked);label.append(input,text);content.append(label);}
   function resourceCard(kind){
     const row=resource(kind),card=document.createElement('article');card.className='model-card';
-    paragraph((kind==='asr'?'Распознавание речи · '+(row?.model||(profile==='gpu-quality'?'medium':'small')):'Озвучка · Silero xenia')+' — '+(labels[row?.state]||'Проверяем ресурсы'),card);
+    paragraph((kind==='asr'?'Распознавание речи · '+(row?.model||(profile==='gpu-quality'?'medium':'small')):'Озвучка · Silero xenia')+' — '+resourceStatus(kind),card);
     if(row?.state!=='ready'){
       const b=button(row?.state==='unverified'?'Проверить модель':'Подготовить '+(kind==='asr'?'распознавание':'озвучку'),async()=>{
         b.disabled=true;error.hidden=true;
@@ -47,7 +72,7 @@
   function render(){
     clearTimeout(timer);timer=null;heading.textContent=steps[step];content.replaceChildren();progress.replaceChildren();
     steps.forEach((name,index)=>{const item=document.createElement('li');item.textContent=String(index+1);item.title=name;item.setAttribute('aria-label',name);if(index===step)item.setAttribute('aria-current','step');item.classList.toggle('complete',index<step);progress.append(item);});
-    back.disabled=step===0||saving;next.disabled=saving||!data;next.textContent=step===5?'Завершить настройку':'Далее';later.hidden=step===5;
+    back.disabled=step===0||saving;next.disabled=saving||!data;next.textContent=step===5?'Завершить настройку':'Далее';later.disabled=saving;later.hidden=step===5;
     if(step===0){
       paragraph('LocalMind — ваше личное пространство для мыслей и голоса. Проверим уже установленные модели и подготовим недостающее с вашего согласия. Загрузка требует интернета, распознавание и ответы работают локально.');
       const h=data?.hardware;
@@ -57,16 +82,17 @@
       paragraph('Микрофон включается только по кнопке записи. Windows спросит разрешение при первом использовании; проверьте текст перед отправкой. Аудиозаписи не сохраняются.');
       const label=document.createElement('label');label.textContent='Распознавание русской речи';const select=document.createElement('select');select.id='setupProfile';
       for(const [id,name] of [['cpu-fast','Small · CPU'],['gpu-quality','Medium · GPU или CPU']]){const o=document.createElement('option');o.value=id;o.textContent=name;select.append(o);}
-      select.value=profile==='balanced'?'cpu-fast':profile;select.onchange=()=>{profile=select.value;render();};label.append(select);content.append(label);
-      resourceCard('asr');checkbox(' Подготовить распознавание позже',skipASR,v=>{skipASR=v;});
+      select.value=profile==='balanced'?'cpu-fast':profile;select.onchange=()=>{profile=select.value;saveProgress();render();};label.append(select);content.append(label);
+      resourceCard('asr');checkbox(' Подготовить распознавание позже',skipASR,v=>{skipASR=v;saveProgress();});
       if(profile==='gpu-quality')paragraph('При выборе Medium загрузка Small не требуется. Недоступность CUDA не отменяет возможность запуска на CPU.');
     }
-    if(step===2){resourceCard('tts');checkbox(' Подготовить голос позже',skipTTS,v=>{skipTTS=v;});paragraph('Silero xenia работает на CPU. Уже проверенный голос повторно не загружается.');}
+    if(step===2){resourceCard('tts');checkbox(' Подготовить голос позже',skipTTS,v=>{skipTTS=v;saveProgress();});paragraph('Silero xenia работает на CPU. Уже проверенный голос повторно не загружается.');}
     if(step===3){
       const ollama=data?.ollama;
+      paragraph('Движок Ollama входит в установщик LocalMind. Отдельно скачивать или устанавливать Ollama не нужно.');
       paragraph(ollama?.state==='ready'?(ollama.active_verified?'Нейросеть проверена и готова: '+ollama.active:'Движок работает. Выберите модель и проверьте её коротким запросом.'):(ollama?.message||'Проверяем встроенный движок…'));
-      if(data.engine)paragraph(data.engine.message);
-      const storage=data.model_storage;
+      if(data?.engine)paragraph(data.engine.message);
+      const storage=data?.model_storage;
       if(storage?.choice_required||storage?.switch_available&&storage.candidates?.some(s=>s.count>0&&!s.selected)){
         paragraph('Найдены локальные хранилища. Можно использовать готовые модели без копирования и повторной загрузки. Совместимость проверим коротким локальным запросом.');
         for(const store of storage.candidates||[]){
@@ -123,8 +149,9 @@
       paragraph('Можно продолжить, пока идёт подготовка, или завершить настройку без необязательных ресурсов. Ошибочную задачу можно повторить отдельно.');
     }
     if(step===5){
-      paragraph(data?.ollama?.active_verified?'Нейросеть проверена реальным ответом и готова.': 'Настройки сохранены. Нейросеть ещё не проверена: вернитесь к этапу «Нейросеть» или подготовьте её позже через помощь.');
-      paragraph('Беседы сохраняются локально автоматически. Для первого запроса нажмите микрофон или напишите сообщение.');
+      paragraph(data?.ollama?.active_verified?'Нейросеть проверена реальным ответом и готова.':'Нейросеть ещё не проверена. Вернитесь к этапу «Нейросеть» или подготовьте её позже через помощь.');
+      paragraph('Распознавание речи — '+resourceStatus('asr')+'. Озвучка — '+resourceStatus('tts')+'.');
+      paragraph('Беседы сохраняются локально автоматически. Голосовой ввод доступен после подготовки распознавания.');
     }
   }
   function offlineCard(){
@@ -147,33 +174,44 @@
       finally{loading=null;if(dialog.open&&[3,4].includes(step)&&!document.hidden)timer=setTimeout(poll,1500);}
     })();return loading;
   }
-  async function finish(skip=false){
-    if(saving)return;saving=true;next.disabled=true;later.disabled=true;error.hidden=true;
+  async function finish(){
+    if(saving)return;saving=true;render();error.hidden=true;
     try{
+      await pendingProgress.catch(()=>{});
       await api('/preferences',{voice_profile:profile});
-      const result=await api('/onboarding',{completed:true,profile,skip_asr:skip||skipASR,skip_tts:skip||skipTTS});
+      const result=await api('/onboarding',{...progressValues(),completed:true});
       $('voiceProfile').value=profile==='balanced'?'cpu-fast':profile;$('voiceProfile').dispatchEvent(new Event('change'));
       data={...data,...result};dialog.close();window.dispatchEvent(new CustomEvent('localmind-setup-completed',{detail:result}));
-    }catch(e){showError(e);}finally{saving=false;next.disabled=false;later.disabled=false;}
+    }catch(e){showError(e);}finally{saving=false;render();}
   }
   async function load(first=false){
     error.hidden=true;
     try{
       data=await api('');const prefs=data.preferences||{};
       if(first)window.dispatchEvent(new CustomEvent('localmind-preferences',{detail:prefs}));
-      profile=data.onboarding?.profile||prefs.voice_profile||'cpu-fast';
-      const found=row=>['ready','unverified'].includes(row.state);
-      if(!data.onboarding?.profile&&!prefs.voice_profile&&data.voice?.some(v=>v.kind==='asr'&&v.model==='medium'&&found(v))&&!data.voice?.some(v=>v.kind==='asr'&&v.model==='small'&&found(v)))profile='gpu-quality';
-      skipASR=Boolean(data.onboarding?.skip_asr);skipTTS=Boolean(data.onboarding?.skip_tts);
-      if(first&&data.model_storage?.choice_required)step=3;
+      if(!initialized){
+        const onboarding=data.onboarding||{};
+        profile=onboarding.profile||prefs.voice_profile||'cpu-fast';
+        const found=row=>['ready','unverified'].includes(row.state);
+        if(!onboarding.profile&&!prefs.voice_profile&&data.voice?.some(v=>v.kind==='asr'&&v.model==='medium'&&found(v))&&!data.voice?.some(v=>v.kind==='asr'&&v.model==='small'&&found(v)))profile='gpu-quality';
+        skipASR=Boolean(onboarding.skip_asr);skipTTS=Boolean(onboarding.skip_tts);
+        if(!onboarding.completed&&Number.isInteger(onboarding.step)&&onboarding.step>=0&&onboarding.step<steps.length)step=onboarding.step;
+        initialized=true;
+      }
       render();
-      if(first&&(data.onboarding?.completed===false||data.model_storage?.choice_required)&&!document.querySelector('dialog[open]')){dialog.showModal();poll();}
-      if(first&&data.onboarding?.completed&&!data.model_storage?.choice_required)window.dispatchEvent(new CustomEvent('localmind-setup-completed',{detail:data}));
+      if(first&&data.onboarding?.completed===false&&!document.querySelector('dialog[open]')){dialog.showModal();poll();}
+      if(first&&data.onboarding?.completed)window.dispatchEvent(new CustomEvent('localmind-setup-completed',{detail:data}));
     }catch(e){showError(e);if(first&&!document.querySelector('dialog[open]')){render();dialog.showModal();content.append(button('Повторить проверку',()=>load()));}}
   }
-  function open(){step=0;if(!dialog.open)dialog.showModal();load();}
+  function open(){
+    if(data?.onboarding?.completed)step=0;
+    if(!dialog.open)dialog.showModal();
+    render();
+    load();
+  }
   for(const id of ['repeatSetup','helpSetup'])$(id)?.addEventListener('click',()=>{document.querySelectorAll('dialog[open]').forEach(d=>d.close());open();});
   const repair=button('Подготовить голос / восстановить',open);repair.id='repairVoice';$('settings-voice').append(repair);
+  dialog.addEventListener('cancel',event=>{event.preventDefault();pauseSetup();});
   dialog.addEventListener('close',()=>{clearTimeout(timer);timer=null;});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)clearTimeout(timer);else poll();});
   window.localmindSetup={open,refresh:load};load(true);

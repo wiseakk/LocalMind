@@ -28,6 +28,7 @@ function initial(){return {onboarding:{completed:false},tour:{completed:false,sk
   const state=initial();let c=setup(state);
   try{
     await pause();assert.equal(c.d.querySelector('#setupDialog').open,true);assert.equal(c.calls.filter(c=>c.body).length,0);
+    assert.equal(c.d.querySelector('#setupTitle').textContent,'Добро пожаловать');
     c.d.querySelector('#setupNext').click();
     assert.equal(c.d.querySelector('#setupProfile').value,'gpu-quality');
     assert.match(c.d.querySelector('.setup-content').textContent,/medium.*нужна проверка/);
@@ -38,7 +39,7 @@ function initial(){return {onboarding:{completed:false},tour:{completed:false,sk
     assert.equal(c.d.querySelector('#tourPopover').hidden,false);
     c.d.querySelector('#tourPopover .text-button').click();await pause();assert.equal(state.tour.skipped,true);
   }finally{c.w.close();}
-  state.voice=[];c=setup(state);
+  state.voice=[];state.model_storage={choice_required:true};c=setup(state);
   try{
     await pause();assert.equal(c.d.querySelector('#setupDialog').open,false,'missing resources after restart do not reset completion');
     assert.equal(c.d.querySelector('#tourPopover').hidden,true,'skipped tour stays skipped after restart');
@@ -46,12 +47,44 @@ function initial(){return {onboarding:{completed:false},tour:{completed:false,sk
     for(let i=0;i<4;i++)c.d.querySelector('#tourPopover .secondary').click();await pause();
     assert.equal(state.tour.completed,true);assert.equal(c.d.querySelector('#tourPopover').hidden,true);
     c.d.querySelector('#repeatSetup').click();await pause();assert.equal(c.d.querySelector('#setupDialog').open,true);
+    assert.equal(c.d.querySelector('#setupTitle').textContent,'Добро пожаловать');
   }finally{c.w.close();}
   c=setup(initial(),{fail:true});
   try{
     await pause();c.d.querySelector('#setupDialog .text-button').click();await pause();
     assert.equal(c.d.querySelector('#setupDialog').open,true);assert.match(c.d.querySelector('#setupDialog .error').textContent,/Диск заполнен/);
     assert.equal(c.d.querySelector('#tourPopover').hidden,true);
+  }finally{c.w.close();}
+  const interrupted=initial();
+  c=setup(interrupted);
+  try{
+    await pause();
+    c.d.querySelector('#setupNext').click();
+    const select=c.d.querySelector('#setupProfile');
+    select.value='cpu-fast';select.dispatchEvent(new c.w.Event('change'));
+    c.d.querySelector('#setupDialog input[type=checkbox]').click();
+    c.d.querySelector('#setupNext').click();
+    c.d.querySelector('#setupDialog input[type=checkbox]').click();
+    c.d.querySelector('#setupBack').click();
+    await c.w.localmindSetup.refresh();
+    assert.equal(c.d.querySelector('#setupProfile').value,'cpu-fast');
+    assert.equal(c.d.querySelector('#setupDialog input[type=checkbox]').checked,true);
+    c.d.querySelector('#setupNext').click();
+    await c.d.querySelector('#setupDialog .text-button').onclick();
+    assert.equal(c.d.querySelector('#setupDialog').open,false);
+    assert.equal(interrupted.onboarding.completed,false);
+  }finally{c.w.close();}
+  c=setup(interrupted);
+  try{
+    await pause();
+    assert.equal(c.d.querySelector('#setupDialog').open,true);
+    assert.equal(c.d.querySelector('#setupTitle').textContent,'Голос');
+    assert.equal(c.d.querySelector('#setupDialog input[type=checkbox]').checked,true);
+    c.d.querySelector('#setupBack').click();
+    assert.equal(c.d.querySelector('#setupProfile').value,'cpu-fast');
+    assert.equal(c.d.querySelector('#setupDialog input[type=checkbox]').checked,true);
+    c.d.querySelector('#setupBack').click();
+    assert.equal(c.d.querySelector('#setupTitle').textContent,'Добро пожаловать');
   }finally{c.w.close();}
   console.log('PASS onboarding completion, found Medium, ready Silero/Gemma, persisted tour, repeat and failed write');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -5,6 +5,35 @@ from localmind.paths import migrate_legacy, legacy_preferences_plan, python_runt
 from localmind.resource_setup import classify_voice_error
 
 
+def test_onboarding_progress_persists_without_completing_or_overwriting_choices(tmp_path, monkeypatch):
+    from localmind import paths, product_state
+    from localmind.setup_routes import OnboardingRequest, save_onboarding
+
+    monkeypatch.setattr(paths, 'CONFIG', tmp_path)
+    assert product_state.read()['onboarding'] == {'completed': False}
+    save_onboarding(OnboardingRequest(step=2, profile='gpu-quality', skip_asr=True))
+    assert product_state.read()['onboarding'] == {
+        'completed': False, 'step': 2, 'profile': 'gpu-quality', 'skip_asr': True,
+    }
+    save_onboarding(OnboardingRequest(completed=True))
+    save_onboarding(OnboardingRequest(step=1))
+    assert product_state.read()['onboarding'] == {
+        'completed': True, 'step': 1, 'profile': 'gpu-quality', 'skip_asr': True,
+    }
+
+
+@pytest.mark.parametrize('step', [-1, 6, True, '3', 3.0])
+def test_onboarding_rejects_invalid_steps(step):
+    from pydantic import ValidationError
+    from localmind import product_state
+    from localmind.setup_routes import OnboardingRequest
+
+    with pytest.raises(ValidationError):
+        OnboardingRequest(step=step)
+    with pytest.raises(ValueError):
+        product_state.update('onboarding', {'step': step})
+
+
 def test_migration_preserves_selection_without_copying_grants_or_secrets(tmp_path):
     source, dest = tmp_path / 'old', tmp_path / 'new'
     (source / 'results/private').mkdir(parents=True)

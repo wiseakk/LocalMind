@@ -72,7 +72,8 @@ def select_engine_storage(data: ModelStoreSelection):
 
 class OnboardingRequest(BaseModel):
     model_config = {'extra': 'forbid'}
-    completed: bool
+    completed: bool | None = None
+    step: int | None = Field(default=None, strict=True, ge=0, le=5)
     profile: Literal['cpu-fast', 'balanced', 'gpu-quality'] = 'cpu-fast'
     skip_asr: bool = False
     skip_tts: bool = False
@@ -103,7 +104,7 @@ def product_preferences():
 @router.post('/onboarding')
 def save_onboarding(data: OnboardingRequest):
     from .product_state import update
-    return setup_operation(lambda: update('onboarding', data.model_dump()))
+    return setup_operation(lambda: update('onboarding', data.model_dump(exclude_unset=True, exclude_none=True)))
 
 
 @router.post('/tour')

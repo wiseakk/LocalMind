@@ -45,7 +45,7 @@ const pause=()=>new Promise(resolve=>setTimeout(resolve,15));
   const rw=reuse.window,rd=rw.document,reuseCalls=[];
   rw.HTMLDialogElement.prototype.showModal=function(){this.open=true;};rw.HTMLDialogElement.prototype.close=function(){this.open=false;};
   const store={id:'b'.repeat(24),fingerprint:'c'.repeat(64),source:'Ollama',path:'C:\\Users\\fixture\\.ollama\\models',models:['gemma4:12b'],count:1};
-  const state={onboarding:{completed:true},voice:[],engine:{state:'storage_choice_required',message:'Выберите каталог'},
+  const state={onboarding:{completed:false},voice:[],engine:{state:'storage_choice_required',message:'Выберите каталог'},
     ollama:{state:'unavailable',installed:[]},model_storage:{choice_required:true,switch_available:true,candidates:[store]}};
   let statusReads=0,chosen=false;
   rw.fetch=async(url,options={})=>{
@@ -68,8 +68,15 @@ const pause=()=>new Promise(resolve=>setTimeout(resolve,15));
   try{
     rw.eval(fs.readFileSync('static/assets/setup.js','utf8'));await pause();
     const find=text=>[...rd.querySelectorAll('#setupDialog button')].find(b=>b.textContent===text);
-    assert.equal(rd.querySelector('#setupDialog').open,true,'existing onboarding does not hide storage choice');
+    assert.equal(rd.querySelector('#setupDialog').open,true);
+    assert.equal(rd.querySelector('#setupTitle').textContent,'Добро пожаловать');
+    for(const title of ['Микрофон и распознавание','Голос','Нейросеть']){
+      rd.querySelector('#setupNext').click();
+      assert.equal(rd.querySelector('#setupTitle').textContent,title);
+    }
     assert.match(rd.querySelector('#setupTitle').textContent,/Нейросеть/);
+    assert.match(rd.querySelector('.setup-content').textContent,/Ollama входит в установщик/);
+    assert.match(rd.querySelector('.setup-content').textContent,/gemma4:12b/);
     assert.equal(reuseCalls.filter(r=>r.url==='/api/setup/runtime/storage').length,0);
     find('Использовать эти модели').click();
     for(let i=0;i<150&&!find('Проверить и использовать gemma4:12b');i++)await pause();

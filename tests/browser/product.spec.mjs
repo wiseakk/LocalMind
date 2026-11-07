@@ -52,6 +52,7 @@ async function product(page,baseURL,{completed=false,ready=false}={}){
 test('first setup finds installed Medium Silero and Gemma; completion and tour survive reload',async({page,baseURL})=>{
   const {state,mutations}=await product(page,baseURL,{ready:true});
   await page.goto('/');await expect(page.locator('#setupDialog')).toBeVisible();expect(mutations).toEqual([]);
+  await expect(page.locator('#setupTitle')).toHaveText('Добро пожаловать');
   await page.locator('#setupNext').click();await expect(page.locator('#setupProfile')).toHaveValue('gpu-quality');
   await expect(page.locator('#setupDialog .model-card')).toContainText('medium — Готово');
   await page.locator('#setupNext').click();await expect(page.locator('#setupDialog .model-card')).toContainText('Silero xenia — Готово');
@@ -67,13 +68,66 @@ test('first setup finds installed Medium Silero and Gemma; completion and tour s
   await page.locator('#tourPopover').press('Escape');await expect(page.locator('#tourPopover')).not.toBeVisible();
 });
 
+test('existing model store leaves first run at welcome and preserves interrupted progress',async({page,baseURL})=>{
+  const {state,mutations}=await product(page,baseURL);
+  state.engine={state:'storage_choice_required',message:'Выберите каталог'};
+  state.ollama={state:'unavailable',installed:[]};
+  state.model_storage={choice_required:true,current_path:null,candidates:[{
+    source:'Ollama',path:'C:/Fixture/.ollama/models',count:1,models:['gemma4:12b'],
+  }]};
+  const title=page.locator('#setupTitle');
+  const next=page.locator('#setupNext');
+  const back=page.locator('#setupBack');
+  const current=page.locator('#setupDialog [aria-current=step]');
+  await page.goto('/');
+  await expect(title).toHaveText('Добро пожаловать');
+  await expect(current).toHaveText('1');
+  await expect(back).toBeDisabled();
+  await next.click();
+  await expect(current).toHaveText('2');
+  await expect(page.locator('.setup-content')).toContainText('Модель ещё не загружена');
+  await page.locator('#setupProfile').selectOption('gpu-quality');
+  await page.getByLabel('Подготовить распознавание позже').check();
+  await next.click();
+  await expect(title).toHaveText('Голос');
+  await expect(page.locator('.setup-content')).toContainText('Модель ещё не загружена');
+  await page.getByLabel('Подготовить голос позже').check();
+  await next.click();
+  await expect(current).toHaveText('4');
+  await expect(page.locator('.setup-content')).toContainText('Ollama входит в установщик');
+  await expect(page.locator('.setup-content')).toContainText('gemma4:12b');
+  await expect(page.getByRole('button',{name:'Использовать эти модели'})).toBeVisible();
+  await page.getByRole('button',{name:'Настроить позже',exact:true}).click();
+  await expect(page.locator('#setupDialog')).not.toBeVisible();
+  expect(state.onboarding.completed).toBe(false);
+  await page.reload();
+  await expect(current).toHaveText('4');
+  await back.click();
+  await expect(page.getByLabel('Подготовить голос позже')).toBeChecked();
+  await back.click();
+  await expect(page.locator('#setupProfile')).toHaveValue('gpu-quality');
+  await expect(page.getByLabel('Подготовить распознавание позже')).toBeChecked();
+  await back.click();
+  await expect(current).toHaveText('1');
+  await next.click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#setupDialog')).not.toBeVisible();
+  await page.locator('#settingsOpen').click();
+  await page.locator('#tab-advanced').click();
+  await page.locator('#repeatSetup').click();
+  await expect(current).toHaveText('2');
+  await expect(page.getByLabel('Подготовить распознавание позже')).toBeChecked();
+  expect(mutations.filter(m=>m.path!=='/api/setup/onboarding'&&m.path.startsWith('/api/setup/'))).toEqual([]);
+});
+
 test('Whisper and Silero have independent progress cancellation retry and explicit restart resume',async({page,baseURL})=>{
   const {jobs,mutations}=await product(page,baseURL);
   await page.goto('/');await expect(page.locator('#setupDialog')).toBeVisible();
   for(let i=0;i<4;i++)await page.locator('#setupNext').click();
   await page.getByRole('button',{name:'Подготовить выбранные ресурсы',exact:true}).click();
   await expect.poll(()=>jobs.length).toBe(2);expect(new Set(jobs.map(j=>j.kind)).size).toBe(2);
-  await page.getByRole('button',{name:'Настроить позже',exact:true}).click();
+  await page.locator('#setupNext').click();
+  await page.getByRole('button',{name:'Завершить настройку',exact:true}).click();
   await page.locator('#tourPopover').getByRole('button',{name:'Пропустить'}).click();
   await page.locator('#downloadsOpen').click();const list=page.locator('#downloadsList');
   await expect(list.locator('progress')).toHaveCount(2);

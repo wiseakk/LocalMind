@@ -34,7 +34,7 @@ def read():
 def update(section, values):
     # Route validation is deliberately repeated at the persistence boundary.
     allowed = {
-        'onboarding': {'completed', 'profile', 'skip_asr', 'skip_tts'},
+        'onboarding': {'completed', 'step', 'profile', 'skip_asr', 'skip_tts'},
         'tour': {'completed', 'skipped'},
         'preferences': {'theme', 'reduce_motion', 'low_performance', 'voice_profile', 'tts_voice', 'speak'},
     }
@@ -47,6 +47,9 @@ def update(section, values):
         if key in choices:
             if value not in choices[key]:
                 raise ValueError('Недопустимое значение настройки.')
+        elif key == 'step':
+            if type(value) is not int or not 0 <= value <= 5:
+                raise ValueError('Недопустимый шаг настройки.')
         elif type(value) is not bool:
             raise ValueError('Настройка должна быть логическим значением.')
     storage.begin_mutation()
