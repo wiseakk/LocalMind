@@ -7,7 +7,7 @@ from .file_access import FileAccessError
 
 
 READ_PREFIX = (
-    r'(?:прочитай\s+(?:содержимое\s+)?(?:файл|документ)(?:а)?|'
+    r'(?:прочи?тай\s+(?:содержимое\s+)?(?:файл|документ)(?:а)?|'
     r'(?:покажи|выведи)\s+содержимое\s+(?:файла|документа)|'
     r'что\s+(?:написано|содержится)\s+в\s+(?:файле|документе)|'
     r'что\s+(?:находится\s+)?внутри\s+(?:файла|документа))'
@@ -16,6 +16,7 @@ READ_PREFIX = (
 SUMMARY_PREFIX = (
     r'(?:(?:о\s+ч[её]м|про\s+что)\s+(?:этот\s+)?(?:файл|документ)|'
     r'(?:кратко\s+)?перескажи\s+(?:содержимое\s+)?(?:файл|документ)(?:а)?|'
+    r'сделай\s+(?:краткий\s+)?пересказ\s+(?:файла|документа)|'
     r'расскажи\s+(?:о\s+(?:файле|документе)|про\s+(?:файл|документ)))'
 )
 
@@ -25,6 +26,13 @@ DIRECTORY_PREFIX = (
     r'покажи,?\s+что\s+(?:находится|лежит|есть)\s+в|что\s+(?:лежит|находится)\s+в)'
     r'\s+(?:(?:папке|каталоге)\s+)?|(?:покажи|выведи)\s+содержимое\s+(?:папки|каталога)\s+'
 )
+PATH_QUOTES = {'"': '"', '«': '»', '“': '”', "'": "'"}
+
+
+def _unquote_target(target):
+    if len(target) > 1 and PATH_QUOTES.get(target[0]) == target[-1]:
+        return target[1:-1]
+    return target
 
 
 def directory_request(text):
@@ -33,10 +41,7 @@ def directory_request(text):
                          text, re.I)
     if not match:
         return None
-    target = match[1].rstrip('?.').strip()
-    quotes = {'"': '"', '«': '»', '“': '”', "'": "'"}
-    if target and quotes.get(target[0]) == target[-1] and len(target) > 1:
-        target = target[1:-1]
+    target = _unquote_target(match[1].rstrip('?.').strip())
     # A generic question such as «Что лежит в основе теории?» stays dialogue.
     if not re.match(r'(?:[a-z]:|[\\/])', target, re.I) and not re.search(
             r'\b(?:папк[еи]|каталог[еа])\s*$', text[:match.start(1)], re.I):
@@ -54,6 +59,7 @@ def _resolve_target(target, operation):
     """Resolve lexically, without enumeration, reading bytes or creating grants."""
     from .file_access import file_access
     from .personal_permissions import known_folder
+    target = _unquote_target(target)
     try:
         named = re.fullmatch(r'([^/\\:]+)\s+в\s+папке\s+([^/\\:]+)\s+на\s+рабочем\s+столе', target, re.I)
         if named:
@@ -65,7 +71,7 @@ def _resolve_target(target, operation):
             path = Path(target)
         if (not path.is_absolute() or str(path).startswith(('\\\\', '//'))
                 or '..' in path.parts or not path.name or len(str(path)) > 1024
-                or ':' in str(path)[len(path.drive):]
+                or ':' in str(path)[len(path.drive):] or any(c in '<>|*?"«»“”`' or ord(c) < 32 for c in target)
                 or any(part.rstrip(' .') != part for part in path.parts if part != path.anchor)):
             raise FileAccessError('Укажи полный локальный путь или имя файла в папке на рабочем столе.')
         roots = file_access.personal_mode.roots()
@@ -119,5 +125,6 @@ def image_path_request(text):
     prefix = (r'(?:что\s+(?:изображено|нарисовано|показано)\s+на\s+(?:картинке|изображении|фото)|'
               r'опиши\s+(?:картинку|изображение|фото)|' + READ_PREFIX + r')')
     target = _target(text, prefix)
+    target = _unquote_target(target) if target else ''
     return bool(target and re.match(r'(?:[a-z]:[/\\]|/|\\\\)', target, re.I)
                 and re.search(r'\.(?:png|jpe?g|webp|gif|bmp|tiff?)$', target, re.I))

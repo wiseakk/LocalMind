@@ -19,10 +19,24 @@ def compound_parts(text):
     Alternatives and conditions stay in one clause and fail target resolution.
     The caller executes at most six parts under the original turn deadline.
     """
-    if re.search(r'[«»"`]|\b(?:если|когда|или|либо)\b', text, re.I):
+    if re.search(r'[«»“”"\'`]|\b(?:если|когда|или|либо)\b', text, re.I):
         return [text]
     start = r'(?=(?:не\s+)?(?:открой|запусти|включи|выключи|закрой|выведи|найди|прочитай|расскажи|объясни|создай|удали)\b)'
-    return [part.strip() for part in re.split(r'(?:\s+(?:и|затем|потом)\s+|[,;.!]\s*(?:(?:а\s+)?(?:потом|затем|после\s+запуска)\s+)?)' + start, text, flags=re.I) if part.strip()]
+    body = re.sub(r'^пожалуйста[, ]+', '', text, flags=re.I)
+    parts = [part.strip() for part in re.split(r'(?:\s+(?:и|затем|потом)\s+|[,;.!]\s*(?:(?:а\s+)?(?:потом|затем|после\s+запуска)\s+)?)' + start, body, flags=re.I) if part.strip()]
+    return parts if len(parts) > 1 else [text]
+
+
+def status_request(text):
+    """Resolve complete observation requests without involving model selection."""
+    text = action_clause(text)
+    polite = r'(?:пожалуйста[, ]+)?'
+    end = r'(?:[, ]+пожалуйста)?[?!.]?'
+    if re.fullmatch(polite + r'(?:(?:покажи|перечисли) (?:запущенные|работающие|открытые) (?:приложения|окна)|какие (?:окна|приложения) (?:сейчас )?открыты)' + end, text, re.I):
+        return ToolIntent('apps.list_running', {})
+    if re.fullmatch(polite + r'(?:какие (?:устройства|лампы) (?:сейчас )?включены|(?:настольная )?лампа (?:сейчас )?включена)' + end, text, re.I):
+        return ToolIntent('devices.list_enabled', {})
+    return None
 
 
 def validate_sequence(parts, conversation, assess):
@@ -69,7 +83,7 @@ def pc_intent(text, conversation, assessment):
     normalized = re.sub(r'^(?:а\s+)?(?:теперь\s+)', '', normalized, flags=re.I)
     polite = r'(?:пожалуйста[, ]+)?'
     end = r'(?:[, ]+пожалуйста)?[.!]?'
-    if command_negated(normalized) or re.search(r'[«»“”"`]|\b(?:если|когда)\b', normalized, re.I):
+    if command_negated(normalized):
         return None, None, None
     from .file_requests import read_request, delete_request, latest_download_request
     # action_clause collapses whitespace for conversational grammar. A literal
@@ -79,6 +93,8 @@ def pc_intent(text, conversation, assessment):
         intent, error = parser(file_text)
         if intent or error:
             return intent, error, None
+    if re.search(r'[«»“”"`]|\b(?:если|когда)\b', normalized, re.I):
+        return None, None, None
     latest = latest_download_request(file_text)
     if latest:
         return latest, None, None
@@ -108,7 +124,7 @@ def pc_intent(text, conversation, assessment):
             return ToolIntent('files.find_latest_pdf_in_downloads', {}), None, None
         return None, 'Сначала выбери файл через поиск.', None
     # Scope names map to server-owned roots, never a model-provided path.
-    search = re.fullmatch(polite + r'(?:найди|покажи)\s+(?:(самый\s+старый|самый\s+новый|последний|старейший|новейший)\s+)?(?:(?:скачанный|скачанный мной)\s+)?(PDF(?:-файл)?|пдф|TXT|DOCX|CSV|MD|JSON|файл(?:ы)?)(?:\s*,?\s*который\s+я\s+скачал)?(?:\s+в\s+(?:(?:папке|каталоге)\s+)?(Downloads|Загрузках|Загрузки|одобренных папках))?' + end, normalized, re.I)
+    search = re.fullmatch(polite + r'(?:найди|покажи)\s+(?:(самый\s+старый|самый\s+новый|самый\s+недавно\s+измен[её]нный|последний|старейший|новейший)\s+)?(?:(?:скачанный|скачанный мной)\s+)?(PDF(?:-файл)?|пдф|TXT|DOCX|CSV|MD|JSON|файл(?:ы)?)(?:\s*,?\s*который\s+я\s+скачал)?(?:\s+в\s+(?:(?:папке|каталоге)\s+)?(Downloads|Загрузках|Загрузки|одобренных папках))?' + end, normalized, re.I)
     if search:
         ordering, extension, scope = search.groups()
         oldest = (ordering or '').casefold() in ('самый старый', 'старейший')
@@ -147,8 +163,9 @@ def pc_intent(text, conversation, assessment):
         return ToolIntent('set_light', {'device_id': ref.id, 'state': 'on' if device.group(1).casefold() == 'включи' else 'off'}), None, ref
     if re.fullmatch(polite + r'(?:найди|покажи) (?:самый )?последний (?:скачанный )?(?:PDF|пдф)(?: в загрузках)?' + end, normalized, re.I):
         return ToolIntent('files.find_latest_pdf_in_downloads', {}), None, None
-    if re.fullmatch(polite + r'(?:покажи|перечисли) (?:запущенные|работающие|открытые) (?:приложения|окна)' + end, normalized, re.I):
-        return ToolIntent('apps.list_running', {}), None, None
+    observation = status_request(normalized)
+    if observation:
+        return observation, None, None
     pronoun = re.fullmatch(polite + r'(открой|закрой|покажи|сфокусируй|активируй) (его|её|ее|это окно|тот файл|этот файл)' + end, normalized, re.I)
     if pronoun:
         verb, noun = (s.casefold() for s in pronoun.groups())

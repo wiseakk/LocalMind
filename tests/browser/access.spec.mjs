@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 
-test('access screen previews rules and remains usable at 100/125/140 percent',async({page})=>{
+test('access screen keeps the close button reachable while the rules scroll at 100–175 percent',async({page})=>{
   const mutations=[];
   let policy={mode:'restricted',revision:'one',server_instance:'fixture',roots:[{id:'docs',path:'C:\\LocalMind-test\\Documents'}],operations:['search','read','open'],rules:[],excluded:'Системные области, чужие профили и секреты исключены.',access_log:[]};
   await page.route('**/api/**',async route=>{
@@ -24,14 +24,14 @@ test('access screen previews rules and remains usable at 100/125/140 percent',as
   await page.locator('#cancelAccessRule').click();await expect(page.locator('#accessRulePreview')).toBeHidden();
   await page.locator('#previewAccessRule').click();await page.locator('#applyAccessRule').click();
   await expect(page.locator('#accessRules')).toContainText('Не трогай папку Загрузки');
-  for(const scale of [1,1.25,1.4]){
+  for(const [width,height] of [[1280,720],[1366,768],[1920,1080],[900,620]])for(const scale of [1,1.25,1.5,1.75]){
+    await page.setViewportSize({width,height});
     await page.evaluate(value=>document.body.style.zoom=String(value),scale);
-    await page.locator('#accessClose').scrollIntoViewIfNeeded();
     const bounds=await dialog.boundingBox(),viewport=page.viewportSize();
     expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(viewport.width+1);
-    await expect(page.locator('#accessClose')).toBeInViewport();
     await page.locator('#accessRuleText').scrollIntoViewIfNeeded();await expect(page.locator('#accessRuleText')).toBeInViewport();
-    await page.screenshot({path:test.info().outputPath('access-'+Math.round(scale*100)+'.png')});
+    await expect(page.locator('#accessClose')).toBeInViewport({ratio:1});
+    await page.locator('#accessClose').click({trial:true});
   }
   await page.evaluate(()=>document.body.style.zoom='1');
   await dialog.press('Escape');await expect(dialog).not.toBeVisible();await expect(page.locator('#capabilitiesOpen')).toBeFocused();

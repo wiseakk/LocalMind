@@ -582,7 +582,7 @@ conversations.push(currentConversation);
 function historyStatus(text){if($('historyStorage'))$('historyStorage').textContent=text;}
 function updateConversationTitle(){
   $('conversationTitle').textContent=currentConversation.title;
-  $('message').readOnly=false;
+  $('message').readOnly=resetting;
   $('send').disabled=busy||resetting||voiceBusy||Boolean(recording);
   $('mic').disabled=busy||resetting||voiceBusy;
   $('attach').disabled=busy||resetting;

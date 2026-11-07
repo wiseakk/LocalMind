@@ -878,12 +878,14 @@ function makeCanvasDom(){
       await pause(10);await w.sendText('Первый ход');assert.equal(chatBodies.length,1);
       holdSave=true;d.querySelector('#resetConversation').click();await pause(1);
       assert.equal(heldSaves,1);assert.equal(d.querySelector('#send').disabled,true);assert.equal(d.querySelector('#mic').disabled,true);
+      assert.equal(d.querySelector('#message').readOnly,true);
       d.querySelector('#message').value='Не выполнять во время сброса';
       d.querySelector('#form').dispatchEvent(new w.Event('submit',{cancelable:true}));
       d.querySelector('#message').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',cancelable:true}));
       d.querySelector('[data-example]').click();await w.sendText('Тоже не выполнять');d.querySelector('#resetConversation').click();
       assert.equal(chatBodies.length,1);assert.equal(heldSaves,1);assert.equal(destructiveResets,0);
       holdSave=false;resolveSave(Response.json({ok:true}));await pause(10);assert.equal(d.querySelector('#send').disabled,false);assert.equal(d.querySelector('#mic').disabled,false);assert.equal(d.querySelectorAll('.bubble.me').length,0);
+      assert.equal(d.querySelector('#message').readOnly,false);
       await w.sendText('Новый ход');assert.equal(chatBodies.length,2);assert.notEqual(chatBodies[1].conversation_id,chatBodies[0].conversation_id);assert.equal(chatBodies[1].history.length,0);assert.notEqual(chatBodies[0].request_id,chatBodies[1].request_id);assert.equal(d.querySelectorAll('.bubble.me').length,1);
     }finally{dom.window.close()}
   });

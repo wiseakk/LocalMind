@@ -3,7 +3,8 @@
 import {conversationFixture} from './conversation-fixture.mjs';
 const externalAttempts=new WeakMap();
 test.beforeEach(async({page,baseURL})=>{
-  await page.route('**/api/setup',route=>route.fulfill({json:{voice:[{kind:'asr',state:'ready'},{kind:'tts',state:'ready'}],ollama:{state:'ready',active_installed:true}}}));
+  await page.route('**/api/setup',route=>route.fulfill({json:{onboarding:{completed:true},tour:{completed:true},preferences:{},
+    voice:[{kind:'asr',state:'ready'},{kind:'tts',state:'ready'}],ollama:{state:'ready',active_installed:true}}}));
   const attempts=[];externalAttempts.set(page,attempts);const origin=new URL(baseURL).origin;
   await page.route('**/*',route=>{
     const url=route.request().url();

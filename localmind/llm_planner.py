@@ -240,10 +240,14 @@ def choose(text, conversation, generation, chat, *, native=False):
 def prepare(prepared, actions_authorized, chat, *, has_document_context=False):
     """Return True if handled; False allows the proven conventional fallback."""
     text, conversation = prepared.text, prepared.conversation
-    if not conversation:
+    from .orchestration import status_request
+    if not conversation or status_request(text):
         return False
     if not actionable(text):
         from .agent import INFO_PREFIX, META_ACTION_CONTEXT
+        from .file_requests import delete_request
+        if re.search(r'[«»“”"\']', text) and any(delete_request(text)):
+            return False  # Exact quoted paths still require the deterministic permission and confirmation flow.
         pc_operation = has(text, r'сверни|сворачивай|разверни|восстанови') or (
             has(text, r'создай|создавай|удали|удаляй|перемести|переименуй|перезапиши')
             and (has(text, r'файл\w*|папк\w*|каталог\w*|документ\w*') or re.search(r'\.(?:txt|md|pdf|docx|csv|json)\b', text, re.I)))

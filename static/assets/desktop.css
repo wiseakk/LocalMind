@@ -223,7 +223,11 @@ html[data-low-performance="true"] #mic {animation:none;box-shadow:none}
 @media(max-height:650px) {.welcome {padding-top:16px}.welcome h1 {font-size:28px}.welcome>p {margin-block:10px}.suggestions button {padding:9px 12px}.composer-area {padding-top:8px;padding-bottom:12px}.sidebar .brand {margin-bottom:12px}.sidebar .nav {min-height:34px;padding-block:6px}.rail-nav {padding-top:4px;margin-top:4px}}
 
 /* Explicit permissions use static cards, native controls and ordinary scrolling. */
-#accessDialog {box-sizing:border-box;width:min(1000px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:92dvh;padding:24px;overflow-y:auto;overflow-x:hidden;overflow-wrap:anywhere}
+#accessDialog {box-sizing:border-box;position:fixed;inset:0;margin:auto;width:min(1000px,calc(100% - 24px));max-width:calc(100% - 24px);max-height:calc(100% - 24px);padding:0;overflow:hidden;overflow-wrap:anywhere}
+#accessDialog[open] {display:flex;flex-direction:column}
+#accessDialog .dialog-heading {flex:none;margin:0;padding:16px 24px;border-bottom:1px solid var(--line)}
+#accessClose {flex:none}
+.access-body {min-height:0;padding:0 24px 24px;overflow-y:auto;overflow-x:hidden}
 #accessDialog .dialog-heading>div,#accessForm {min-width:0}
 #accessDialog h2 {font-size:clamp(21px,3vw,30px)}
 #accessDialog h3 {font-size:17px;margin:0 0 12px}
@@ -256,7 +260,7 @@ html[data-low-performance="true"] #mic {animation:none;box-shadow:none}
 #accessRuleInterpretation {white-space:pre-wrap}
 #accessStatus:empty {display:none}
 #accessDialog input:focus-visible,#accessDialog button:focus-visible,#accessDialog textarea:focus-visible,#accessDialog select:focus-visible {outline:2px solid var(--accent);outline-offset:3px}
-@media(max-width:760px) {#accessDialog {padding:18px;width:calc(100vw - 20px);max-width:calc(100vw - 20px);max-height:94dvh}.access-modes,.access-columns {grid-template-columns:minmax(0,1fr)}.access-mode,.access-card {padding:15px}.access-actions>button {min-height:44px}.access-actions {align-items:stretch}}
+@media(max-width:760px) {#accessDialog .dialog-heading {padding:12px 16px}.access-body {padding:0 16px 16px}.access-modes,.access-columns {grid-template-columns:minmax(0,1fr)}.access-mode,.access-card {padding:15px}.access-actions>button {min-height:44px}.access-actions {align-items:stretch}}
 
 .app-permissions {display:flex;flex-wrap:wrap;gap:8px 18px;grid-column:1/-1}
 .app-permissions .check {font-size:12px;margin:0;min-height:36px}

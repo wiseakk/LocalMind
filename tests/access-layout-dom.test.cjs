@@ -24,8 +24,12 @@ try{
     assert.match(css.gridTemplateColumns,/minmax\(0,\s*1fr\)/,'long paths cannot widen grid tracks');
   }
   const dialog=w.getComputedStyle(d.querySelector('#accessDialog'));
-  assert.equal(dialog.boxSizing,'border-box');assert.equal(dialog.overflowX,'hidden');
-  assert.equal(dialog.overflowY,'auto');assert.equal(dialog.overflowWrap,'anywhere');
+  assert.equal(dialog.boxSizing,'border-box');assert.equal(dialog.overflow,'hidden');
+  assert.equal(dialog.overflowWrap,'anywhere');
+  const body=d.querySelector('.access-body');
+  assert.equal(w.getComputedStyle(body).overflowY,'auto');
+  assert.equal(w.getComputedStyle(body).overflowX,'hidden');
+  assert.ok(!body.contains(d.querySelector('#accessClose')));
   const rules=[...d.styleSheets].flatMap(sheet=>[...sheet.cssRules]);
   assert.ok(rules.some(rule=>rule.conditionText==='(max-width:760px)' && [...rule.cssRules].some(child=>
     child.selectorText==='.access-modes,.access-columns' && child.style.getPropertyValue('grid-template-columns')==='minmax(0,1fr)')),

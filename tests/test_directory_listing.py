@@ -118,15 +118,15 @@ def test_explicit_child_deny_takes_priority_over_parent_search_grant(listing):
 
 def test_listing_limit_preserves_real_count_and_review_guard(listing):
     _, root = listing
-    for index in range(65):
-        (root/f'{index:02d}.txt').touch()
+    for index in range(115):
+        (root/f'{index:03d}.txt').touch()
     text = f'Какие файлы есть в папке {root}?'
     review = reply(text, authorized=False)
     assert review['engine'] == 'action-review' and review['action_results'] == []
     result = reply(text)
     data = result['action_results'][0]['data']
-    assert data['truncated'] and data['files_count'] == 65 and len(data['entries']) == 50
-    assert data['entries'][-1]['name'] == '49.txt'
+    assert data['truncated'] and data['files_count'] == 115 and len(data['entries']) == 50
+    assert data['entries'][-1]['name'] == '049.txt'
     assert 'Показаны первые 50' in result['answer']
 
 
