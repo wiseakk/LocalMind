@@ -225,3 +225,31 @@ def test_probe_failure_preserves_previous_model_directory(models, isolated, monk
     wait_job(job['id'], 'failed')
     assert (target/'model.bin').read_bytes() == b'previous bytes'
     assert not setup._verified_stamp('asr', 'cpu-fast', models)
+
+
+@pytest.mark.parametrize('model', ['small', 'medium'])
+@pytest.mark.parametrize('variant', ['published', 'tampered', 'extra', 'mixed-prefix'])
+def test_systran_windows_archive_keeps_only_pinned_lf_files(tmp_path, model, variant):
+    pinned = {**FILES, 'config.json': b'{\n}\n', 'tokenizer.json': b'{\n}\n',
+              'vocabulary.txt': b'word\nword2\n'}
+    assets = [asset(data, f'whisper/{model}/{name}') for name, data in pinned.items()]
+    folder = f'faster-whisper-{model}/'
+    archive = tmp_path/'archive.zip'
+    with zipfile.ZipFile(archive, 'w') as output:
+        for name, data in pinned.items():
+            data = data.replace(b'\n', b'\r\n') if name in sources.TEXT_ASSETS else data
+            if name == 'config.json' and variant == 'tampered':
+                data = data.replace(b'{', b'[')
+            output.writestr(folder + name, data)
+        output.writestr(('' if variant == 'mixed-prefix' else folder) + 'README.md', 'model notes')
+        if variant == 'extra':
+            output.writestr(folder + '.git/config', b'unexpected file')
+    stage = tmp_path/'stage'
+    stage.mkdir()
+    if variant == 'published':
+        sources.stage_import(archive, 'zip', stage, model, assets, threading.Event())
+        assert {file.name:file.read_bytes() for file in stage.iterdir()} == pinned
+    else:
+        with pytest.raises(sources.ASRSourceError):
+            sources.stage_import(archive, 'zip', stage, model, assets, threading.Event())
+        assert not (stage/'README.md').exists()

@@ -30,6 +30,9 @@ def test_build_keeps_source_identity_through_runtime_and_asset_copies(tmp_path, 
     asset.write_bytes(b'voice weights')
     (root / 'config/voice_resources.json').write_text(json.dumps({'assets': [
         {'path': 'silero/model.pt', 'bytes': asset.stat().st_size, 'sha256': builder.sha256(asset)}]}))
+    mirror_config = 'config/asr_mirrors.json'
+    mirror_source = (Path(__file__).resolve().parents[1] / mirror_config).read_bytes()
+    (root / mirror_config).write_bytes(mirror_source)
     gguf = tmp_path / 'fallback.gguf'
     gguf.write_bytes(b'GGUFexample')
     iscc = tmp_path / 'compiler.exe'
@@ -81,6 +84,8 @@ def test_build_keeps_source_identity_through_runtime_and_asset_copies(tmp_path, 
     assert provenance['branch'] == source['branch']
     assert provenance['voice_assets_bundled'] is offline
     assert provenance['llm_bundled'] is offline
+    assert (output / 'LocalMind' / mirror_config).read_bytes() == mirror_source
+    assert provenance['payload_sha256'][mirror_config] == source['sources'][mirror_config]
     assert archived == [source]
     assert (output / 'SHA256.txt').is_file()
 

@@ -21,6 +21,8 @@ PUBLIC_HOSTS = {'disk.yandex.ru', 'disk.yandex.com', 'disk.yandex.net', 'yadi.sk
 DOWNLOAD_HOSTS = {'downloader.disk.yandex.ru', 'downloader.disk.yandex.net',
                   'downloader.disk.yandex.com', 'downloader.dst.yandex.ru'}
 CHUNK = 1024 * 1024
+TEXT_ASSETS = {'config.json', 'tokenizer.json', 'vocabulary.txt'}
+MAX_ZIP_TEXT = 8 * CHUNK
 MIRROR_SOURCES = {'yandex_disk': 'yandex', 'direct_https': 'direct_https'}
 
 
@@ -314,6 +316,21 @@ def _write_asset(source, destination, asset, cancel):
         raise ASRSourceError('Файлы не совпадают с закреплённой версией Whisper. Проверьте профиль и источник.')
 
 
+def _write_zip_asset(source, item, destination, asset, cancel):
+    if item.file_size == asset['bytes']:
+        _write_asset(source, destination, asset, cancel)
+        return
+    # A Windows Git checkout can convert the Systran text files to CRLF.
+    # Keep the published files byte-for-byte equal to the pinned manifest.
+    check_cancel(cancel)
+    normalized = source.read(item.file_size).replace(b'\r\n', b'\n')
+    check_cancel(cancel)
+    if len(normalized) != asset['bytes'] or hashlib.sha256(normalized).hexdigest() != asset['sha256']:
+        raise ASRSourceError('Текстовые файлы ZIP не совпадают с закреплённой версией Whisper.')
+    with destination.open('xb') as output:
+        output.write(normalized)
+
+
 def stage_import(incoming, mode, stage, model, assets, cancel):
     size = incoming.stat().st_size
     required = sum(asset['bytes'] for asset in assets)
@@ -329,38 +346,50 @@ def stage_import(incoming, mode, stage, model, assets, cancel):
             return
         if not 0 < size <= archive_limit(assets):
             raise ASRSourceError('Размер ZIP выходит за пределы профиля Whisper.')
-        _check_zip_index(stream, size, len(names))
+        # Allow one wrapper directory and one bounded README alongside the model.
+        _check_zip_index(stream, size, len(names) + 1)
         try:
             with zipfile.ZipFile(stream) as archive:
                 entries = archive.infolist()
-                if len(entries) > len(names) + 1:
+                if len(entries) > len(names) + 2:
                     raise ASRSourceError('В ZIP слишком много записей.')
                 files = {}
                 prefixes = set()
                 folders = set()
+                wrappers = {model, 'faster-whisper-' + model}
+                readme_seen = False
                 for item in entries:
                     if item.orig_filename != item.filename or item.flag_bits & 1:
                         raise ASRSourceError('ZIP содержит недопустимое имя или шифрование.')
                     mode_bits = stat.S_IFMT(item.external_attr >> 16)
                     if mode_bits not in (0, stat.S_IFREG, stat.S_IFDIR) or item.external_attr & 0x400:
                         raise ASRSourceError('ZIP содержит ссылку или специальный файл.')
-                    if item.is_dir() and item.filename == model + '/' and mode_bits != stat.S_IFREG:
+                    if item.is_dir() and item.filename[:-1] in wrappers and mode_bits != stat.S_IFREG:
                         if item.filename in folders or item.file_size:
                             raise ASRSourceError('ZIP содержит дублирующийся или непустой каталог.')
                         folders.add(item.filename)
                         continue
                     prefix, _, name = item.filename.rpartition('/')
-                    if (prefix not in ('', model) or name not in names or name in files
-                            or mode_bits == stat.S_IFDIR or item.file_size != names[name]['bytes']
+                    if (prefix not in wrappers | {''} or mode_bits == stat.S_IFDIR
                             or item.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED)):
                         raise ASRSourceError('ZIP содержит недопустимый путь, размер или состав.')
-                    files[name] = item
                     prefixes.add(prefix)
-                if files.keys() != names.keys() or len(prefixes) != 1 or folders and prefixes != {model}:
+                    if name == 'README.md' and not readme_seen and item.file_size <= 65536:
+                        readme_seen = True
+                        continue  # Documentation is never extracted.
+                    if name not in names or name in files:
+                        raise ASRSourceError('ZIP содержит недопустимый путь, размер или состав.')
+                    expected = names[name]['bytes']
+                    if (item.file_size != expected and
+                            not (name in TEXT_ASSETS and expected < item.file_size <= min(2 * expected, MAX_ZIP_TEXT))):
+                        raise ASRSourceError('ZIP содержит недопустимый размер файла Whisper.')
+                    files[name] = item
+                if (files.keys() != names.keys() or len(prefixes) != 1
+                        or folders and folders != {prefix + '/' for prefix in prefixes if prefix}):
                     raise ASRSourceError('В ZIP нужен полный комплект файлов выбранной модели Whisper.')
                 for name, asset in names.items():
                     with archive.open(files[name]) as source:
-                        _write_asset(source, stage / name, asset, cancel)
+                        _write_zip_asset(source, files[name], stage / name, asset, cancel)
                         if source.read(1):
                             raise ASRSourceError('Распакованный файл превышает допустимый размер.')
         except (zipfile.BadZipFile, NotImplementedError, EOFError):
