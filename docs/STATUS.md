@@ -1,5 +1,22 @@
 # RC2 — сборка и окончательная проверка 2026-11-04
 
+## 2026-11-08 — просмотр содержимого папки RC3
+
+Установленный RC3 с provenance `a28e6c3` отправлял вопрос о папке DEMO в
+Ollama без файловых действий. В отдельном экземпляре с исправлением и
+настоящим окном Windows (PySide6/Qt WebEngine) список совпал с Windows:
+`demo_analyze.txt`, `demo_cancel.txt`, `demo_delete.txt`, `demo_read.txt`.
+Диагностика показала `files.list_directory`, `observed` и `llm_ms=0`.
+`demo_read.txt` вернул фактический текст, `demo_analyze.txt` пересказала
+локальная Gemma 4 12B после `files.read_file`. Использован отдельный профиль
+с правами поиска и чтения только для DEMO.
+
+Python: 1622 passed, 2 skipped, 35 subtests passed. DOM и проверка JavaScript
+прошли. Chromium `product.spec.mjs`: 7 passed. Дополнительный
+`access.spec.mjs` падает на видимости `#accessClose` при масштабировании
+также на `a28e6c3`. Setup.exe не собирался. Микрофон и GPU отдельно не проверялись.
+Команды и ожидаемые результаты приведены в [ручной приёмке](../MANUAL_QA.md#просмотр-содержимого-папки).
+
 ## 2026-11-08 — живое зеркало Whisper Small и Medium
 
 Оба адреса вернули HTTPS 200 и 206 с указанными размерами и стабильными ETag.

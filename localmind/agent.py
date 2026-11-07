@@ -672,17 +672,18 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
         base['conversation_id'] = conversation.id
     prepared.generation = generation or defaults()
     base['generation'] = prepared.generation.to_dict()
-    from .file_requests import image_path_request
+    from .file_requests import directory_request, image_path_request
+    directory_intent = directory_request(text)
     if image_path_request(text):
         prepared.compose_actions = False
         base.update(answer='Анализ изображения по пути на диске пока не поддерживается. Прикрепи изображение к сообщению.',
                     engine='vision-unavailable')
         return prepared
-    if llm_first and conversation:
+    if llm_first and conversation and directory_intent is None:
         from .llm_planner import prepare as prepare_tools
         if prepare_tools(prepared, actions_authorized, ollama_chat, has_document_context=bool(document_facts)):
             return prepared
-    if conversation:
+    if conversation and directory_intent is None:
         from .orchestration import compound_parts, validate_sequence
         parts = compound_parts(text)
         if len(parts) > 6:
@@ -753,9 +754,10 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
         return prepared
     assessment = assess_action(text)
     result = None
-    if conversation:
+    if conversation or directory_intent:
         from .orchestration import pc_intent, propose_intent
-        intent, clarification, reference = pc_intent(text, conversation, assessment)
+        intent, clarification, reference = ((directory_intent, None, None) if directory_intent
+                                           else pc_intent(text, conversation, assessment))
         if clarification:
             result = refused('policy', None, clarification, status='clarification_required')
             prepared.compose_actions = False
@@ -770,7 +772,8 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
             # Interpretation is independent of the registry's permission checks.
             proposal = intent
             check_cancelled()
-            result = (registry.execute(proposal, intent, conversation.id) if proposal else
+            owner = conversation.id if conversation else 'direct-directory-request'
+            result = (registry.execute(proposal, intent, owner) if proposal else
                       refused(intent.name, None, 'План не прошёл проверку. Уточни одно действие и цель.'))
             result = prepare_file_read(prepared, result)
             if result.execution_status == 'confirmation_required':
@@ -794,6 +797,8 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
             # selected path, timestamp or window observation.
             prepared.compose_actions = False
             base['actions'] = [str(result)]
+            if directory_intent:
+                base['engine'] = 'file-listing'
         elif (re.fullmatch(r'(?:а\s+)?(?:ты\s+)?(?:можешь|умеешь|можешь ли ты)\s+(?:управлять\s+(?:ПК|компьютером|приложениями)|открывать\s+приложения)[?!.]?', text, re.I)
               or re.fullmatch(r'(?:а\s+)?(?:у тебя (?:есть|нет)|имеешь ли ты|есть ли у тебя) доступ к (?:моему )?(?:ПК|компьютеру)[?!.]?', text, re.I)):
             base.update(answer='Я могу открывать разрешённые приложения, выбирать проверенные окна и искать PDF в Загрузках после твоего разрешения. Произвольные команды и файлы недоступны.', engine='capabilities')

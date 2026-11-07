@@ -70,6 +70,28 @@ async function product(page,baseURL,{completed=false,ready=false,asrSources=fals
   return {state,jobs,mutations,chats};
 }
 
+test('chat displays observed directory entries and the executed file action',async({page,baseURL})=>{
+  await product(page,baseURL,{completed:true});
+  const path='C:\\LocalMind QA\\DEMO';
+  const command=`Какие файлы есть в папке ${path}?`;
+  await page.route('**/api/chat/stream',async route=>{
+    expect(route.request().postDataJSON().text).toBe(command);
+    const data={engine:'file-listing',answer:'В папке DEMO найдено 2 элемента.\n\n- Папка `Материалы`\n- Файл `[Отчёт](example.test).txt`',
+      action_results:[{success:true,action:'files.list_directory',execution_status:'observed',observed_state:'directory_entries',
+        resolved_target:path,data:{directory_name:'DEMO'}}]};
+    await route.fulfill({contentType:'application/x-ndjson',body:['status','final'].map(type=>JSON.stringify({type,data})+'\n').join('')});
+  });
+  await page.goto('/');
+  await page.locator('#message').fill(command);
+  await page.locator('#send').click();
+  const reply=page.locator('.bubble.assistant');
+  await expect(reply.locator('.rendered-message li')).toHaveText(['Папка Материалы','Файл [Отчёт](example.test).txt']);
+  await expect(reply.locator('.rendered-message a')).toHaveCount(0);
+  await expect(reply.locator('.action-chip')).toContainText('содержимое папки проверено');
+  await reply.locator('.message-diagnostics summary').click();
+  await expect(reply.locator('.message-diagnostics pre').last()).toContainText('files.list_directory');
+});
+
 test('first setup finds installed Medium Silero and Gemma; completion and tour survive reload',async({page,baseURL})=>{
   const {state,mutations}=await product(page,baseURL,{ready:true});
   await page.goto('/');await expect(page.locator('#setupDialog')).toBeVisible();expect(mutations).toEqual([]);

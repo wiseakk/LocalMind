@@ -19,6 +19,30 @@ SUMMARY_PREFIX = (
     r'расскажи\s+(?:о\s+(?:файле|документе)|про\s+(?:файл|документ)))'
 )
 
+DIRECTORY_PREFIX = (
+    r'(?:какие\s+(?:файлы|папки|подпапки)(?:\s+(?:есть|находятся|лежат))?\s+в|'
+    r'(?:перечисли|покажи)\s+(?:файлы|папки|подпапки)\s+в|список\s+файлов\s+в|'
+    r'покажи,?\s+что\s+(?:находится|лежит|есть)\s+в|что\s+(?:лежит|находится)\s+в)'
+    r'\s+(?:(?:папке|каталоге)\s+)?|(?:покажи|выведи)\s+содержимое\s+(?:папки|каталога)\s+'
+)
+
+
+def directory_request(text):
+    text = text.strip()
+    match = re.fullmatch(r'(?:пожалуйста[,\s]+)?(?:' + DIRECTORY_PREFIX + r')(.+)',
+                         text, re.I)
+    if not match:
+        return None
+    target = match[1].rstrip('?.').strip()
+    quotes = {'"': '"', '«': '»', '“': '”', "'": "'"}
+    if target and quotes.get(target[0]) == target[-1] and len(target) > 1:
+        target = target[1:-1]
+    # A generic question such as «Что лежит в основе теории?» stays dialogue.
+    if not re.match(r'(?:[a-z]:|[\\/])', target, re.I) and not re.search(
+            r'\b(?:папк[еи]|каталог[еа])\s*$', text[:match.start(1)], re.I):
+        return None
+    return ToolIntent('files.list_directory', {'path': target})
+
 
 def _target(text, prefix, suffix=''):
     match = re.fullmatch(

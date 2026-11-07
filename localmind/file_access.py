@@ -508,6 +508,69 @@ class FileAccess:
             reason = str(exc) if isinstance(exc, FileAccessError) else 'Не удалось полностью и безопасно прочитать область поиска.'
             return refused(action, None, reason, status='permission_required' if 'разреш' in reason.casefold() or 'выключен' in reason else 'denied')
 
+    def list_directory(self, target):
+        from .generation import check_cancelled
+        action = 'files.list_directory'
+        path = Path(target)
+        if (not path.is_absolute() or target.startswith(('\\\\', '//')) or '..' in path.parts
+                or ':' in target[len(path.drive):] or any(c in '<>|*?"' or ord(c) < 32 for c in target)
+                or any(part.rstrip(' .') != part for part in path.parts if part != path.anchor)):
+            return refused(action, None, 'Укажи полный локальный путь к папке.', status='invalid_target')
+        limit, scan_limit = 50, 2000
+        deadline = time.monotonic() + 5
+        entries, seen, complete = [], 0, True
+        try:
+            with self._lock, self.personal_mode._lock:
+                self._sync_policy()
+                try:
+                    self.personal_mode.check_file(path, 'search')
+                except FileAccessError as exc:
+                    return refused(action, str(path), str(exc) + ' Для просмотра папки нужно разрешение «Поиск».',
+                                   status='permission_required')
+                _checked(path)
+                if not path.is_dir():
+                    return refused(action, str(path), 'Указанный путь ведёт к файлу. Укажи папку.', status='invalid_target')
+                with _locked_path(path, directory=True), os.scandir(path) as children:
+                    for child in children:
+                        check_cancelled()
+                        if seen >= scan_limit or time.monotonic() > deadline:
+                            complete = False
+                            break
+                        seen += 1
+                        if not self.personal_mode.allows(Path(child.path), 'search'):
+                            continue
+                        try:
+                            # Windows DirEntry.stat may report st_nlink=0.
+                            info = os.stat(child.path, follow_symlinks=False)
+                        except OSError:
+                            continue
+                        if getattr(info, 'st_file_attributes', 0) & 0x400:
+                            continue
+                        is_dir = stat.S_ISDIR(info.st_mode)
+                        if not is_dir and (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1):
+                            continue
+                        entries.append({'name': child.name, 'kind': 'directory' if is_dir else 'file',
+                                        'size_bytes': None if is_dir else info.st_size,
+                                        'modified_utc': datetime.fromtimestamp(info.st_mtime, timezone.utc).isoformat()})
+                entries.sort(key=lambda row: (row['kind'] != 'directory', row['name'].casefold(), row['name']))
+                self.personal_mode.record('search', path, 'observed')
+                return ActionResult(True, action, str(path), 'observed', 'directory_entries',
+                    status_text='Содержимое папки проверено.',
+                    data={'directory_name': path.name or path.anchor, 'entries': entries[:limit],
+                          'files_count': sum(row['kind'] == 'file' for row in entries) if complete else None,
+                          'directories_count': sum(row['kind'] == 'directory' for row in entries) if complete else None,
+                          'empty': complete and seen == 0, 'scan_complete': complete,
+                          'truncated': not complete or len(entries) > limit})
+        except FileNotFoundError:
+            reason, status = 'Папка не найдена. Проверь путь.', 'not_found'
+        except PermissionError:
+            reason, status = 'Windows не разрешила просмотреть папку. Проверь права текущего пользователя.', 'denied'
+        except (OSError, FileAccessError) as exc:
+            reason = str(exc) if isinstance(exc, FileAccessError) else 'Не удалось безопасно просмотреть папку.'
+            status = 'denied'
+        self.personal_mode.record('search', path, status, reason)
+        return refused(action, str(path), reason, status=status)
+
     def read_file(self, owner, scope, relative_path):
         """Exact scoped read; scope/relative_path must be grounded by the caller."""
         action = 'files.read_file'

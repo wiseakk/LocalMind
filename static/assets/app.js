@@ -134,16 +134,20 @@ function renderStatus(el, value) {
   for (const result of value.action_results || []) {
     const chip = document.createElement('div'); chip.className = 'action-chip' + (result.success ? '' : ' error');
     const states = {process_created:'Запуск начат; ожидаем окно', already_running:result.observed_state==='visible_window'?'Окно приложения уже открыто':'Приложение уже работает в фоне', launch_pending:'Приложение ещё запускается', observed:'Состояние подтверждено', request_accepted:'Команда принята; состояние пока не подтверждено'};
-    const target=result.resolved_target || result.requested_target || result.target || result.data?.application || (result.action?.startsWith('devices.')?'Устройство':'Действие');
-    const observed={on:'включено',off:'выключено',visible_window:'видимое окно',running:'процесс работает',unknown:'неизвестно'};
+    const resolved=result.resolved_target || result.requested_target || result.target;
+    const fileTool=result.action?.startsWith('files.');
+    const target=fileTool
+      ? result.data?.directory_name || result.data?.filename || (/^(?:[a-z]:[/\\]|\/)/i.test(resolved||'')?resolved:'Файлы')
+      : resolved || result.data?.application || (result.action?.startsWith('devices.')?'Устройство':'Действие');
+    const observed={on:'включено',off:'выключено',visible_window:'видимое окно',running:'процесс работает',unknown:'неизвестно',directory_entries:'содержимое папки проверено'};
     const actual=result.observed_state&&result.execution_status!=='request_accepted'?' · Наблюдение: '+(observed[result.observed_state] || result.observed_state):'';
     chip.textContent = (result.mode==='DEMO'?'ДЕМО · симуляция · ':'') + target + ' · ' + (result.success ? states[result.execution_status] || result.status_text || 'Проверка завершена' : result.error || result.status_text || 'Действие не выполнено')+actual;
     el.insertBefore(chip, el.querySelector('.rendered-message')); 
-    if(result.success&&result.action?.startsWith('files.')&&result.data?.filename){
+    if(result.success&&fileTool&&result.data?.filename){
       const details=document.createElement('details');details.className='file-result-details';
       const summary=document.createElement('summary');summary.textContent='Метаданные выбранного файла'+(result.data.files?.length>1?' и другие совпадения':'');
-      const exact=document.createElement('pre');const {files,...selected}=result.data;exact.textContent=JSON.stringify(selected,null,2);details.append(summary,exact);
-      for(const match of (files || []).slice(1)){const row=document.createElement('pre');row.textContent=JSON.stringify(match,null,2);details.append(row);}
+      const exact=document.createElement('pre');const {files,file_id,...selected}=result.data;exact.textContent=JSON.stringify(selected,null,2);details.append(summary,exact);
+      for(const {file_id,...match} of (files || []).slice(1)){const row=document.createElement('pre');row.textContent=JSON.stringify(match,null,2);details.append(row);}
       el.append(details);
     }
     if(result.execution_status==='permission_required') {

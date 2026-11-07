@@ -427,6 +427,34 @@ function makeCanvasDom(){
       assert.equal(submitted[1].history.length,2,'final is appended to context only once');
     }finally{w.close();}
   });
+  await run('directory entries render as literal names and file IDs stay in diagnostics',async()=>{
+    const opaque='pB7PCe3P1VjX_fT1RtHqg8ypwNxpK9YG';
+    const name='[Файл](example.test).txt';
+    const replies=[
+      {engine:'file-listing',answer:'В папке DEMO найден 1 файл:\n\n- `'+name+'`',action_results:[{
+        success:true,action:'files.list_directory',execution_status:'observed',observed_state:'directory_entries',data:{directory_name:'DEMO'}}]},
+      {engine:'file-read',answer:'Текст из файла',action_results:[{success:true,action:'files.read_file',
+        resolved_target:opaque,data:{filename:'demo_read.txt',file_id:opaque}}]}
+    ];
+    const {window:w}=makeDom(async(url)=>{
+      if(url==='/api/chat/stream'){
+        const data=replies.shift();
+        return new Response(['status','final'].map(type=>JSON.stringify({type,data})+'\n').join(''));
+      }
+      return Response.json({server_instance:'test',devices:[],apps:[],voice:{}});
+    }),d=w.document;
+    try{
+      await pause(10);await w.sendText('Что лежит в C:\\DEMO?');
+      assert.equal(d.querySelector('.bubble.assistant li').textContent,name);
+      assert.equal(d.querySelector('.bubble.assistant li a'),null);
+      assert.match(d.querySelector('.action-chip').textContent,/DEMO.*содержимое папки проверено/);
+      await w.sendText('Прочитай файл C:\\DEMO\\demo_read.txt');
+      const reply=[...d.querySelectorAll('.bubble.assistant')].at(-1);
+      assert.match(reply.querySelector('.action-chip').textContent,/demo_read\.txt/);
+      for(const node of reply.querySelectorAll('.action-chip,.file-result-details,.rendered-message'))assert.ok(!node.textContent.includes(opaque));
+      assert.ok(reply.querySelector('.message-diagnostics pre:last-child').textContent.includes(opaque));
+    }finally{w.close();}
+  });
   await run('model controls snapshot settings; live Markdown deltas and collapsed diagnostics',async()=>{
     let submitted,release;
     const dom=makeDom(async(url,options)=>{

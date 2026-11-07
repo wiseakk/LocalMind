@@ -1,5 +1,6 @@
 """Trusted adapter outcomes. Acceptance and observation are separate facts."""
 from dataclasses import asdict, dataclass
+import re
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,8 @@ def file_output(result):
     """Return concise display/speech for verified file metadata, or None."""
     if not result.success or not result.data or not result.action.startswith('files.'):
         return None
+    if result.action == 'files.list_directory':
+        return _directory_output(result.data)
     name = result.data.get('filename')
     if not isinstance(name, str):
         return None
@@ -60,3 +63,30 @@ def file_output(result):
         prefix = 'Окно документа обнаружено: ' if result.observed_state == 'visible_window' else 'Запрос открытия передан Windows: '
         return str(result), prefix + filename_description(name) + '.'
     return None
+
+
+def _literal_name(name):
+    # Names are filesystem data. Keep Markdown syntax and control characters inert.
+    name = ''.join(c if c.isprintable() else f'\\u{ord(c):04x}' for c in name)
+    fence = '`' * (1 + max((len(run) for run in re.findall(r'`+', name)), default=0))
+    return f'{fence} {name} {fence}'
+
+
+def _directory_output(data):
+    folder = 'В папке ' + _literal_name(data['directory_name'])
+    entries = data['entries']
+    if data['empty']:
+        return folder + ' пусто.', 'В папке пусто.'
+    if not entries:
+        message = ('Доступных элементов не найдено.' if data['scan_complete']
+                   else 'Просмотр ограничен. Среди проверенных элементов доступных не найдено.')
+        return folder + '. ' + message, message
+    counts = (f"Файлов — {data['files_count']}, подпапок — {data['directories_count']}."
+              if data['scan_complete'] else 'Просмотр ограничен. Полный размер списка неизвестен.')
+    lines = []
+    for row in entries:
+        kind = 'папка' if row['kind'] == 'directory' else f"{row['size_bytes']} Б"
+        date = row['modified_utc'][:16].replace('T', ' ') + ' UTC'
+        lines.append(f"- {_literal_name(row['name'])} — {kind}, {date}")
+    truncation = f' Показаны первые {len(entries)} доступных элементов из проверенных.' if data['truncated'] else ''
+    return folder + '. ' + counts + truncation + '\n\n' + '\n'.join(lines), counts + truncation
