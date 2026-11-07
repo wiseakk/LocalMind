@@ -61,7 +61,13 @@ def start_pull(data: PullRequest):
 @router.get('/downloads')
 def list_pulls():
     try:
-        return {'jobs': catalog.downloads.snapshot()}
+        jobs = catalog.downloads.snapshot()
+        for job in jobs:
+            if job.get('asr_mirror'):
+                from .resource_setup import mirror_offer
+                if job['asr_mirror'] != mirror_offer(job.get('profile')):
+                    job['asr_mirror'] = None
+        return {'jobs': jobs}
     except ValueError:
         raise HTTPException(503, 'Журнал загрузок повреждён или недоступен. Восстановите хранилище приложения.')
 
@@ -140,6 +146,10 @@ def retry_pull(job_id: str):
             raise ValueError('Повтор доступен для прерванной или неудачной загрузки.')
         if job.get('kind') in ('asr', 'tts'):
             from .resource_setup import start
+            if job.get('asr_source') == 'local':
+                raise ValueError('Выберите файл или папку снова.')
+            if job.get('asr_source') == 'yandex':
+                return start('asr', job['profile'], source='yandex', fingerprint=job['mirror_fingerprint'])
             return start(job['kind'], **({'profile': job['profile']} if job.get('profile') else {}))
         if job.get('kind') == 'llm_offline':
             from .offline_model import start

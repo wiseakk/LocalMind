@@ -1,13 +1,22 @@
 """GUI setup shares the same authenticated loopback boundary as chat."""
+import asyncio
+from pathlib import Path
+import shutil
+import tempfile
+from threading import Lock
 from typing import Literal
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
+from starlette.requests import ClientDisconnect
 from pydantic import BaseModel, Field
 import httpx
 from . import resource_setup
 from .model_manager import manager, ollama_json
 from .paths import APP_ROOT
+from .asr_sources import archive_limit
 
 router = APIRouter(prefix='/api/setup')
+_asr_import_slot = Lock()
 
 
 @router.get('')
@@ -122,6 +131,8 @@ def save_product_preferences(data: PreferencesRequest):
 class ResourceRequest(BaseModel):
     kind: Literal['asr', 'tts']
     profile: Literal['cpu-fast', 'balanced', 'gpu-quality'] = 'balanced'
+    source: Literal['huggingface', 'yandex'] = 'huggingface'
+    fingerprint: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
 
 
 class OfflineModelRequest(BaseModel):
@@ -141,9 +152,68 @@ def offline_model(data: OfflineModelRequest):
 @router.post('/voice')
 def prepare_voice(data: ResourceRequest):
     try:
-        return resource_setup.start(data.kind, data.profile)
+        if data.source == 'huggingface':
+            return resource_setup.start(data.kind, data.profile)
+        return resource_setup.start(data.kind, data.profile, source=data.source, fingerprint=data.fingerprint)
     except (OSError, ValueError) as exc:
         raise HTTPException(409, str(exc) if isinstance(exc, ValueError) else 'Хранилище приложения недоступно.')
+
+
+@router.post('/asr-import')
+async def import_asr(request: Request, profile: Literal['cpu-fast', 'balanced', 'gpu-quality'],
+                     mode: Literal['zip', 'directory']):
+    """Accept bytes explicitly chosen by the browser. No filesystem paths enter this API."""
+    from .paths import ordinary_tree
+
+    if request.headers.get('content-type') != 'application/octet-stream':
+        raise HTTPException(415, 'Выберите ZIP или папку Whisper.')
+    assets = resource_setup.assets_for('asr', profile)
+    required = sum(asset['bytes'] for asset in assets)
+    limit = archive_limit(assets) if mode == 'zip' else required
+    length = request.headers.get('content-length', '')
+    if not length.isascii() or not length.isdecimal() or len(length) > 10:
+        raise HTTPException(411, 'Для импорта нужен известный размер файлов.')
+    length = int(length)
+    if not 0 < length <= limit or mode == 'directory' and length != required:
+        raise HTTPException(413, 'Размер не соответствует выбранной модели Whisper.')
+    if not resource_setup.dependencies('asr'):
+        raise HTTPException(409, 'Компоненты распознавания отсутствуют. Восстановите LocalMind установщиком.')
+    if not _asr_import_slot.acquire(blocking=False):
+        raise HTTPException(429, 'Другой импорт ещё передаёт файлы.')
+    incoming = None
+    try:
+        folder = ordinary_tree(resource_setup.MODELS / 'whisper' / '.incoming')
+        folder.mkdir(parents=True, exist_ok=True)
+        if shutil.disk_usage(folder).free < length + required:
+            raise HTTPException(409, 'Недостаточно места для проверки и установки модели.')
+        with tempfile.NamedTemporaryFile(dir=folder, prefix='asr-', delete=False) as stream:
+            incoming = Path(stream.name)
+            received = 0
+            chunks = request.stream().__aiter__()
+            async with asyncio.timeout(600):
+                while True:
+                    chunk = await asyncio.wait_for(anext(chunks, None), timeout=15)
+                    if chunk is None:
+                        break
+                    received += len(chunk)
+                    if received > length:
+                        raise HTTPException(413, 'Превышен размер импорта.')
+                    await run_in_threadpool(stream.write, chunk)
+        if received != length:
+            raise HTTPException(400, 'Импорт получен не полностью.')
+        result = resource_setup.start('asr', profile, source='local', incoming=incoming, mode=mode)
+        incoming = None  # The queued worker owns this temporary file now.
+        return result
+    except (TimeoutError, ClientDisconnect):
+        raise HTTPException(408, 'Передача файлов прервана. Выберите файл или папку снова.') from None
+    except (OSError, ValueError) as exc:
+        raise HTTPException(409, str(exc) if isinstance(exc, ValueError) else 'Хранилище модели недоступно.') from None
+    finally:
+        try:
+            if incoming is not None:
+                incoming.unlink(missing_ok=True)
+        finally:
+            _asr_import_slot.release()
 
 
 class StoragePlanRequest(BaseModel):

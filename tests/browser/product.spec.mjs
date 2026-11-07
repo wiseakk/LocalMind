@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 // Stateful browser fixtures. Real SQLite/process recovery is tested in Python.
-async function product(page,baseURL,{completed=false,ready=false}={}){
+async function product(page,baseURL,{completed=false,ready=false,asrSources=false}={}){
   const state={onboarding:{completed},tour:{completed:false,skipped:completed},preferences:{},voice:[
     {kind:'asr',profile:'cpu-fast',model:'small',state:'model_missing'},
     {kind:'asr',profile:'balanced',model:'small',state:'model_missing'},
@@ -9,11 +9,24 @@ async function product(page,baseURL,{completed=false,ready=false}={}){
     {kind:'tts',model:'Silero xenia',state:ready?'ready':'model_missing'}],
     ollama:{state:'ready',active_installed:true,active:'gemma4:12b',installed:['gemma4:12b']}};
   const jobs=[],mutations=[],chats=new Map();let serial=0,stream=null;
+  if(asrSources){
+    for(const row of state.voice.filter(row=>row.kind==='asr')){
+      row.download_bytes=486000000;
+      row.mirror_configured=true;
+    }
+  }
   const origin=new URL(baseURL).origin;
   await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
   await page.route('**/api/**',async route=>{
     const request=route.request(),path=new URL(request.url()).pathname;
     const body=()=>request.postDataJSON(),json=data=>route.fulfill({json:data});
+    if(path==='/api/setup/asr-import'&&asrSources){
+      const query=new URL(request.url()).searchParams;
+      mutations.push({path,mode:query.get('mode'),profile:query.get('profile'),bytes:request.postDataBuffer()?.length});
+      const job={id:String(++serial).padStart(32,'0'),kind:'asr',profile:'cpu-fast',model:'Whisper small',
+        asr_source:'local',status:'verifying',completed:10,total:10};
+      jobs.push(job);return json(job);
+    }
     if(request.method()==='POST')mutations.push({path,body:body()});
     if(path==='/api/setup')return json(state);
     for(const section of ['onboarding','tour','preferences'])if(path==='/api/setup/'+section){
@@ -22,7 +35,13 @@ async function product(page,baseURL,{completed=false,ready=false}={}){
     if(path==='/api/setup/voice'){
       const resource=body(),job={id:String(++serial).padStart(32,'0'),...resource,
         model:resource.kind==='asr'?'Whisper small':'Silero xenia',destination:'C:/Fixture/models/'+resource.kind,
-        status:'downloading',completed:resource.kind==='asr'?25:60,total:100};jobs.push(job);return json(job);
+        status:'downloading',completed:resource.kind==='asr'?25:60,total:100};
+      if(asrSources&&resource.kind==='asr'){
+        if(resource.source==='yandex')Object.assign(job,{asr_source:'yandex',updated_at:Date.now()/1000,bytes_per_second:4194304});
+        else Object.assign(job,{asr_source:'huggingface',status:'failed',error:'Hugging Face недоступен.',
+          asr_mirror:{fingerprint:'a'.repeat(64),bytes:486000000}});
+      }
+      jobs.push(job);return json(job);
     }
     if(path==='/api/downloads')return json({jobs});
     if(path.startsWith('/api/downloads/')){
@@ -65,7 +84,42 @@ test('first setup finds installed Medium Silero and Gemma; completion and tour s
   state.voice=[];await page.reload();await expect(page.locator('#setupDialog')).not.toBeVisible();await expect(page.locator('#tourPopover')).not.toBeVisible();
   await page.locator('#settingsOpen').click();await page.locator('#tab-advanced').click();
   await page.locator('#repeatTour').click();await expect(page.locator('#tourPopover')).toBeVisible();
-  await page.locator('#tourPopover').press('Escape');await expect(page.locator('#tourPopover')).not.toBeVisible();
+  await page.locator('#tourPopover').getByRole('button',{name:'Далее',exact:true}).press('Escape');
+  await expect(page.locator('#tourPopover')).not.toBeVisible();
+});
+
+test('Whisper wizard shows explicit mirror consent, progress, cancellation and local ZIP',async({page,baseURL})=>{
+  const {jobs,mutations}=await product(page,baseURL,{asrSources:true});
+  const wizard=page.locator('#setupDialog');
+  await page.goto('/');
+  await expect(page.locator('#setupTitle')).toHaveText('Добро пожаловать');
+  await page.locator('#setupNext').click();
+  await expect(wizard.getByText(/Hugging Face · .*МиБ/)).toBeVisible();
+  await expect(wizard.getByRole('button',{name:/Скачать с Яндекс Диска/})).toHaveCount(0);
+  await wizard.getByRole('button',{name:'Скачать Whisper',exact:true}).click();
+  await expect(wizard.getByText(/Hugging Face недоступен/)).toBeVisible();
+  expect(jobs).toHaveLength(1);
+  await wizard.getByRole('button',{name:/Скачать с Яндекс Диска/}).click();
+  const mirror=wizard.locator('[data-download-id]').filter({hasText:'Источник: Яндекс Диск'});
+  await expect(mirror).toContainText('25%');
+  await expect(mirror).toContainText('4.0 МБ/с');
+  await expect(mirror.locator('progress')).toHaveJSProperty('value',25);
+  expect(mutations.filter(entry=>entry.body?.source==='yandex')).toHaveLength(1);
+  await mirror.getByRole('button',{name:'Отменить',exact:true}).click();
+  await expect(mirror).toContainText('Отменено');
+  await expect(mirror.getByRole('button',{name:'Повторить',exact:true})).toBeVisible();
+  await wizard.locator('input[type=file][accept]').setInputFiles({
+    name:'small.zip',mimeType:'application/zip',buffer:Buffer.from('fixture bytes'),
+  });
+  await expect(wizard.locator('[data-download-id]').filter({hasText:'Локальный импорт'})).toContainText('Проверяем модель');
+  expect(mutations.find(entry=>entry.path==='/api/setup/asr-import')).toMatchObject({
+    mode:'zip',profile:'cpu-fast',bytes:13,
+  });
+  await wizard.getByRole('button',{name:'Настроить позже',exact:true}).click();
+  await page.locator('#settingsOpen').click();
+  await page.locator('#tab-voice').click();
+  await expect(page.locator('#settings-voice').getByRole('button',{name:'Импортировать из папки'})).toBeVisible();
+  await expect(page.locator('#settings-voice [data-download-id]').filter({hasText:'Локальный импорт'})).toContainText('Проверяем модель');
 });
 
 test('existing model store leaves first run at welcome and preserves interrupted progress',async({page,baseURL})=>{

@@ -18,6 +18,8 @@
   footer.append(back,later,next);dialog.append(progress,heading,content,error,footer);document.body.append(dialog);
   let step=0,data=null,timer=null,loading=null,saving=false,profile='cpu-fast',skipASR=false,skipTTS=false;
   let initialized=false,pendingProgress=Promise.resolve();
+  let activeImport=null;
+  const reportedAsrJobs=new Set();
   const bytes=value=>typeof value==='number'?(value/1073741824).toFixed(1)+' ГиБ':'неизвестно';
   async function modelApi(path,body){
     const r=await fetch('/api/models'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-LocalMind-Key':$('key').value},...(body?{body:JSON.stringify(body)}:{})});
@@ -57,17 +59,95 @@
     finally{saving=false;render();}
   }
   function checkbox(text,checked,change){const label=document.createElement('label');label.className='check';const input=document.createElement('input');input.type='checkbox';input.checked=checked;input.onchange=()=>change(input.checked);label.append(input,text);content.append(label);}
-  function resourceCard(kind){
-    const row=resource(kind),card=document.createElement('article');card.className='model-card';
-    paragraph((kind==='asr'?'Распознавание речи · '+(row?.model||(profile==='gpu-quality'?'medium':'small')):'Озвучка · Silero xenia')+' — '+resourceStatus(kind),card);
-    if(row?.state!=='ready'){
-      const b=button(row?.state==='unverified'?'Проверить модель':'Подготовить '+(kind==='asr'?'распознавание':'озвучку'),async()=>{
-        b.disabled=true;error.hidden=true;
-        try{await api('/voice',{kind,...(kind==='asr'?{profile}:{})});paragraph('Задача запущена. Независимый прогресс и отмена — в «Загрузках».',card);}
-        catch(e){showError(e);}finally{b.disabled=false;}
-      });card.append(b);
+  function resourceCard(kind,root=content,selected=profile){
+    const row=kind==='asr'?data?.voice?.find(v=>v.kind==='asr'&&v.profile===selected):resource(kind);
+    const card=document.createElement('article');card.className='model-card';
+    paragraph((kind==='asr'?'Распознавание речи · '+(row?.model||(selected==='gpu-quality'?'medium':'small')):'Озвучка · Silero xenia')+
+      ' — '+(labels[row?.state]||'Состояние ресурса не подтверждено'),card);
+    if(kind==='asr'&&row?.state!=='ready'){
+      if(row?.download_bytes)paragraph('Hugging Face · '+(row.download_bytes/1048576).toFixed(1)+' МиБ. '+
+        (row.mirror_configured?'При ошибке сети можно выбрать зеркало Яндекс Диска.':'Зеркало Яндекс Диска не настроено.'),card);
+      if(row&&row.state!=='dependency_missing')addAsrImport(card,row,selected,root===content);
     }
-    content.append(card);
+    if(row?.state!=='ready'){
+      const b=button(row?.state==='unverified'?'Проверить модель':kind==='asr'?'Скачать Whisper':'Подготовить озвучку',async()=>{
+        b.disabled=true;error.hidden=true;
+        try{
+          await api('/voice',{kind,...(kind==='asr'?{profile:selected}:{})});
+          poll();
+          paragraph('Задача запущена. Прогресс и отмена доступны в «Загрузках».',card);
+        }catch(e){paragraph(e.message,card);}finally{b.disabled=false;}
+      });b.disabled=row?.state==='dependency_missing';card.append(b);
+    }
+    root.append(card);
+  }
+  function addAsrImport(card,row,selected,inWizard){
+    for(const mode of ['zip','directory']){
+      const input=document.createElement('input');input.type='file';input.hidden=true;
+      if(mode==='zip')input.accept='.zip,application/zip';
+      else input.setAttribute('webkitdirectory','');
+      const choose=button(mode==='zip'?'Импортировать из файла':'Импортировать из папки',()=>input.click());
+      choose.dataset.asrPicker='';choose.disabled=activeImport!==null;
+      input.onchange=()=>{
+        const files=Array.from(input.files);input.value='';
+        if(!files.length)return;
+        if(mode==='zip'){
+          importAsr(card,files[0],mode,selected);
+          return;
+        }
+        const parts=(row.import_files||[]).map(asset=>files.filter(file=>file.name===asset.name&&file.size===asset.bytes));
+        if(!parts.length||parts.some(matches=>matches.length!==1)||
+           new Set(parts.map(([file])=>file.webkitRelativePath.split('/').slice(0,-1).join('/'))).size!==1){
+          paragraph('В выбранной папке нужен полный комплект файлов этой версии Whisper.',card);
+          return;
+        }
+        importAsr(card,new Blob(parts.map(([file])=>file)),mode,selected);
+      };
+      card.append(input,choose);
+    }
+    if(activeImport&&(inWizard||!dialog.open))card.append(activeImport);
+  }
+  function importAsr(card,blob,mode,selected){
+    if(activeImport)return;
+    const xhr=new XMLHttpRequest();
+    const started=performance.now();
+    const panel=document.createElement('div');
+    const status=paragraph('Передаём выбранные файлы локальному приложению…',panel);
+    const meter=document.createElement('progress');
+    meter.setAttribute('aria-label','Передача файлов Whisper');meter.max=blob.size;meter.value=0;
+    const cancel=button('Отмена импорта',()=>xhr.abort());
+    panel.append(meter,cancel);card.append(panel);activeImport=panel;
+    document.querySelectorAll('[data-asr-picker]').forEach(control=>control.disabled=true);
+    xhr.open('POST','/api/setup/asr-import?'+new URLSearchParams({profile:selected,mode}));
+    xhr.setRequestHeader('X-LocalMind-Key',$('key').value);
+    xhr.setRequestHeader('Content-Type','application/octet-stream');
+    xhr.responseType='json';xhr.timeout=610000;
+    xhr.upload.onprogress=event=>{
+      meter.value=event.loaded;
+      const seconds=(performance.now()-started)/1000;
+      const rate=seconds>=1?' · '+(event.loaded/1048576/seconds).toFixed(1)+' МиБ/с':'';
+      status.textContent='Локальный импорт · '+Math.floor(100*event.loaded/blob.size)+'%'+rate;
+    };
+    xhr.upload.onload=()=>{
+      cancel.disabled=true;
+      status.textContent='Файлы переданы. Ожидаем задачу проверки…';
+    };
+    xhr.onload=()=>{
+      if(xhr.status>=200&&xhr.status<300){
+        status.textContent='Файлы получены. Проверяем модель Whisper.';
+        poll();
+      }else status.textContent=xhr.response?.detail||'Не удалось передать файлы.';
+    };
+    xhr.onerror=xhr.ontimeout=()=>{status.textContent='Передача файлов прервана. Выберите файл или папку снова.';};
+    xhr.onabort=()=>{
+      status.textContent='Передача остановлена. Если проверка уже началась, отмените её в списке задач.';
+      poll();
+    };
+    xhr.onloadend=()=>{
+      cancel.remove();meter.remove();activeImport=null;
+      document.querySelectorAll('[data-asr-picker]').forEach(control=>control.disabled=false);
+    };
+    xhr.send(blob);
   }
   function render(){
     clearTimeout(timer);timer=null;heading.textContent=steps[step];content.replaceChildren();progress.replaceChildren();
@@ -84,6 +164,8 @@
       for(const [id,name] of [['cpu-fast','Small · CPU'],['gpu-quality','Medium · GPU или CPU']]){const o=document.createElement('option');o.value=id;o.textContent=name;select.append(o);}
       select.value=profile==='balanced'?'cpu-fast':profile;select.onchange=()=>{profile=select.value;saveProgress();render();};label.append(select);content.append(label);
       resourceCard('asr');checkbox(' Подготовить распознавание позже',skipASR,v=>{skipASR=v;saveProgress();});
+      const jobs=document.createElement('div');jobs.id='setupAsrJobs';jobs.setAttribute('aria-live','polite');content.append(jobs);
+      poll();
       if(profile==='gpu-quality')paragraph('При выборе Medium загрузка Small не требуется. Недоступность CUDA не отменяет возможность запуска на CPU.');
     }
     if(step===2){resourceCard('tts');checkbox(' Подготовить голос позже',skipTTS,v=>{skipTTS=v;saveProgress();});paragraph('Silero xenia работает на CPU. Уже проверенный голос повторно не загружается.');}
@@ -163,16 +245,34 @@
     const b=button('Установить модель из комплекта',async()=>{b.disabled=true;try{await api('/offline-model',{accept_license:accept.checked,acknowledge_unknown_disk:disk.checked&&document.documentElement.dataset.expert==='true'});paragraph('Импорт начат. Активная нейросеть не изменится.',card);}catch(e){showError(e);}finally{b.disabled=false;}});card.append(b);content.append(card);
   }
   async function poll(){
-    clearTimeout(timer);if(!dialog.open||![3,4].includes(step)||document.hidden)return;
+    clearTimeout(timer);if(!downloadTarget()||document.hidden)return;
     if(loading)return loading;
     loading=(async()=>{
       try{const r=await fetch('/api/downloads',{headers:{'X-LocalMind-Key':$('key').value}});const d=await r.json();if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:'Загрузки недоступны');
-        if(dialog.open&&[3,4].includes(step))window.localmindDownloads?.renderInto($(step===3?'setupModelJobs':'setupJobs'),d.jobs||[]);
-        if(step===3&&(['checking','verifying','starting','recovering'].includes(data?.engine?.state)||
+        const target=downloadTarget();
+        if(!target)return;
+        const jobs=(d.jobs||[]).filter(job=>!target.profile||job.kind==='asr'&&
+          (job.profile==='gpu-quality')===(target.profile==='gpu-quality'));
+        window.localmindDownloads?.renderInto(target.root,jobs);
+        const finished=jobs.filter(job=>job.kind==='asr'&&job.status==='succeeded'&&!reportedAsrJobs.has(job.id));
+        if(finished.length&&!activeImport){
+          finished.forEach(job=>reportedAsrJobs.add(job.id));
+          await load();
+        }else if(dialog.open&&step===3&&(['checking','verifying','starting','recovering'].includes(data?.engine?.state)||
             data?.engine?.state==='ready'&&data?.ollama?.state!=='ready'))await load();
       }catch(e){showError(e);}
-      finally{loading=null;if(dialog.open&&[3,4].includes(step)&&!document.hidden)timer=setTimeout(poll,1500);}
+      finally{loading=null;if(downloadTarget()&&!document.hidden)timer=setTimeout(poll,1500);}
     })();return loading;
+  }
+  function downloadTarget(){
+    if(dialog.open){
+      if(step===1)return {root:$('setupAsrJobs'),profile};
+      if(step===3)return {root:$('setupModelJobs')};
+      if(step===4)return {root:$('setupJobs')};
+    }
+    if($('settingsDialog').open&&!$('settings-voice').hidden&&!$('downloadsDialog')?.open)
+      return {root:voiceSettingsJobs,profile:$('voiceProfile').value||'cpu-fast'};
+    return null;
   }
   async function finish(){
     if(saving)return;saving=true;render();error.hidden=true;
@@ -199,8 +299,10 @@
         initialized=true;
       }
       render();
+      renderVoiceSettings();
       if(first&&data.onboarding?.completed===false&&!document.querySelector('dialog[open]')){dialog.showModal();poll();}
       if(first&&data.onboarding?.completed)window.dispatchEvent(new CustomEvent('localmind-setup-completed',{detail:data}));
+      poll();
     }catch(e){showError(e);if(first&&!document.querySelector('dialog[open]')){render();dialog.showModal();content.append(button('Повторить проверку',()=>load()));}}
   }
   function open(){
@@ -211,6 +313,25 @@
   }
   for(const id of ['repeatSetup','helpSetup'])$(id)?.addEventListener('click',()=>{document.querySelectorAll('dialog[open]').forEach(d=>d.close());open();});
   const repair=button('Подготовить голос / восстановить',open);repair.id='repairVoice';$('settings-voice').append(repair);
+  const voiceSettings=document.createElement('div');
+  const voiceSettingsJobs=document.createElement('div');voiceSettingsJobs.setAttribute('aria-live','polite');
+  $('settings-voice').append(voiceSettings,voiceSettingsJobs);
+  function renderVoiceSettings(){
+    voiceSettings.replaceChildren();
+    if(data?.voice?.length)resourceCard('asr',voiceSettings,$('voiceProfile').value||'cpu-fast');
+  }
+  $('voiceProfile').addEventListener('change',()=>{renderVoiceSettings();poll();});
+  let voiceSettingsVisible=false;
+  const settingsObserver=new MutationObserver(()=>{
+    const visible=$('settingsDialog').open&&!$('settings-voice').hidden;
+    if(visible===voiceSettingsVisible)return;
+    voiceSettingsVisible=visible;
+    if(visible)load();else poll();
+  });
+  settingsObserver.observe($('settingsDialog'),{attributes:true,attributeFilter:['open']});
+  settingsObserver.observe($('settings-voice'),{attributes:true,attributeFilter:['hidden']});
+  $('downloadsDialog')?.addEventListener('close',poll);
+  window.addEventListener('localmind-downloads-changed',poll);
   dialog.addEventListener('cancel',event=>{event.preventDefault();pauseSetup();});
   dialog.addEventListener('close',()=>{clearTimeout(timer);timer=null;});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)clearTimeout(timer);else poll();});

@@ -1,5 +1,6 @@
 """Private bounded first-run inference probe. No microphone or audio retention."""
 import json
+import re
 import sys
 
 
@@ -11,11 +12,15 @@ def main():
         if kind == 'asr':
             import numpy as np
             from .voice import Recognizer, MODELS, PROFILES
+            from .paths import ordinary_tree
             profile = sys.argv[2] if len(sys.argv) > 2 else 'balanced'
             config = PROFILES[profile]
+            folder = sys.argv[3] if len(sys.argv) > 3 else config['model']
+            if folder != config['model'] and not re.fullmatch(r'\.asr-stage-[a-f0-9]{32}', folder):
+                raise ValueError('Unknown staging folder')
             # Readiness probe verifies CPU portability. GPU is only proven by
             # an actual recognition request and reported by that worker.
-            model, _, _ = Recognizer().load(MODELS / 'whisper' / config['model'], 'cpu', 'int8')
+            model, _, _ = Recognizer().load(ordinary_tree(MODELS / 'whisper' / folder), 'cpu', 'int8')
             segments, _ = model.transcribe(np.zeros(16000, dtype=np.float32), language='ru', beam_size=1, vad_filter=False)
             list(segments)
         elif kind == 'tts':

@@ -259,7 +259,10 @@ async def local_boundary(request: Request, call_next):
             authorize(request.headers.get('x-localmind-key'))
         except HTTPException as exc:
             return JSONResponse({'detail':exc.detail},status_code=exc.status_code)
-    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+    # This exact route enforces its own streaming size, timeout and admission
+    # limits after the same loopback, origin and key checks above.
+    streaming_asr_import = request.method == 'POST' and request.url.path == '/api/setup/asr-import'
+    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE') and not streaming_asr_import:
         if not _body_slots.acquire(blocking=False):
             return JSONResponse({'detail':'Слишком много одновременных загрузок'},status_code=429)
         try:
