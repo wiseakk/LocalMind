@@ -1,6 +1,8 @@
 """Extra sources for the exact CTranslate2 artifacts pinned in voice_resources.json."""
 import hashlib
+import ipaddress
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -10,7 +12,8 @@ import time
 from urllib.parse import urljoin, urlsplit
 import zipfile
 
-from .paths import APP_ROOT, ordinary_tree
+import httpx
+from .paths import APP_ROOT, atomic_json, ordinary_tree
 
 MIRRORS = APP_ROOT / 'config/asr_mirrors.json'
 DOWNLOAD_API = 'https://cloud-api.yandex.net/v1/disk/public/resources/download'
@@ -18,6 +21,7 @@ PUBLIC_HOSTS = {'disk.yandex.ru', 'disk.yandex.com', 'disk.yandex.net', 'yadi.sk
 DOWNLOAD_HOSTS = {'downloader.disk.yandex.ru', 'downloader.disk.yandex.net',
                   'downloader.disk.yandex.com', 'downloader.dst.yandex.ru'}
 CHUNK = 1024 * 1024
+MIRROR_SOURCES = {'yandex_disk': 'yandex', 'direct_https': 'direct_https'}
 
 
 class ASRSourceError(ValueError):
@@ -36,6 +40,25 @@ def _yandex_url(url, hosts):
     return parsed
 
 
+def _direct_url(url):
+    if not isinstance(url, str) or len(url) > 2048 or any(ord(char) <= 32 or ord(char) == 127 for char in url):
+        raise ASRSourceError('Укажите прямую HTTPS-ссылку зеркала.')
+    parsed = urlsplit(url)
+    host = parsed.hostname or ''
+    if (parsed.scheme != 'https' or not host or parsed.username is not None or parsed.password is not None
+            or parsed.fragment or parsed.port == 0 or parsed.path in ('', '/') or '\\' in url):
+        raise ASRSourceError('Укажите прямую HTTPS-ссылку зеркала без учётных данных.')
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        if (not re.fullmatch(r'(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,62}', host)
+                or host.endswith(('.localhost', '.local'))):
+            raise ASRSourceError('Укажите публичное имя HTTPS-зеркала.')
+    else:
+        if not address.is_global or address.is_multicast:
+            raise ASRSourceError('Укажите публичный адрес HTTPS-зеркала.')
+
+
 def mirror_for(model, assets):
     try:
         path = ordinary_tree(MIRRORS)
@@ -45,13 +68,24 @@ def mirror_for(model, assets):
         if not isinstance(row, dict):
             return None
         url, digest, size = row['url'], row['sha256'], row.get('bytes')
-        parsed = _yandex_url(url, PUBLIC_HOSTS)
-        if (len(url) > 512 or parsed.query or not re.fullmatch(r'/[di]/[A-Za-z0-9_-]+/?', parsed.path)
-                or not re.fullmatch(r'[0-9a-fA-F]{64}', digest)
+        kind = row.get('type', 'yandex_disk')
+        if kind == 'direct_https':
+            _direct_url(url)
+        elif kind == 'yandex_disk':
+            parsed = _yandex_url(url, PUBLIC_HOSTS)
+            if len(url) > 512 or parsed.query or not re.fullmatch(r'/[di]/[A-Za-z0-9_-]+/?', parsed.path):
+                return None
+        else:
+            return None
+        if (not re.fullmatch(r'[0-9a-fA-F]{64}', digest)
                 or size is not None and (type(size) is not int or not 0 < size <= archive_limit(assets))):
             return None
         mirror = {'url': url, 'sha256': digest.lower(), 'bytes': size}
-        return {**mirror, 'fingerprint': hashlib.sha256(json.dumps(mirror, sort_keys=True).encode()).hexdigest()}
+        # Keep the old Yandex fingerprint so already-confirmed jobs can retry.
+        if kind == 'direct_https':
+            mirror['type'] = kind
+        fingerprint = hashlib.sha256(json.dumps(mirror, sort_keys=True).encode()).hexdigest()
+        return {**mirror, 'type': kind, 'fingerprint': fingerprint}
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
         return None
 
@@ -59,6 +93,130 @@ def mirror_for(model, assets):
 def check_cancel(cancel):
     if cancel.is_set():
         raise InterruptedError()
+
+
+def _strong_etag(value):
+    return isinstance(value, str) and re.fullmatch(r'"[\x21\x23-\x7e]{0,256}"', value) is not None
+
+
+def _clear_partial(partial, metadata):
+    metadata.unlink(missing_ok=True)
+    partial.unlink(missing_ok=True)
+
+
+def _direct_resume(partial, metadata, mirror, limit):
+    try:
+        if metadata.stat().st_size <= 2048 and partial.is_file():
+            row = json.loads(metadata.read_text(encoding='utf-8'))
+            size = partial.stat().st_size
+            total, etag = row['total'], row['etag']
+            if (row['fingerprint'] == mirror['fingerprint'] and _strong_etag(etag)
+                    and type(total) is int and 0 < size <= total <= limit
+                    and mirror['bytes'] in (None, total)):
+                return size, total, etag
+    except (OSError, ValueError, TypeError, KeyError):
+        pass
+    _clear_partial(partial, metadata)
+    return 0, mirror['bytes'], None
+
+
+def _direct_response(response, offset, total, etag, configured_size, limit):
+    response.raise_for_status()
+    if (response.headers.get('content-encoding', 'identity').lower() != 'identity'
+            or response.headers.get('content-type', '').lower().startswith(('text/html', 'multipart/'))):
+        raise ASRSourceError('HTTPS-зеркало не вернуло ZIP в исходном представлении.')
+    length = response.headers.get('content-length')
+    if length is not None:
+        if not re.fullmatch(r'[0-9]{1,10}', length) or not 0 < int(length) <= limit:
+            raise ASRSourceError('Недопустимый размер ZIP с HTTPS-зеркала.')
+        length = int(length)
+    current_etag = response.headers.get('etag')
+    content_range = response.headers.get('content-range')
+    if response.status_code == 206:
+        match = re.fullmatch(r'bytes ([0-9]{1,10})-([0-9]{1,10})/([0-9]{1,10})', content_range or '')
+        if (not offset or current_etag != etag or not match
+                or tuple(map(int, match.groups())) != (offset, total - 1, total)
+                or length not in (None, total - offset)):
+            raise ASRSourceError('HTTPS-зеркало вернуло несогласованный диапазон ZIP. Повтор начнётся заново.')
+        return offset, total, etag
+    if response.status_code != 200 or content_range is not None:
+        raise ASRSourceError('Неожиданный ответ HTTPS-зеркала.')
+    if configured_size is not None and length not in (None, configured_size):
+        raise ASRSourceError('Размер ZIP с HTTPS-зеркала не совпадает с конфигурацией.')
+    return 0, length or configured_size, current_etag if _strong_etag(current_etag) else None
+
+
+def download_direct_archive(client, mirror, partial, destination, assets, cancel, progress, register):
+    """Resume only the same immutable representation, then check the whole ZIP on disk."""
+    _direct_url(mirror['url'])
+    partial = ordinary_tree(partial)
+    metadata = ordinary_tree(partial.with_suffix('.json'))
+    limit = archive_limit(assets)
+    offset, total, etag = _direct_resume(partial, metadata, mirror, limit)
+    deadline = time.monotonic() + 7200
+    try:
+        check_cancel(cancel)
+        if offset == 0 or offset != total:
+            for _ in range(2):
+                headers = {'Accept-Encoding': 'identity'}
+                if offset:
+                    headers.update({'Range': f'bytes={offset}-', 'If-Range': etag})
+                with client.stream('GET', mirror['url'], headers=headers, follow_redirects=False) as response:
+                    register(response)
+                    if response.is_redirect:
+                        raise ASRSourceError('Укажите конечную HTTPS-ссылку на ZIP без перенаправления.')
+                    if offset and response.status_code == 416:
+                        _clear_partial(partial, metadata)
+                        offset, total, etag = 0, mirror['bytes'], None
+                        continue
+                    offset, total, etag = _direct_response(response, offset, total, etag, mirror['bytes'], limit)
+                    if not offset:
+                        _clear_partial(partial, metadata)
+                    required = sum(asset['bytes'] for asset in assets)
+                    if shutil.disk_usage(partial.parent).free < required + (total or limit) - offset:
+                        raise OSError('Недостаточно места')
+                    progress(offset, total)
+                    with partial.open('ab' if offset else 'xb') as output:
+                        if not offset and total and etag:
+                            atomic_json(metadata, {'fingerprint': mirror['fingerprint'], 'total': total, 'etag': etag})
+                        count = offset
+                        last_report = time.monotonic()
+                        for chunk in response.iter_raw():
+                            check_cancel(cancel)
+                            count += len(chunk)
+                            now = time.monotonic()
+                            if count > (total or limit):
+                                raise ASRSourceError('ZIP с HTTPS-зеркала превышает допустимый размер.')
+                            if now > deadline:
+                                raise httpx.ReadTimeout('Превышено время скачивания ZIP.')
+                            output.write(chunk)
+                            if now - last_report >= .25:
+                                progress(count, total)
+                                last_report = now
+                        if not count or total is not None and count != total:
+                            raise httpx.ReadError('ZIP получен не полностью.')
+                        output.flush()
+                        os.fsync(output.fileno())
+                    break
+        count = partial.stat().st_size
+        progress(count, count)
+        digest = hashlib.sha256()
+        with partial.open('rb') as stream:
+            while chunk := stream.read(CHUNK):
+                check_cancel(cancel)
+                digest.update(chunk)
+        if digest.hexdigest() != mirror['sha256']:
+            raise ASRSourceError('SHA-256 архива с HTTPS-зеркала не совпадает.')
+        check_cancel(cancel)
+        partial.replace(destination)
+        metadata.unlink(missing_ok=True)
+    except (httpx.HTTPError, InterruptedError):
+        # A checked validator and bounded prefix survive a user retry or restart.
+        _direct_resume(partial, metadata, mirror, limit)
+        raise
+    except Exception:
+        _clear_partial(partial, metadata)
+        raise
 
 
 def download_archive(client, mirror, target, assets, cancel, progress, register):

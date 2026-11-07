@@ -65,8 +65,9 @@
     paragraph((kind==='asr'?'Распознавание речи · '+(row?.model||(selected==='gpu-quality'?'medium':'small')):'Озвучка · Silero xenia')+
       ' — '+(labels[row?.state]||'Состояние ресурса не подтверждено'),card);
     if(kind==='asr'&&row?.state!=='ready'){
+      const mirror=row?.mirror_type==='direct_https'?'прямое HTTPS-зеркало':'зеркало Яндекс Диска';
       if(row?.download_bytes)paragraph('Hugging Face · '+(row.download_bytes/1048576).toFixed(1)+' МиБ. '+
-        (row.mirror_configured?'При ошибке сети можно выбрать зеркало Яндекс Диска.':'Зеркало Яндекс Диска не настроено.'),card);
+        (row.mirror_configured?'При ошибке сети можно выбрать '+mirror+'.':'Зеркало не настроено.'),card);
       if(row&&row.state!=='dependency_missing')addAsrImport(card,row,selected,root===content);
     }
     if(row?.state!=='ready'){

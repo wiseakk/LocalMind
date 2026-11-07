@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 // Stateful browser fixtures. Real SQLite/process recovery is tested in Python.
-async function product(page,baseURL,{completed=false,ready=false,asrSources=false}={}){
+async function product(page,baseURL,{completed=false,ready=false,asrSources=false,mirrorType='yandex_disk'}={}){
   const state={onboarding:{completed},tour:{completed:false,skipped:completed},preferences:{},voice:[
     {kind:'asr',profile:'cpu-fast',model:'small',state:'model_missing'},
     {kind:'asr',profile:'balanced',model:'small',state:'model_missing'},
@@ -13,6 +13,7 @@ async function product(page,baseURL,{completed=false,ready=false,asrSources=fals
     for(const row of state.voice.filter(row=>row.kind==='asr')){
       row.download_bytes=486000000;
       row.mirror_configured=true;
+      row.mirror_type=mirrorType;
     }
   }
   const origin=new URL(baseURL).origin;
@@ -37,9 +38,10 @@ async function product(page,baseURL,{completed=false,ready=false,asrSources=fals
         model:resource.kind==='asr'?'Whisper small':'Silero xenia',destination:'C:/Fixture/models/'+resource.kind,
         status:'downloading',completed:resource.kind==='asr'?25:60,total:100};
       if(asrSources&&resource.kind==='asr'){
-        if(resource.source==='yandex')Object.assign(job,{asr_source:'yandex',updated_at:Date.now()/1000,bytes_per_second:4194304});
+        if(['yandex','direct_https'].includes(resource.source))Object.assign(job,{asr_source:resource.source,
+          updated_at:Date.now()/1000,bytes_per_second:4194304});
         else Object.assign(job,{asr_source:'huggingface',status:'failed',error:'Hugging Face недоступен.',
-          asr_mirror:{fingerprint:'a'.repeat(64),bytes:486000000}});
+          asr_mirror:{type:mirrorType,fingerprint:'a'.repeat(64),bytes:486000000}});
       }
       jobs.push(job);return json(job);
     }
@@ -86,6 +88,28 @@ test('first setup finds installed Medium Silero and Gemma; completion and tour s
   await page.locator('#repeatTour').click();await expect(page.locator('#tourPopover')).toBeVisible();
   await page.locator('#tourPopover').getByRole('button',{name:'Далее',exact:true}).press('Escape');
   await expect(page.locator('#tourPopover')).not.toBeVisible();
+});
+
+test('direct HTTPS is offered after Hugging Face fails and retries the same job source',async({page,baseURL})=>{
+  const {jobs,mutations}=await product(page,baseURL,{asrSources:true,mirrorType:'direct_https'});
+  const wizard=page.locator('#setupDialog');
+  await page.goto('/');
+  await page.locator('#setupNext').click();
+  await expect(wizard.getByText(/прямое HTTPS-зеркало/)).toBeVisible();
+  const offer=wizard.getByRole('button',{name:/Скачать с HTTPS-зеркала/});
+  await expect(offer).toHaveCount(0);
+  await wizard.getByRole('button',{name:'Скачать Whisper',exact:true}).click();
+  await expect(offer).toBeVisible();
+  expect(jobs).toHaveLength(1);
+  await offer.click();
+  const card=wizard.locator('[data-download-id]').filter({hasText:'Источник: HTTPS-зеркало'});
+  await expect(card.locator('progress')).toHaveJSProperty('value',25);
+  expect(mutations.filter(entry=>entry.body?.source==='direct_https')).toHaveLength(1);
+  await card.getByRole('button',{name:'Отменить',exact:true}).click();
+  await expect(card).toContainText('Отменено');
+  await card.getByRole('button',{name:'Повторить',exact:true}).click();
+  await expect(card).toContainText('Подготовка');
+  expect(mutations.some(entry=>entry.path==='/api/downloads/'+jobs[1].id+'/retry')).toBe(true);
 });
 
 test('Whisper wizard shows explicit mirror consent, progress, cancellation and local ZIP',async({page,baseURL})=>{

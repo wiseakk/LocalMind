@@ -98,7 +98,7 @@ def test_official_network_failure_offers_mirror_only_with_explicit_consent(model
     official = setup.start('asr', 'cpu-fast')
     wait_job(official['id'], 'failed')
     offer = setup.store.snapshot(official['id'])['asr_mirror']
-    assert offer == {'fingerprint': configured['fingerprint'], 'bytes': len(payload)}
+    assert offer == {'type':'yandex_disk', 'fingerprint': configured['fingerprint'], 'bytes': len(payload)}
     assert not seen
     with pytest.raises(ValueError):
         setup.start('asr', 'cpu-fast', source='yandex', fingerprint='0'*64)
@@ -203,7 +203,7 @@ def test_changed_mirror_is_not_advertised_from_persisted_failure(models, monkeyp
     persisted = {'kind':'asr', 'profile':'cpu-fast', 'status':'failed',
                  'asr_mirror':{'bytes':offer['bytes'], 'fingerprint':offer['fingerprint']}}
     monkeypatch.setattr(model_routes.catalog.downloads, 'snapshot', lambda: [dict(persisted)])
-    assert model_routes.list_pulls()['jobs'][0]['asr_mirror'] == persisted['asr_mirror']
+    assert model_routes.list_pulls()['jobs'][0]['asr_mirror'] == {**persisted['asr_mirror'], 'type':'yandex_disk'}
     sources.MIRRORS.write_text('{"small": null}')
     assert model_routes.list_pulls()['jobs'][0]['asr_mirror'] is None
 

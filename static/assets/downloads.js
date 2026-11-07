@@ -50,7 +50,7 @@
         if(Number.isFinite(job.eta_seconds)&&job.eta_seconds>=0)amount.textContent+=' · около '+Math.ceil(job.eta_seconds)+' с'+(job.kind==='llm'?' по известным слоям':'');
       }
       card.append(title,text,destination,progress,amount);
-      const sources={huggingface:'Hugging Face',yandex:'Яндекс Диск',local:'Локальный импорт'};
+      const sources={huggingface:'Hugging Face',yandex:'Яндекс Диск',direct_https:'HTTPS-зеркало',local:'Локальный импорт'};
       if(sources[job.asr_source]){
         const source=document.createElement('p');source.className='mini';
         source.textContent='Источник: '+sources[job.asr_source];card.append(source);
@@ -64,14 +64,18 @@
       if(active)action('Отменить','cancel').disabled=job.status==='cancelling';
       else{
         if(retryStates.includes(job.status)&&job.asr_source!=='local')action('Повторить','retry');
-        if(job.status==='failed'&&job.asr_source==='huggingface'&&job.asr_mirror?.fingerprint){
+        const mirrorType=job.asr_mirror?.type||'yandex_disk';
+        if(job.status==='failed'&&job.asr_source==='huggingface'&&job.asr_mirror?.fingerprint&&
+            ['yandex_disk','direct_https'].includes(mirrorType)){
           const alternative=document.createElement('button');alternative.className='secondary';
-          alternative.textContent='Скачать с Яндекс Диска'+(job.asr_mirror.bytes?' · '+size(job.asr_mirror.bytes):'');
+          const direct=mirrorType==='direct_https';
+          alternative.textContent=(direct?'Скачать с HTTPS-зеркала':'Скачать с Яндекс Диска')+
+            (job.asr_mirror.bytes?' · '+size(job.asr_mirror.bytes):'');
           alternative.onclick=async()=>{
             alternative.disabled=true;
             try{
               const r=await fetch('/api/setup/voice',{method:'POST',headers:{'Content-Type':'application/json','X-LocalMind-Key':$('key').value},
-                body:JSON.stringify({kind:'asr',profile:job.profile,source:'yandex',fingerprint:job.asr_mirror.fingerprint})});
+                body:JSON.stringify({kind:'asr',profile:job.profile,source:direct?'direct_https':'yandex',fingerprint:job.asr_mirror.fingerprint})});
               const result=await r.json();
               if(!r.ok)throw Error(result.detail||'Зеркало недоступно');
               await resumePolling();

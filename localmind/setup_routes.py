@@ -131,7 +131,7 @@ def save_product_preferences(data: PreferencesRequest):
 class ResourceRequest(BaseModel):
     kind: Literal['asr', 'tts']
     profile: Literal['cpu-fast', 'balanced', 'gpu-quality'] = 'balanced'
-    source: Literal['huggingface', 'yandex'] = 'huggingface'
+    source: Literal['huggingface', 'yandex', 'yandex_disk', 'direct_https'] = 'huggingface'
     fingerprint: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
 
 

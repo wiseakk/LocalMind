@@ -90,7 +90,8 @@ def status():
             mirror = asr_sources.mirror_for(ASR_PROFILES[profile], assets)
             source_info = {'download_bytes': sum(a['bytes'] for a in assets),
                            'import_files': [{'name': Path(a['path']).name, 'bytes': a['bytes']} for a in assets],
-                           'mirror_configured': mirror is not None}
+                           'mirror_configured': mirror is not None,
+                           'mirror_type': mirror['type'] if mirror else None}
         rows.append({'kind': kind, 'profile': profile if kind == 'asr' else None,
                      'required': kind != 'asr' or profile == default_stt_profile(),
                      'model': ASR_PROFILES[profile] if kind == 'asr' else 'Silero · xenia', 'state': state,
@@ -107,7 +108,7 @@ def mirror_offer(profile):
     if profile not in ASR_PROFILES:
         return None
     mirror = asr_sources.mirror_for(ASR_PROFILES[profile], assets_for('asr', profile))
-    return {'fingerprint': mirror['fingerprint'], 'bytes': mirror['bytes']} if mirror else None
+    return {key: mirror[key] for key in ('type', 'fingerprint', 'bytes')} if mirror else None
 
 
 def signatures(assets):
@@ -129,13 +130,15 @@ def start(kind, profile='balanced', *, source='huggingface', fingerprint=None, i
     if kind not in ('asr', 'tts'):
         raise ValueError('Неизвестный ресурс.')
     assets = assets_for(kind, profile)
-    if (source not in ('huggingface', 'yandex', 'local') or kind != 'asr' and source != 'huggingface'
+    source = asr_sources.MIRROR_SOURCES.get(source, source)
+    if (source not in ('huggingface', 'yandex', 'direct_https', 'local') or kind != 'asr' and source != 'huggingface'
             or source == 'local' and (incoming is None or mode not in ('zip', 'directory'))):
         raise ValueError('Неизвестный источник голосового ресурса.')
     mirror = None
-    if source == 'yandex':
+    if source in asr_sources.MIRROR_SOURCES.values():
         mirror = asr_sources.mirror_for(ASR_PROFILES[profile], assets)
-        if not mirror or mirror['fingerprint'] != fingerprint:
+        if (not mirror or asr_sources.MIRROR_SOURCES[mirror['type']] != source
+                or mirror['fingerprint'] != fingerprint):
             raise ValueError('Зеркало не настроено или изменилось. Повторите проверку источника.')
     if not dependencies(kind):
         raise ValueError('Компоненты голоса отсутствуют. Восстановите LocalMind установщиком; Python и pip не нужны.')
@@ -146,7 +149,7 @@ def start(kind, profile='balanced', *, source='huggingface', fingerprint=None, i
            'status': 'starting', 'completed': 0, 'total': 0, 'error': None, 'layers': {},
            'created_at': time.time(), 'resumable': True}
     if kind == 'asr':
-        job.update(asr_source=source, resumable=source == 'huggingface')
+        job.update(asr_source=source, resumable=source in ('huggingface', 'direct_https'))
         if mirror:
             job.update(mirror_fingerprint=fingerprint, total=mirror['bytes'])
     with _lock:
@@ -406,10 +409,10 @@ def _install_import(key, profile, cancel, assets, source, mirror, incoming, mode
     stage = parent / ('.asr-stage-' + uuid.uuid4().hex)
     stage.mkdir()
     try:
-        if source == 'yandex':
+        if mirror:
             archive = stage / 'incoming.zip'
             mode = 'zip'
-            if shutil.disk_usage(parent).free < sum(a['bytes'] for a in assets) + (mirror['bytes'] or asr_sources.archive_limit(assets)):
+            if source == 'yandex' and shutil.disk_usage(parent).free < sum(a['bytes'] for a in assets) + (mirror['bytes'] or asr_sources.archive_limit(assets)):
                 raise OSError('Недостаточно места')
 
             def register(response):
@@ -417,16 +420,22 @@ def _install_import(key, profile, cancel, assets, source, mirror, incoming, mode
                     asr_sources.check_cancel(cancel)
                     _sources[key] = response
 
+            def progress(completed, total):
+                store.update(key, status='downloading', completed=completed, total=total)
+
             with httpx.Client(timeout=httpx.Timeout(15, connect=5, read=5), follow_redirects=False, trust_env=False) as client:
-                asr_sources.download_archive(client, mirror, archive, assets, cancel,
-                    lambda completed, total: store.update(key, status='downloading', completed=completed, total=total), register)
+                if source == 'direct_https':
+                    partial = parent / ('.asr-' + model + '-direct.part')
+                    asr_sources.download_direct_archive(client, mirror, partial, archive, assets, cancel, progress, register)
+                else:
+                    asr_sources.download_archive(client, mirror, archive, assets, cancel, progress, register)
         else:
             archive = ordinary_tree(incoming)
             received = archive.stat().st_size
             store.update(key, completed=received, total=received)
         store.update(key, status='verifying')
         asr_sources.stage_import(archive, mode, stage, model, assets, cancel)
-        if source == 'yandex':
+        if mirror:
             archive.unlink()
         _require_probe(_serial_probe(key, 'asr', cancel, profile, stage))
         with _lock:
@@ -456,7 +465,16 @@ def _install_import(key, profile, cancel, assets, source, mirror, incoming, mode
 
 def _remote_unavailable(exc):
     return isinstance(exc, httpx.RequestError) or isinstance(exc, httpx.HTTPStatusError) and (
-        exc.response.status_code in (401, 403, 404, 408, 429) or exc.response.status_code >= 500)
+        exc.response.status_code in (401, 403, 404, 408, 429, 451) or exc.response.status_code >= 500)
+
+
+def _cancel_message(source):
+    return {
+        'huggingface': 'Загрузка прервана. Нажмите «Повторить»: загруженная часть сохранена.',
+        'local': 'Подготовка отменена. Для локального импорта выберите файл или папку снова.',
+        'yandex': 'Загрузка отменена. Повтор начнёт скачивание архива заново.',
+        'direct_https': 'Загрузка отменена. Повтор продолжит скачивание, если сервер подтвердит ту же версию ZIP.',
+    }[source]
 
 
 def _prepare(key, kind, cancel, profile='balanced', *, source='huggingface', mirror=None, incoming=None, mode=None):
@@ -509,15 +527,12 @@ def _prepare(key, kind, cancel, profile='balanced', *, source='huggingface', mir
                 raise InterruptedError()
             _mark_ready(key, kind, profile, assets)
     except InterruptedError:
-        message = ('Загрузка прервана. Нажмите «Повторить»: загруженная часть сохранена.' if source == 'huggingface'
-                   else 'Подготовка отменена. Для локального импорта выберите файл или папку снова.' if source == 'local'
-                   else 'Загрузка отменена. Повтор начнёт скачивание архива заново.')
-        store.terminal_failure(key, status='cancelled', error=message)
+        store.terminal_failure(key, status='cancelled', error=_cancel_message(source))
     except ResourceBusyError as exc:
         store.terminal_failure(key, error=str(exc))
     except Exception as exc:
         if cancel.is_set():
-            store.terminal_failure(key, status='cancelled', error='Подготовка остановлена при завершении LocalMind. Загруженная часть сохранена.')
+            store.terminal_failure(key, status='cancelled', error=_cancel_message(source))
             return
         from .download_errors import record_download_error
         error = record_download_error(exc, 'voice_setup')
@@ -532,8 +547,9 @@ def _prepare(key, kind, cancel, profile='balanced', *, source='huggingface', mir
         if kind == 'asr' and source == 'huggingface' and _remote_unavailable(exc):
             fallback = mirror_offer(profile)
             error['message'] = 'Hugging Face недоступен. Можно импортировать ZIP или папку с моделью.'
-        elif source == 'yandex' and _remote_unavailable(exc):
-            error['message'] = 'Яндекс Диск недоступен. Повторите попытку или импортируйте ZIP или папку с моделью.'
+        elif source in asr_sources.MIRROR_SOURCES.values() and _remote_unavailable(exc):
+            label = 'HTTPS-зеркало недоступно.' if source == 'direct_https' else 'Яндекс Диск недоступен.'
+            error['message'] = label + ' Повторите попытку или импортируйте ZIP или папку с моделью.'
         elif isinstance(exc, asr_sources.ASRSourceError):
             error['message'] = str(exc)
         details = {'asr_mirror': fallback} if kind == 'asr' else {}

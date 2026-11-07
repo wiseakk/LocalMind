@@ -8,8 +8,10 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,5));
     {id:'two',kind:'llm',model:'test',status:'cancelling'},
     {id:'three',kind:'llm',model:'test',status:'succeeded',completed:100,total:100},
     {id:'four',kind:'llm',model:'test',status:'cancelled_unverified'}];
+  const confirmations=[];
   w.fetch=async(url,options)=>{
     calls.push(url);
+    if(url==='/api/setup/voice')confirmations.push(JSON.parse(options.body));
     if(url.endsWith('/dismiss'))jobs=jobs.map(job=>job.id==='three'?{...job,dismissed:true}:job);
     return Response.json(url==='/api/downloads'?{jobs}:{});
   };
@@ -33,6 +35,19 @@ const tick=()=>new Promise(resolve=>setTimeout(resolve,5));
     assert.equal(calls.some(url=>url.includes('delete')||url.includes('select')),false);
     const other=d.createElement('div');w.localmindDownloads.renderInto(other,jobs);
     assert.match(other.textContent,/Отмена запрошена/,'catalog uses identical renderer');
+    const fingerprint='f'.repeat(64);
+    jobs.push({id:'hf',kind:'asr',model:'Whisper medium',profile:'gpu-quality',asr_source:'huggingface',
+      status:'failed',asr_mirror:{type:'direct_https',fingerprint,bytes:1500000000}});
+    jobs.push({id:'direct',kind:'asr',model:'Whisper medium',asr_source:'direct_https',
+      status:'downloading',completed:750000000,total:1500000000});
+    await w.localmindDownloads.refresh();
+    assert.match(card('direct').textContent,/HTTPS-зеркало/);
+    assert.match(card('direct').textContent,/50%/);
+    assert.equal(card('direct').querySelector('progress').value,750000000);
+    assert.deepEqual(confirmations,[]);
+    [...card('hf').querySelectorAll('button')].find(button=>button.textContent.startsWith('Скачать с HTTPS-зеркала')).click();
+    await tick();
+    assert.deepEqual(confirmations,[{kind:'asr',profile:'gpu-quality',source:'direct_https',fingerprint}]);
     console.log('PASS downloads: real byte progress, unknown total, destination, truthful cancellation, durable dismiss action, shared renderer');
   }finally{w.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});
