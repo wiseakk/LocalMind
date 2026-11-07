@@ -14,6 +14,23 @@ os.environ['LOCALMIND_DATA_DIR'] = str(Path(__file__).resolve().parents[1] / '.t
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def no_global_engine_process_in_unit_tests():
+    """Lifespan tests must not discover/start the developer's real engine.
+
+    Supervisor tests create explicit instances; real binaries use a separate,
+    opt-in isolated integration run, never this CI singleton.
+    """
+    from localmind.ollama_runtime import runtime
+    # Do not request pytest's monkeypatch fixture here: doing so changes teardown
+    # order for tests whose temporary directory uses a patched os.scandir.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(runtime, 'start', lambda: runtime.status())
+        patch.setattr(runtime, 'close', lambda: None)
+        patch.setattr(runtime, 'model_stores', lambda: {'candidates': [], 'choice_required': False})
+        yield
+
+
 @pytest.fixture
 def offline_desktop_planner(monkeypatch):
     """Legacy HTTP regressions also exercise the safe planner-unavailable path.

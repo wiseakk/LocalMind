@@ -112,6 +112,8 @@ def test_changed_hf_artifact_cannot_become_ready(monkeypatch):
 @pytest.mark.parametrize('ending,expected', [(b'{"status":"success"}\n', 'succeeded'),
     (b'', 'failed'), (b'{"status":"success"', 'failed'), (b'{"error":"disk full /private/path"}\n', 'failed')])
 def test_progress_interruption_verification_and_redaction(monkeypatch, ending, expected):
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr('localmind.model_manager.manager.verify_download', AsyncMock(return_value={'actual_model': 'fixture'}))
     digest = 'sha256:' + 'a'*64
     progress = json.dumps({'digest': digest, 'total': 100, 'completed': 50}).encode() + b'\n'
     original = httpx.AsyncClient

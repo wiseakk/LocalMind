@@ -20,19 +20,54 @@ def setup_status():
         raise HTTPException(409, str(exc) if isinstance(exc, ValueError) else 'Настройки недоступны. Проверьте каталог данных.')
     try:
         tags = ollama_json('GET', 'tags').get('models', [])
-        ollama = {'state': 'ready', 'active': manager.active,
+        installed = [m['name'] for m in tags if isinstance(m, dict) and isinstance(m.get('name'), str)]
+        ollama = {'state': 'ready', 'active': manager.active if manager.active in installed else None,
+                  'saved_model': manager.active,
+                  'active_verified': manager.verified(tags),
                   'active_installed': any(m.get('name') == manager.active for m in tags if isinstance(m, dict)),
                   'installed': [m['name'] for m in tags if isinstance(m, dict) and isinstance(m.get('name'), str)]}
     except (httpx.HTTPError, ValueError, TypeError):
-        ollama = {'state': 'unavailable', 'message': 'Запустите Ollama или восстановите его установку.'}
+        from .ollama_runtime import runtime
+        engine = runtime.status()
+        ollama = {'state': 'unavailable', 'message': engine['message'] if engine['state'] != 'ready'
+                  else 'Связь с движком потеряна. Нажмите «Повторить запуск движка».'}
     try:
         offline_model = manifest()
     except (OSError, ValueError):
         offline_model = None
     from .model_catalog import disk_status
-    return {**product, 'voice': resource_setup.status(), 'ollama': ollama, 'offline_model': offline_model,
+    from .ollama_runtime import runtime
+    from .hardware import hardware_status
+    return {**product, 'voice': resource_setup.status(), 'ollama': ollama, 'engine': runtime.status(),
+            'model_storage': runtime.model_stores(),
+            'hardware': hardware_status(), 'model_disk': disk_status(), 'offline_model': offline_model,
             'offline_disk': disk_status() if offline_model else None,
             'offline_bundle': (APP_ROOT / 'offline-assets').is_dir()}
+
+
+@router.post('/runtime/retry')
+def retry_engine():
+    from .ollama_runtime import runtime
+    return runtime.retry()
+
+
+class ModelStoreSelection(BaseModel):
+    model_config = {'extra': 'forbid'}
+    store_id: str = Field(pattern=r'^[a-f0-9]{24}$')
+    fingerprint: str = Field(pattern=r'^[a-f0-9]{64}$')
+
+
+@router.post('/runtime/storage')
+def select_engine_storage(data: ModelStoreSelection):
+    from .ollama_runtime import runtime
+    from .model_catalog import downloads
+    from .agent import _inference_slot
+    def select():
+        with _inference_slot(), downloads.lock:
+            if any(job['status'] in ('starting', 'downloading', 'verifying', 'cancelling') for job in downloads.snapshot()):
+                raise ValueError('Дождитесь завершения или отмены загрузок перед сменой каталога моделей.')
+            return runtime.select_store(data.store_id, data.fingerprint)
+    return setup_operation(select)
 
 
 class OnboardingRequest(BaseModel):

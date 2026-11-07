@@ -365,10 +365,13 @@ class DownloadJobs:
             expected = self.jobs[key].get('expected_sha256')
             if expected and (not isinstance(expected, str) or not re.fullmatch('[a-f0-9]{64}', expected) or detail.get('weight_sha256') != expected):
                 raise ValueError('Файл несовместим: GGUF изменился после подтверждения metadata или его SHA-256 не подтверждён Ollama.')
+            self.update(key, status='verifying', stage='inference_verification')
+            from .model_manager import manager
+            health = await manager.verify_download(reference)
             with self.lock:
                 if control['cancel']:
                     raise asyncio.CancelledError()
-                self.update(key, status='succeeded', digest=detail.get('digest'), ready=True, completed=self.jobs[key].get('total', 0))
+                self.update(key, status='succeeded', digest=detail.get('digest'), ready=True, health=health, completed=self.jobs[key].get('total', 0))
         except asyncio.CancelledError:
             self.update(key, status='cancelled_unverified', error='Поток закрыт. Остановка скачивания внутри Ollama не подтверждена; общий pull другого клиента может продолжаться.')
         except Exception as exc:

@@ -1,0 +1,10 @@
+{
+  "version": "0.40.14",
+  "minimum_version": "0.6.6",
+  "url": "https://github.com/ollama/ollama/releases/download/v0.40.14/ollama-windows-amd64.zip",
+  "bytes": 1601954968,
+  "sha256": "65d68cade6cf6375f398b518224f8c8a15e062387f38cf477abfc848de7e7e29",
+  "license": "MIT; bundled components retain their own notices",
+  "license_url": "https://raw.githubusercontent.com/ollama/ollama/v0.40.14/LICENSE",
+  "platform": "windows-amd64"
+}

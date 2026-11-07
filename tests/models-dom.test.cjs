@@ -7,9 +7,10 @@ const html=fs.readFileSync('static/index.html','utf8');
   const row={id:'Qwen/Test-GGUF',name:'<img src=x onerror=alert(1)>',publisher:'<script>bad()</script>',
     source:'huggingface',source_url:'https://huggingface.co/Qwen/Test-GGUF',quantization:'Q4_K_M',
     compatibility:'estimated',license:'apache-2.0',size:1000000,fingerprint:'a'.repeat(64),memory:{},disk:{status:'unknown'},capabilities:{tools:'unknown'}};
+  let missing=false;
   w.fetch=async(url,options)=>{
     calls.push({url,body:options.body&&JSON.parse(options.body)});
-    if(url==='/api/models')return Response.json({active:'local:4b',models:[{name:'local:4b',selectable:true,details:{}}]});
+    if(url==='/api/models')return Response.json(missing?{active:null,default:null,saved_model:'gemma4:12b',models:[]}:{active:'local:4b',models:[{name:'local:4b',selectable:true,details:{}}]});
     if(url.endsWith('/hardware'))return Response.json({gpus:[]});
     if(url.includes('/catalog?'))return Response.json({models:[row]});
     if(url==='/api/models/downloads'&&options.method==='POST'){
@@ -43,6 +44,10 @@ const html=fs.readFileSync('static/index.html','utf8');
     d.querySelector('#testModels').click();await tick();await tick();
     assert.equal(calls.filter(c=>c.url==='/api/models/benchmarks').at(-1).body.models[0],'local:4b');
     assert.match(d.querySelector('#benchmarkResults').textContent,/Полное сравнение не завершено/);
+    missing=true;await w.localmindModels.refresh();
+    assert.equal(d.querySelector('#modelSelect').value,'');
+    assert.match(d.querySelector('#modelStatus').textContent,/gemma4:12b недоступна/);
+    assert.doesNotMatch(d.querySelector('#modelStatus').textContent,/Выбрана сервером/);
     console.log('PASS models: no silent discovery/download, transactional selection error, inert metadata, explicit license/quantization, real identity');
   }finally{w.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -38,6 +38,12 @@ def storage_status():
     try:
         process = listener_process()
         if process is not None:
+            from .ollama_runtime import runtime
+            with runtime.lock:
+                if runtime.process is not None and runtime.process.poll() is None and process.pid == runtime.process.pid:
+                    result.update(path=str(runtime.models), managed=True, confirmed=True, verified=True,
+                                  source='Bundled Ollama owned by LocalMind', pid=process.pid)
+                    return result
             environment = process.environ()
             if os.name == 'nt':
                 environment = {key.upper(): value for key, value in environment.items()}
@@ -54,7 +60,7 @@ def storage_status():
                         and process.create_time() == _managed_identity):
                     result.update(path=str(_managed_path), managed=True, confirmed=True, verified=True,
                                   source='LocalMind launched Ollama; listener PID and start time verified')
-    except (OSError, RuntimeError, ValueError):
+    except (OSError, RuntimeError, ValueError, ImportError):
         pass
     except Exception as exc:
         # psutil AccessDenied/NoSuchProcess do not prove a storage location.

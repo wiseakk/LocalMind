@@ -66,6 +66,7 @@ def test_build_keeps_source_identity_through_runtime_and_asset_copies(tmp_path, 
 
     monkeypatch.setattr(builder.urllib.request, 'urlretrieve', retrieve)
     monkeypatch.setattr(builder, 'run', run)
+    monkeypatch.setattr(builder, 'stage_ollama', lambda *a: {'version': 'fixture', 'files': {}})
     monkeypatch.setattr(builder.subprocess, 'check_output', lambda *a, **k: b'[["example","1.0"]]')
     archived = []
 

@@ -17,6 +17,11 @@
   const later=button('Настроить позже',()=>finish(true));later.className='text-button';
   footer.append(back,later,next);dialog.append(progress,heading,content,error,footer);document.body.append(dialog);
   let step=0,data=null,timer=null,loading=null,saving=false,profile='cpu-fast',skipASR=false,skipTTS=false;
+  const bytes=value=>typeof value==='number'?(value/1073741824).toFixed(1)+' ГиБ':'неизвестно';
+  async function modelApi(path,body){
+    const r=await fetch('/api/models'+path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-LocalMind-Key':$('key').value},...(body?{body:JSON.stringify(body)}:{})});
+    const value=await r.json();if(!r.ok)throw Error(typeof value.detail==='string'?value.detail:'Модель недоступна');return value;
+  }
   function button(text,action){const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent=text;b.onclick=action;return b;}
   function paragraph(text,root=content){const p=document.createElement('p');p.textContent=text;root.append(p);return p;}
   function showError(e){error.hidden=false;error.textContent=e.message||String(e);}
@@ -43,7 +48,11 @@
     clearTimeout(timer);timer=null;heading.textContent=steps[step];content.replaceChildren();progress.replaceChildren();
     steps.forEach((name,index)=>{const item=document.createElement('li');item.textContent=String(index+1);item.title=name;item.setAttribute('aria-label',name);if(index===step)item.setAttribute('aria-current','step');item.classList.toggle('complete',index<step);progress.append(item);});
     back.disabled=step===0||saving;next.disabled=saving||!data;next.textContent=step===5?'Завершить настройку':'Далее';later.hidden=step===5;
-    if(step===0)paragraph('LocalMind — ваше личное пространство для мыслей и голоса. Проверим уже установленные модели и подготовим недостающее с вашего согласия. Загрузка требует интернета, распознавание и ответы работают локально.');
+    if(step===0){
+      paragraph('LocalMind — ваше личное пространство для мыслей и голоса. Проверим уже установленные модели и подготовим недостающее с вашего согласия. Загрузка требует интернета, распознавание и ответы работают локально.');
+      const h=data?.hardware;
+      if(h)paragraph('CPU: '+(h.cpu||'неизвестно')+' · RAM: '+bytes(h.ram_total)+' · доступно: '+bytes(h.ram_available)+' · GPU: '+(h.gpus?.map(g=>g.name+' '+bytes(g.vram_total)).join(', ')||'не обнаружен, доступен CPU')+' · свободно для моделей: '+bytes(data.model_disk?.free));
+    }
     if(step===1){
       paragraph('Микрофон включается только по кнопке записи. Windows спросит разрешение при первом использовании; проверьте текст перед отправкой. Аудиозаписи не сохраняются.');
       const label=document.createElement('label');label.textContent='Распознавание русской речи';const select=document.createElement('select');select.id='setupProfile';
@@ -55,9 +64,50 @@
     if(step===2){resourceCard('tts');checkbox(' Подготовить голос позже',skipTTS,v=>{skipTTS=v;});paragraph('Silero xenia работает на CPU. Уже проверенный голос повторно не загружается.');}
     if(step===3){
       const ollama=data?.ollama;
-      paragraph(ollama?.state==='ready'?(ollama.active_installed?'Нейросеть готова: '+ollama.active:'Ollama работает. Выберите установленную нейросеть в настройках.'):'Запустите Ollama или восстановите его установку. Настройку можно завершить и подготовить нейросеть позже.');
+      paragraph(ollama?.state==='ready'?(ollama.active_verified?'Нейросеть проверена и готова: '+ollama.active:'Движок работает. Выберите модель и проверьте её коротким запросом.'):(ollama?.message||'Проверяем встроенный движок…'));
+      if(data.engine)paragraph(data.engine.message);
+      const storage=data.model_storage;
+      if(storage?.choice_required||storage?.switch_available&&storage.candidates?.some(s=>s.count>0&&!s.selected)){
+        paragraph('Найдены локальные хранилища. Можно использовать готовые модели без копирования и повторной загрузки. Совместимость проверим коротким локальным запросом.');
+        for(const store of storage.candidates||[]){
+          const card=document.createElement('article');card.className='model-card';
+          paragraph(store.source+' · '+store.path,card);
+          paragraph(store.count?'Найдены: '+store.models.join(', '):'Пустой каталог — модели можно скачать позже',card);
+          const use=button(store.selected?'Выбрано':store.count?'Использовать эти модели':'Использовать отдельный каталог LocalMind',async()=>{
+            use.disabled=true;error.hidden=true;
+            try{await api('/runtime/storage',{store_id:store.id,fingerprint:store.fingerprint});await load();}
+            catch(e){showError(e);use.disabled=false;}
+          });use.disabled=Boolean(store.selected);card.append(use);content.append(card);
+        }
+      }
+      if(ollama?.saved_model&&!ollama.active_installed)paragraph('Сохранённая модель '+ollama.saved_model+' отсутствует в работающем движке.');
       if(ollama?.installed?.length)paragraph('Установлены: '+ollama.installed.join(', '));
-      content.append(button('Открыть модели',()=>{dialog.close();$('modelsOpen').click();}));
+      for(const name of ollama?.installed||[])content.append(button('Проверить и использовать '+name,async()=>{
+        const buttons=[...content.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);
+        try{error.hidden=true;paragraph('Проверяем реальный ответ '+name+'. Первый запуск большой модели может занять до 3 минут.');await modelApi('/select',{model:name});await load();}
+        catch(e){showError(e);buttons.forEach(b=>b.disabled=false);}
+      }));
+      if(ollama?.state!=='ready'&&!storage?.choice_required)content.append(button('Повторить запуск движка',async()=>{try{await api('/runtime/retry',{});await load();}catch(e){showError(e);}}));
+      content.append(button('Обновить состояние',()=>load()));
+      const catalog=button('Выбрать и скачать локальную модель',async()=>{
+        catalog.disabled=true;
+        try{
+          const response=await modelApi('/catalog?context=4096');
+          for(const row of response.models||[]){
+            const card=document.createElement('article');card.className='model-card';
+            paragraph(row.name+' · '+bytes(row.size)+(row.size_is_estimate?' (оценка)':'')+' · лицензия '+row.license,card);
+            paragraph('RAM: от '+bytes(row.memory?.ram_minimum)+' · рекомендация '+bytes(row.memory?.ram_recommended)+' · свободно на диске '+bytes(row.disk?.free)+'. '+row.warning,card);
+            const label=document.createElement('label');label.className='check';const accept=document.createElement('input');accept.type='checkbox';
+            label.append(accept,' Я принимаю лицензию '+row.license+' и разрешаю эту загрузку');card.append(label);
+            const pull=button('Скачать выбранную модель',async()=>{
+              pull.disabled=true;
+              try{await modelApi('/downloads',{source:row.source,identity:row.id,quantization:row.quantization,context:4096,accept_license:accept.checked,fingerprint:row.fingerprint});poll();}
+              catch(e){showError(e);pull.disabled=false;}
+            });pull.disabled=true;accept.onchange=()=>{pull.disabled=row.compatibility==='blocked'||!accept.checked;};card.append(pull);content.append(card);
+          }
+        }catch(e){showError(e);catalog.disabled=false;}
+      });catalog.disabled=ollama?.state!=='ready';content.append(catalog);
+      const jobs=document.createElement('div');jobs.id='setupModelJobs';jobs.setAttribute('aria-live','polite');content.append(jobs);poll();
       if(data?.offline_model)offlineCard();
     }
     if(step===4){
@@ -73,7 +123,7 @@
       paragraph('Можно продолжить, пока идёт подготовка, или завершить настройку без необязательных ресурсов. Ошибочную задачу можно повторить отдельно.');
     }
     if(step===5){
-      paragraph('Рабочее пространство готово. Первоначальная настройка больше не откроется автоматически. Незавершённые загрузки доступны отдельно, а этот мастер можно повторить через помощь.');
+      paragraph(data?.ollama?.active_verified?'Нейросеть проверена реальным ответом и готова.': 'Настройки сохранены. Нейросеть ещё не проверена: вернитесь к этапу «Нейросеть» или подготовьте её позже через помощь.');
       paragraph('Беседы сохраняются локально автоматически. Для первого запроса нажмите микрофон или напишите сообщение.');
     }
   }
@@ -86,13 +136,15 @@
     const b=button('Установить модель из комплекта',async()=>{b.disabled=true;try{await api('/offline-model',{accept_license:accept.checked,acknowledge_unknown_disk:disk.checked&&document.documentElement.dataset.expert==='true'});paragraph('Импорт начат. Активная нейросеть не изменится.',card);}catch(e){showError(e);}finally{b.disabled=false;}});card.append(b);content.append(card);
   }
   async function poll(){
-    clearTimeout(timer);if(!dialog.open||step!==4||document.hidden)return;
+    clearTimeout(timer);if(!dialog.open||![3,4].includes(step)||document.hidden)return;
     if(loading)return loading;
     loading=(async()=>{
       try{const r=await fetch('/api/downloads',{headers:{'X-LocalMind-Key':$('key').value}});const d=await r.json();if(!r.ok)throw Error(typeof d.detail==='string'?d.detail:'Загрузки недоступны');
-        if(dialog.open&&step===4)window.localmindDownloads?.renderInto($('setupJobs'),d.jobs||[]);
+        if(dialog.open&&[3,4].includes(step))window.localmindDownloads?.renderInto($(step===3?'setupModelJobs':'setupJobs'),d.jobs||[]);
+        if(step===3&&(['checking','verifying','starting','recovering'].includes(data?.engine?.state)||
+            data?.engine?.state==='ready'&&data?.ollama?.state!=='ready'))await load();
       }catch(e){showError(e);}
-      finally{loading=null;if(dialog.open&&step===4&&!document.hidden)timer=setTimeout(poll,1500);}
+      finally{loading=null;if(dialog.open&&[3,4].includes(step)&&!document.hidden)timer=setTimeout(poll,1500);}
     })();return loading;
   }
   async function finish(skip=false){
@@ -112,9 +164,11 @@
       profile=data.onboarding?.profile||prefs.voice_profile||'cpu-fast';
       const found=row=>['ready','unverified'].includes(row.state);
       if(!data.onboarding?.profile&&!prefs.voice_profile&&data.voice?.some(v=>v.kind==='asr'&&v.model==='medium'&&found(v))&&!data.voice?.some(v=>v.kind==='asr'&&v.model==='small'&&found(v)))profile='gpu-quality';
-      skipASR=Boolean(data.onboarding?.skip_asr);skipTTS=Boolean(data.onboarding?.skip_tts);render();
-      if(first&&data.onboarding?.completed===false&&!document.querySelector('dialog[open]'))dialog.showModal();
-      if(first&&data.onboarding?.completed)window.dispatchEvent(new CustomEvent('localmind-setup-completed',{detail:data}));
+      skipASR=Boolean(data.onboarding?.skip_asr);skipTTS=Boolean(data.onboarding?.skip_tts);
+      if(first&&data.model_storage?.choice_required)step=3;
+      render();
+      if(first&&(data.onboarding?.completed===false||data.model_storage?.choice_required)&&!document.querySelector('dialog[open]')){dialog.showModal();poll();}
+      if(first&&data.onboarding?.completed&&!data.model_storage?.choice_required)window.dispatchEvent(new CustomEvent('localmind-setup-completed',{detail:data}));
     }catch(e){showError(e);if(first&&!document.querySelector('dialog[open]')){render();dialog.showModal();content.append(button('Повторить проверку',()=>load()));}}
   }
   function open(){step=0;if(!dialog.open)dialog.showModal();load();}

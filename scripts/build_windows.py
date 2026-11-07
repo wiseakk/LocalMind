@@ -16,6 +16,7 @@ import sys
 from release_support import (VERSION, source_identity, validate_resume, payload_manifest,
                              validate_payload_sources, validate_payload_layout, copy_committed_sources,
                              write_source_archive, write_checksums, sha256, validate_ui_payload)
+from ollama_bundle import stage as stage_ollama
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -44,6 +45,7 @@ def main():
     parser.add_argument('--asr-profiles', nargs='+', choices=('cpu-fast', 'balanced', 'gpu-quality'), default=['balanced'],
                         help='ASR profiles to bundle offline; others can be prepared explicitly in setup')
     parser.add_argument('--output', type=Path, default=ROOT / 'dist', help='Fresh directory for this release build')
+    parser.add_argument('--runtime-cache', type=Path, default=ROOT / '.test-artifacts/engine-download', help='Hash-verified standalone engine cache')
     args = parser.parse_args()
     # Fail before downloads, dependency installation or payload mutation.
     problems = []
@@ -136,13 +138,7 @@ def main():
                 raise SystemExit('Offline resource mismatch: ' + asset['path'])
             dest = payload / 'offline-assets' / asset['path']; dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, dest)
-    prerequisites = payload / 'prerequisites'; prerequisites.mkdir(exist_ok=True)
-    if not args.resume or not (prerequisites / 'OllamaSetup.exe').is_file():
-        urllib.request.urlretrieve('https://ollama.com/download/OllamaSetup.exe', prerequisites / 'OllamaSetup.exe')
-    # Reject an unsigned/tampered prerequisite before distributing executable code.
-    run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
-         "$s=Get-AuthenticodeSignature -LiteralPath '" + str(prerequisites / 'OllamaSetup.exe').replace("'", "''") +
-         "'; if ($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -notmatch 'Ollama') {exit 1}"])
+    engine = stage_ollama(ROOT, payload, args.runtime_cache)
     run([csc, '/nologo', '/target:winexe', '/win32icon:' + str(ROOT / 'static/assets/localmind.ico'), '/reference:System.Windows.Forms.dll', '/out:' + str(payload / 'LocalMind.exe'), ROOT / 'installer/LocalMind.cs'])
     import os
     environment = {**os.environ, 'LOCALMIND_DATA_DIR': str(ROOT / '.test-artifacts/build-smoke')}
@@ -156,6 +152,7 @@ def main():
     bundled_voice = (payload / 'offline-assets').is_dir()
     bundled_llm = (payload / 'offline-llm').is_dir()
     provenance = {**source_info, 'python': '3.11.9', 'runtime_sha256': runtime_hash,
+                  'ollama_runtime': engine,
                   'dependencies': json.loads(installed), 'payload_sha256': payload_manifest(payload),
                   'voice_assets_bundled': bundled_voice, 'llm_bundled': bundled_llm,
                   'requires_explicit_model_downloads': not (bundled_voice and bundled_llm)}

@@ -47,6 +47,8 @@ async def lifespan(app):
     offline_model.reopen()
     tts_worker.reopen()
     stt_worker.reopen()
+    from .ollama_runtime import runtime
+    runtime.start()  # Background readiness; never hold GUI/ASGI startup on inference.
     catalog.set_personal_mode(file_access.known_app_launch_allowed())
     warm_task = asyncio.create_task(asyncio.to_thread(warm_tts))
     try:
@@ -62,7 +64,10 @@ async def lifespan(app):
             (downloads.stop_all, benchmarks.stop_all, resource_setup.stop_all, offline_model.stop_all,
              shutdown_tts, shutdown_stt, store.close)), return_exceptions=True)
         warm_task.cancel()
-        window_tools.close()
+        try:
+            window_tools.close()
+        finally:
+            await asyncio.to_thread(runtime.close)
         if any(isinstance(result, BaseException) for result in results):
             raise RuntimeError('Не все фоновые задачи LocalMind удалось завершить.')
 

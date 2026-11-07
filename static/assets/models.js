@@ -49,7 +49,8 @@
         missing.textContent = 'Модель недоступна — выберите установленную';
         missing.selected = true; select.prepend(missing);
       }
-      $('modelStatus').textContent = `Выбрана сервером: ${data.active || data.default}. Смена только после проверки. Загрузка в каталогах — только по кнопке.`;
+      $('modelStatus').textContent = activeSelection ? `Выбрана сервером: ${activeSelection}. Смена только после проверки. Загрузка в каталогах — только по кнопке.` :
+        (data.saved_model ? `Сохранённая модель ${data.saved_model} недоступна. Выберите и проверьте установленную модель.` : 'Выберите и проверьте установленную модель.');
       const list = $('installedModels'); list.replaceChildren();
       for (const row of data.models || []) {
         const item = document.createElement('pre'); item.className = 'model-card mini';

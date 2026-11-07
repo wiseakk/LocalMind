@@ -24,5 +24,14 @@
     "size": 6000000000, "size_is_estimate": true, "architecture": "mistral3",
     "max_context": 262144, "capabilities": ["chat", "tools", "vision"],
     "metadata_date": "2026-11-03", "minimum_ollama": "0.13.1", "benchmarks": []
+  },
+  {
+    "id": "qwen2.5:0.5b-instruct-q4_K_M", "name": "Qwen2.5 0.5B — лёгкая проверка / CPU", "publisher": "Qwen",
+    "source": "ollama", "source_url": "https://ollama.com/library/qwen2.5:0.5b-instruct-q4_K_M",
+    "license": "Apache-2.0", "parameters": 494000000, "quantization": "Q4_K_M",
+    "size": 398000000, "size_is_estimate": true, "architecture": "qwen2",
+    "max_context": 32768, "capabilities": ["chat"],
+    "kv_layers": 24, "kv_heads": 2, "head_dim": 64,
+    "metadata_date": "2026-11-07", "minimum_ollama": "0.3.0", "benchmarks": []
   }
 ]
