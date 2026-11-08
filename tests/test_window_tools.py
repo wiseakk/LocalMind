@@ -354,6 +354,30 @@ def test_open_window_timeout_preserves_launch_and_reports_unknown_process(tools,
     assert result.data['process_running'] is None and not result.data['window_activated']
 
 
+def test_steam_opens_verified_child_window_without_relaunch(tmp_path):
+    client = tmp_path/'steam.exe'
+    helper = tmp_path/'steamwebhelper.exe'
+    backend = FakeWindows()
+    backend.inspect = lambda path: (ApplicationState('background', ((41, 100),)) if path == client else
+                                    ApplicationState('visible_window', ((55, 123),), tuple(backend.windows)))
+    backend.child_of = Mock(return_value=True)
+    operate = Mock(wraps=backend.operate)
+    backend.operate = operate
+    @contextmanager
+    def provider(app_id):
+        yield AppTarget(app_id, 'Steam', client, 'client-fingerprint', companions=((helper, (1, 2, 3, 4)),))
+    service = WindowTools(backend=backend, target_provider=provider, app_ids=lambda: ['steam'])
+    launcher = Mock()
+    result = service.open_app('steam', launcher)
+    launcher.assert_not_called()
+    assert result.observed_state == 'foreground_window' and result.data['window_found'] and result.data['window_activated']
+    assert all(call.args[0] == helper for call in operate.call_args_list)
+    backend.child_of.return_value = False
+    assert service.focus_window(result.data['window_id']).execution_status == 'stale_target'
+    assert not service.list_running('steam').data['windows']
+    assert operate.call_count == 2  # stamp and focus only
+
+
 def test_open_ambiguity_and_inspection_failure_never_launch(tools):
     service, backend, _ = tools
     launcher = Mock()

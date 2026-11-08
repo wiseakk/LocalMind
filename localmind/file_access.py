@@ -512,6 +512,17 @@ class FileAccess:
         from .generation import check_cancelled
         action = 'files.list_directory'
         path = Path(target)
+        if not path.is_absolute() and not path.drive:
+            from .file_requests import saved_folder
+            try:
+                with self._lock, self.personal_mode._lock:
+                    self._sync_policy()
+                    path = saved_folder(target, self.personal_mode.roots().values())
+                    target = str(path)
+            except (FileAccessError, OSError) as exc:
+                reason = str(exc) if isinstance(exc, FileAccessError) else 'Не удалось проверить разрешённые папки.'
+                return refused(action, None, reason + ' Для просмотра папки нужно разрешение «Поиск».',
+                               status='permission_required')
         if (not path.is_absolute() or target.startswith(('\\\\', '//')) or '..' in path.parts
                 or ':' in target[len(path.drive):] or any(c in '<>|*?"' or ord(c) < 32 for c in target)
                 or any(part.rstrip(' .') != part for part in path.parts if part != path.anchor)):

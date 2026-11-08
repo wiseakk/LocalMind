@@ -43,7 +43,7 @@ def directory_request(text):
         return None
     target = _unquote_target(match[1].rstrip('?.').strip())
     # A generic question such as «Что лежит в основе теории?» stays dialogue.
-    if not re.match(r'(?:[a-z]:|[\\/])', target, re.I) and not re.search(
+    if not re.match(r'(?:[a-z]:|[\\/])', target, re.I) and not _test_folder_phrase(target) and not re.search(
             r'\b(?:папк[еи]|каталог[еа])\s*$', text[:match.start(1)], re.I):
         return None
     return ToolIntent('files.list_directory', {'path': target})
@@ -55,19 +55,50 @@ def _target(text, prefix, suffix=''):
     return match.group(1) if match else None
 
 
+def _test_folder_phrase(value):
+    return bool(re.fullmatch(r'(?:моей\s+)?тестовой\s+папке', value, re.I))
+
+
+def saved_folder(target, roots, *, allow_child=False):
+    """Resolve a user label only from approved roots. Do not scan for names."""
+    value = target.casefold()
+    if _test_folder_phrase(value):
+        matches = [root for root in roots if re.search(r'(?:^|[ _-])(?:qa|test|тест\w*)(?:$|[ _-])', root.name, re.I)]
+    else:
+        if not value or value in ('.', '..') or value.rstrip(' .') != value or re.search(r'[\\/:<>|*?"«»\x00-\x1f]', value):
+            raise FileAccessError('Укажи полный локальный путь к папке.')
+        matches = [root for root in roots if root.name.casefold() == value]
+        if not matches and allow_child and len(roots) == 1:
+            return next(iter(roots)) / target
+    if len(matches) == 1:
+        return matches[0]
+    raise FileAccessError('Не удалось однозначно выбрать разрешённую папку. Укажи её полный путь.')
+
+
 def _resolve_target(target, operation):
     """Resolve lexically, without enumeration, reading bytes or creating grants."""
     from .file_access import file_access
     from .personal_permissions import known_folder
-    target = _unquote_target(target)
     try:
         named = re.fullmatch(r'([^/\\:]+)\s+в\s+папке\s+([^/\\:]+)\s+на\s+рабочем\s+столе', target, re.I)
+        scoped = re.fullmatch(r'([^/\\:]+?)\s+(?:в|из)\s+папк[еи]\s+(.+)', target, re.I)
         if named:
             filename, folder = (value.strip() for value in named.groups())
             if any(value in ('.', '..') or value.rstrip(' .') != value for value in (filename, folder)):
                 raise FileAccessError('Некорректное имя файла или папки.')
             path = known_folder('desktop') / folder / filename
+            target = str(path)
+        elif scoped:
+            filename, folder = (_unquote_target(value.strip()) for value in scoped.groups())
+            if not filename or filename in ('.', '..') or filename.rstrip(' .') != filename:
+                raise FileAccessError('Некорректное имя файла.')
+            parent = Path(folder)
+            if not parent.is_absolute():
+                parent = saved_folder(folder, file_access.personal_mode.roots().values(), allow_child=True)
+            path = parent / filename
+            target = str(path)
         else:
+            target = _unquote_target(target)
             path = Path(target)
         if (not path.is_absolute() or str(path).startswith(('\\\\', '//'))
                 or '..' in path.parts or not path.name or len(str(path)) > 1024

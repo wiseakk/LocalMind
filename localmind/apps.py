@@ -50,6 +50,8 @@ KNOWN_ALIASES = {
     'firefox': ('Firefox', 'файрфокс'),
     'msedge': ('Microsoft Edge', 'Edge', 'эдж'),
     'steam': ('Steam', 'стим'),
+    'modrinth app': ('Modrinth', 'модринт'),
+    'modrinth': ('Modrinth', 'модринт'),
 }
 # Compatibility aliases for older callers. Admission is based on discovery
 # evidence and the PE GUI subsystem, never membership in this set.
@@ -950,7 +952,11 @@ class AppCatalog:
         if not self._refreshed:
             self.refresh()
         with self._lock:
-            return {key: item.aliases for key, item in self._entries.items()}
+            # A game uses steam.exe as a transport. Its title and ID identify
+            # the game, while the executable aliases identify only the client.
+            return {key: ((item.name, normalize_name(item.name), key) if item.launch_type == 'steam' else
+                          tuple(dict.fromkeys((item.name, item.target.stem, *item.aliases))))
+                    for key, item in self._entries.items()}
 
     def resolve_alias(self, name: str) -> list[str]:
         normalized = normalize_name(name)

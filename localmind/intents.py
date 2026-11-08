@@ -1,11 +1,7 @@
-"""Small Russian request grammar; proposals never grant execution permission.
-
-The grammar consumes every token, including punctuation. Catalog identity and
-permission checks remain the executor's responsibility. No model output, fuzzy
-name matching or path interpretation participates in this parser.
-"""
+"""Recognize a reviewed request and rank observed catalog names independently."""
 from dataclasses import dataclass
 import re
+import unicodedata
 from collections.abc import Mapping, Sequence
 
 
@@ -15,12 +11,19 @@ class AppIntent:
     target: str
 
 
+@dataclass(frozen=True)
+class AppResolution:
+    action: str
+    candidates: tuple[str, ...]
+    stage: str
+
+
 _TOKEN = re.compile(r'\w+(?:[-+]\w+)*\+*|[^\w\s]', re.UNICODE)
 _VERBS = {
     'open_app': {
         'imperative': {'открой', 'откройте', 'открывай', 'открывайте',
-                       'запусти', 'запустите', 'запускай', 'запускайте'},
-        'infinitive': {'открыть', 'запустить'},
+                       'запусти', 'запустите', 'запускай', 'запускайте', 'включи', 'включите', 'вруби', 'врубите'},
+        'infinitive': {'открыть', 'открывать', 'запустить', 'запускать', 'включить', 'врубить'},
         'past': {'открыл', 'открыла', 'открыли', 'запустил', 'запустила', 'запустили'},
     },
     'close_app': {
@@ -32,6 +35,12 @@ _VERBS = {
 }
 _NEGATION = {'не', 'нет', 'никогда', 'нельзя', 'запрещаю', 'запрещено'}
 _QUOTES = set('«»“”„"‘’\'`‹›')
+_ACTION_WORDS = {word for forms in _VERBS.values() for words in forms.values() for word in words}
+_UNSAFE_TARGET = _ACTION_WORDS | {'и', 'или', 'либо', 'затем', 'потом', 'если', 'когда', 'как',
+                                 'выключи', 'удали', 'создай', 'скажи', 'покажи', 'показать'}
+_TRANSLITERATE = str.maketrans(dict(zip('абвгдежзийклмнопрстуфхцчшщъыьэюя',
+    ('a', 'b', 'v', 'g', 'd', 'e', 'zh', 'z', 'i', 'y', 'k', 'l', 'm', 'n', 'o', 'p', 'r',
+     's', 't', 'u', 'f', 'kh', 'ts', 'ch', 'sh', 'shch', '', 'y', '', 'e', 'yu', 'ya'))))
 
 
 def action_clause(text: str) -> str:
@@ -61,7 +70,7 @@ def command_negated(text: str) -> bool:
 
 
 def _tokens(text: str) -> list[str]:
-    return _TOKEN.findall(text.casefold().replace('ё', 'е'))
+    return _TOKEN.findall(unicodedata.normalize('NFKC', text).casefold().replace('ё', 'е'))
 
 
 def _polite_start(tokens: list[str]) -> list[str]:
@@ -89,7 +98,7 @@ def _target_tokens(tokens: list[str]) -> list[str]:
     return tokens
 
 
-def _request_body(tokens: list[str], verbs: dict[str, set[str]]) -> list[str] | None:
+def _request_body(tokens: list[str], verbs: dict[str, set[str]], *, app=False, bare_infinitive=False) -> list[str] | None:
     tokens = _polite_start(tokens)
     if not tokens:
         return None
@@ -124,52 +133,101 @@ def _request_body(tokens: list[str], verbs: dict[str, set[str]]) -> list[str] | 
         if tokens[:1] == [',']:
             tokens = tokens[1:]
     tokens = _polite_start(tokens)
-    if not tokens or tokens[0] not in verbs[mode]:
-        return None
-    return _target_tokens(tokens[1:])
+    forms = verbs[mode]
+    if app:
+        if mode == 'imperative' and bare_infinitive:
+            forms = forms | verbs['infinitive']
+        if mode == 'infinitive':
+            tokens = _target_tokens(tokens)
+            if len(tokens) > 1 and tokens[-1] in forms:
+                return _target_tokens(tokens[:-1])
+        show = {'показать'} if mode == 'infinitive' else {'покажи', 'покажите'} if mode == 'imperative' else set()
+        if len(tokens) > 2 and tokens[0] in show and tokens[1] == 'приложение':
+            return _target_tokens(tokens[2:])
+    return _target_tokens(tokens[1:]) if tokens and tokens[0] in forms else None
 
 
-def parse_app_intent(text: str, aliases: Mapping[str, Sequence[str]]) -> AppIntent | None:
-    """Recognize one explicit request for one exact, unambiguous catalog alias.
-
-    A question mark does not turn "Можешь открыть Steam?" into an information
-    query. Conversely "Можно ли открыть Steam?" has no authorized grammar.
-    Quotation and negation are inspected before any punctuation normalization.
-    The result is a proposal: the caller must still check authorization and
-    revalidate the executable and its catalog permission before launching.
-    """
+def app_request(text: str) -> tuple[str, tuple[str, ...]] | None:
+    """Consume one affirmative app clause. The result alone has no authority."""
     if not isinstance(text, str) or not text.strip() or len(text) > 2000:
         return None
-    if any(mark in text for mark in _QUOTES):
+    if any(mark in text for mark in _QUOTES) or '\n' in text or '\r' in text:
         return None
     tokens = _tokens(action_clause(text))
     if _NEGATION.intersection(tokens):
         return None
     # Preserve interior punctuation. Only sentence-final punctuation is removed.
-    endings = 0
+    endings = []
     while tokens and tokens[-1] in {'.', '!', '?'}:
-        endings += 1
-        tokens.pop()
-    if endings > 3:
+        endings.append(tokens.pop())
+    if len(endings) > 3:
         return None
-    proposals = []
     for action, verbs in _VERBS.items():
-        target = _request_body(tokens, verbs)
-        if action == 'open_app' and tokens[:1] in (['включи'], ['включите']):
-            target = _target_tokens(tokens[1:])
-        if not target:
-            continue
-        # Catalog names are untrusted metadata. A display alias containing a
-        # conjunction/second command cannot turn a compound request into one
-        # authorized action; the UI's stable catalog ID remains selectable.
-        action_tokens = {word for forms in _VERBS.values() for words in forms.values() for word in words}
-        if set(target).intersection(action_tokens | {'и', 'или', 'либо', 'затем', 'потом', 'включи', 'выключи', 'удали', ';', '&', '|'}):
-            continue
-        matches = [app_id for app_id, names in aliases.items()
-                   if any(target == _tokens(name) for name in names)]
-        if len(matches) == 1:
-            proposals.append(AppIntent(action, matches[0]))
-    return proposals[0] if len(proposals) == 1 else None
+        target = _request_body(tokens, verbs, app=action == 'open_app', bare_infinitive='?' not in endings)
+        if target and not _UNSAFE_TARGET.intersection(target) and all(re.fullmatch(r'[\w+-]+', token) for token in target):
+            return action, tuple(target)
+    return None
+
+
+def _name_key(words):
+    # Compare complete catalog labels. Any collision remains ambiguous, and
+    # derived names are never used as permission identifiers.
+    stems = [re.sub(r'(?<=[а-я])[аяуюеыи]$', '', word) if len(word) >= 5 else word for word in words]
+    if len(stems) == 3 and stems[1] == 'в':
+        stems = [stems[2], stems[0]]
+    if len(stems) > 1 and stems[-1] in ('app', 'приложени'):
+        stems.pop()
+    key = tuple(word.translate(_TRANSLITERATE) for word in stems)
+    if key in (('yandeks', 'muzyk'), ('yandex', 'muzyk'), ('yandex', 'music')):
+        return ('yandex', 'music')
+    return key
+
+
+def _one_edit(a, b):
+    """One substitution, insertion, deletion or adjacent transposition."""
+    if min(len(a), len(b)) < 5 or abs(len(a)-len(b)) > 1 or a == b:
+        return False
+    i = next((index for index, (x, y) in enumerate(zip(a, b)) if x != y), min(len(a), len(b)))
+    if len(a) == len(b):
+        return a[i+1:] == b[i+1:] or (a[i:i+2] == b[i:i+2][::-1] and a[i+2:] == b[i+2:])
+    shorter, longer = sorted((a, b), key=len)
+    return shorter[i:] == longer[i+1:]
+
+
+def _near_label(key, requested):
+    if len(key) != len(requested):
+        return False
+    differences = [(x, y) for x, y in zip(key, requested) if x != y]
+    return len(differences) == 1 and _one_edit(*differences[0])
+
+
+def resolve_app_request(request, aliases: Mapping[str, Sequence[str]]) -> AppResolution | None:
+    if request is None:
+        return None
+    action, words = request
+    normalized = _name_key(words)
+    matches = {'exact': [], 'normalized': [], 'semantic': []}
+    for app_id, names in aliases.items():
+        keys = [tuple(_tokens(name)) for name in names]
+        if words in keys:
+            matches['exact'].append(app_id)
+        elif action == 'open_app':
+            canonical = [_name_key(key) for key in keys]
+            if normalized in canonical:
+                matches['normalized'].append(app_id)
+            elif not words[0].startswith('app-') and any(_near_label(key, normalized) for key in canonical):
+                matches['semantic'].append(app_id)
+    for stage, candidates in matches.items():
+        if candidates:
+            return AppResolution(action, tuple(candidates), stage if len(candidates) == 1 else 'ambiguous')
+    return None
+
+
+def parse_app_intent(text: str, aliases: Mapping[str, Sequence[str]]) -> AppIntent | None:
+    resolved = resolve_app_request(app_request(text), aliases)
+    if resolved and resolved.stage in ('exact', 'normalized'):
+        return AppIntent(resolved.action, resolved.candidates[0])
+    return None
 
 
 def focus_request_target(text: str) -> str | None:

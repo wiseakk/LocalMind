@@ -679,7 +679,25 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
         base.update(answer='Анализ изображения по пути на диске пока не поддерживается. Прикрепи изображение к сообщению.',
                     engine='vision-unavailable')
         return prepared
-    if llm_first and conversation and directory_intent is None:
+    from .intents import app_request, resolve_app_request
+    resolving = time.perf_counter()
+    app_clause = app_request(text)
+    app_aliases = _all_app_aliases() if app_clause else {}
+    resolved_app = resolve_app_request(app_clause, app_aliases)
+    fast_app = resolved_app and resolved_app.stage in ('exact', 'normalized')
+    if resolved_app:
+        base['intent_resolution'] = {'intent': resolved_app.action, 'stage': resolved_app.stage,
+                                     'latency_ms': round((time.perf_counter() - resolving) * 1000, 3),
+                                     'candidates': list(resolved_app.candidates)}
+        if resolved_app.stage == 'ambiguous' or (resolved_app.stage == 'semantic' and not (llm_first and conversation)):
+            from .apps import normalize_name
+            names = ', '.join(dict.fromkeys(normalize_name(app_aliases[key][0]) for key in resolved_app.candidates[:5]))
+            result = refused('policy', None, 'Уточни цель в разделе «Приложения и доступ». Варианты: ' + names,
+                             status='clarification_required')
+            base.update(answer=str(result), engine='tool-policy', action_results=[result.to_dict()])
+            prepared.compose_actions = False
+            return prepared
+    if llm_first and conversation and directory_intent is None and not fast_app:
         from .llm_planner import prepare as prepare_tools
         if prepare_tools(prepared, actions_authorized, ollama_chat, has_document_context=bool(document_facts)):
             return prepared
@@ -752,7 +770,8 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
     if cancellation.get() is not None and cancellation.get().is_set():
         base.update(answer='Ответ прерван.', engine='cancelled', cancelled=True)
         return prepared
-    assessment = assess_action(text)
+    assessment = (ActionAssessment(ActionGrant(resolved_app.action, {'app': resolved_app.candidates[0]}))
+                  if fast_app else assess_action(text))
     result = None
     if conversation or directory_intent:
         from .orchestration import pc_intent, propose_intent
@@ -766,15 +785,15 @@ def prepare_reply(text: str, history: list | None = None, actions_authorized: bo
                 base.update(answer='Проверь текст и подтверди действие.', engine='action-review',
                             confirmation_required=True, pending_action=intent.name)
                 return prepared
-            # Exact conventional commands use the deterministic fast path. The
-            # separate structured planner handles new PC capabilities only.
-            # A fully resolved structured intent needs no model echo pass.
-            # Interpretation is independent of the registry's permission checks.
-            proposal = intent
+            # A fully resolved intent needs no model pass. Authorization and
+            # live target validation still belong to the registry and adapter.
             check_cancelled()
             owner = conversation.id if conversation else 'direct-directory-request'
-            result = (registry.execute(proposal, intent, owner) if proposal else
-                      refused(intent.name, None, 'План не прошёл проверку. Уточни одно действие и цель.'))
+            if fast_app:
+                from .llm_planner import execute_audited
+                result = execute_audited(registry, intent, owner, base)
+            else:
+                result = registry.execute(intent, intent, owner)
             result = prepare_file_read(prepared, result)
             if result.execution_status == 'confirmation_required':
                 base.update(confirmation_required=True, pending_operation=result.data)

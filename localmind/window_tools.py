@@ -18,7 +18,7 @@ import threading
 import time
 import uuid
 
-from .apps import AppError, _launch_guard, catalog, KNOWN_ALIASES, executable_identity
+from .apps import AppError, _launch_guard, _safe_local_path, catalog, KNOWN_ALIASES, executable_identity
 from .results import ActionResult, refused
 from .generation import check_cancelled, cancellation
 from .windows_state import VerifiedWindow, _inspect_windows, inspect_application, inspect_applications
@@ -31,6 +31,7 @@ class AppTarget:
     path: Path
     fingerprint: str
     safe_close: bool = False
+    companions: tuple[tuple[Path, tuple], ...] = ()
 
 
 @dataclass
@@ -42,6 +43,7 @@ class WindowSelection:
     expires: float
     close_requested: bool = False
     policy_generation: str | None = None
+    image: Path | None = None
 
 
 class NativeWindowBackend:
@@ -50,6 +52,18 @@ class NativeWindowBackend:
 
     def inspect_many(self, targets):
         return inspect_applications(targets)
+
+    def child_of(self, pid, parents):
+        import psutil
+        try:
+            parent = psutil.Process(pid).parent()
+            # Compare creation time as well: the sampled client PID may have
+            # exited before the parent query. psutil returns Unix seconds.
+            return parent is not None and any(parent.pid == owner and
+                abs(parent.create_time() - (created / 10_000_000 - 11_644_473_600)) < .001
+                for owner, created in parents)
+        except psutil.Error:
+            return False
 
     def operate(self, target, expected, property_name, marker, operation):
         if os.name != 'nt':
@@ -213,13 +227,47 @@ class WindowTools:
                 raise AppError('Приложение отсутствует в каталоге.')
             if entry.launch_type == 'steam':
                 raise AppError('Окно игры Steam ещё не связано с проверенным исполняемым файлом.')
-            with _launch_guard(entry.target):
+            with _launch_guard(entry.target), ExitStack() as companions_guard:
                 current = catalog._revalidate(app_id)
                 # A basename such as calc.exe is user-controlled. Only the
                 # exact OS-resolved calculator image has the safe-close status.
                 calculator = self._builtin_resolver('calculator') if self._builtin_resolver else None
+                companions = self._steam_companions(current.target, companions_guard)
                 yield AppTarget(current.id, current.name, current.target, current.fingerprint,
-                                safe_close=calculator is not None and current.target == calculator)
+                                safe_close=calculator is not None and current.target == calculator,
+                                companions=companions)
+
+    @staticmethod
+    def _steam_companions(client, guards):
+        if os.name != 'nt' or client.name.casefold() != 'steam.exe':
+            return ()
+        import winreg
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\Valve\Steam') as key:
+                root, kind = winreg.QueryValueEx(key, 'SteamPath')
+            if kind != winreg.REG_SZ or _safe_local_path(Path(root) / 'steam.exe') != client:
+                return ()
+        except (AppError, OSError, ValueError):
+            return ()
+        helpers = []
+        for folder in ('cef.win64', 'cef.win32', 'cef.win7x64', 'cef.win7'):
+            try:
+                path = _safe_local_path(client.parent / 'bin' / 'cef' / folder / 'steamwebhelper.exe')
+                guards.enter_context(_launch_guard(path))
+                stamp = path.stat()
+                helpers.append((path, (stamp.st_dev, stamp.st_ino, stamp.st_size, stamp.st_mtime_ns)))
+            except (AppError, OSError, ValueError):
+                continue
+        return tuple(helpers)
+
+    def _check_companion(self, app, image):
+        if self.policy is not None:
+            with catalog._lock:
+                entry = catalog._entries.get(app.id)
+                if entry is None:
+                    raise AppError('Установка Steam изменилась.')
+                self.policy.check_app((*catalog.identifiers(entry), str(image).casefold(), image.stem.casefold(),
+                                       *executable_identity(image)), 'focus')
 
     def _prune(self):
         for key, selection in list(self._selections.items()):
@@ -228,27 +276,28 @@ class WindowTools:
                 try:
                     with self.target_provider(selection.app.id) as current:
                         if current == selection.app:
-                            self.backend.operate(current.path, selection.native, self._property, selection.marker, 'release')
+                            self.backend.operate(selection.image or current.path, selection.native, self._property, selection.marker, 'release')
                 except (AppError, OSError, ValueError, AttributeError):
                     pass
                 self._selections.pop(key, None)
 
-    def _record(self, app, native):
+    def _record(self, app, native, image=None):
         generation = self.policy.generation if self.policy is not None else None
         for record in self._selections.values():
-            if record.app == app and record.policy_generation == generation and (
+            if record.app == app and record.image == image and record.policy_generation == generation and (
                 record.native.hwnd, record.native.pid, record.native.created, record.native.thread_id
             ) == (native.hwnd, native.pid, native.created, native.thread_id):
                 # Confirm marker too: a recycled HWND must not refresh an ID.
-                if self.backend.operate(app.path, native, self._property, record.marker, 'verify') == 'verified':
+                if self.backend.operate(image or app.path, native, self._property, record.marker, 'verify') == 'verified':
                     return record
         if len(self._selections) >= self.capacity:
             return None
         marker = secrets.randbits(ctypes.sizeof(ctypes.c_void_p) * 8 - 1) or 1
-        if self.backend.operate(app.path, native, self._property, marker, 'stamp') != 'stamped':
+        if self.backend.operate(image or app.path, native, self._property, marker, 'stamp') != 'stamped':
             return None
         record = WindowSelection('win-' + uuid.uuid4().hex, app, native, marker, self.clock() + self.ttl)
         record.policy_generation = generation
+        record.image = image
         self._selections[record.id] = record
         return record
 
@@ -292,7 +341,8 @@ class WindowTools:
                         candidates.append((key, app))
                     except (AppError, OSError, ValueError, AttributeError):
                         unknown.append(key)
-                snapshots = (self.backend.inspect_many([item.path for _, item in candidates])
+                snapshots = (self.backend.inspect_many([path for _, item in candidates
+                             for path in (item.path, *(image for image, _ in item.companions))])
                              if hasattr(self.backend, 'inspect_many') else None)
                 for key, app in candidates:
                     if len(windows) >= 64:
@@ -304,12 +354,23 @@ class WindowTools:
                             unknown.append(key)
                         if state.state == 'background':
                             background.append(key)
-                        truncated = truncated or len(state.windows) > 32
-                        for native in state.windows[:32]:
+                        observed = [(native, None) for native in state.windows]
+                        for image, _ in app.companions if state.processes else ():
+                            helper = snapshots[image] if snapshots is not None else self.backend.inspect(image)
+                            owned = [native for native in helper.windows if self.backend.child_of(native.pid, state.processes)]
+                            if owned:
+                                try:
+                                    self._check_policy(app, 'focus')
+                                    self._check_companion(app, image)
+                                except (AppError, ValueError):
+                                    continue
+                                observed.extend((native, image) for native in owned)
+                        truncated = truncated or len(observed) > 32
+                        for native, image in observed[:32]:
                             if len(windows) >= 64:
                                 truncated = True
                                 break
-                            record = self._record(app, native)
+                            record = self._record(app, native, image)
                             if record:
                                 windows.append(self._public(record))
                             else:
@@ -384,7 +445,8 @@ class WindowTools:
             status_text=focused.status_text if focused.success else launched.status_text + ' ' + focused.status_text,
             data={**(launched.data or {}), **(focused.data or {}), 'launch_status': launched.execution_status,
                   'process_created': launched.execution_status == 'process_created',
-                  'process_running': True if focused.success or found or launched.observed_state in ('visible_window', 'background') else None,
+                  'process_running': True if focused.success or found or launched.observed_state in ('visible_window', 'background') else
+                                     (focused.data or {}).get('process_running'),
                   'window_found': True if focused.success else found, 'window_activated': focused.success,
                   'activation_status': focused.execution_status, 'activation_error': focused.error})
 
@@ -422,7 +484,10 @@ class WindowTools:
             if error.execution_status != 'window_pending':
                 return error
             if self.clock() >= deadline:
-                return refused('apps.focus', app_id, 'Проверенное окно не появилось за отведённое время. Повтори после загрузки приложения.', status='window_timeout')
+                outcome = refused('apps.focus', app_id, 'Проверенное окно не появилось за отведённое время. Повтори после загрузки приложения.', status='window_timeout')
+                if app_id in (error.data or {}).get('background_apps', ()):
+                    return replace(outcome, data={'process_running': True})
+                return outcome
             event = cancellation.get()
             if event is not None:
                 event.wait(.1)
@@ -465,7 +530,12 @@ class WindowTools:
                         if self.policy is not None and selection.policy_generation != self.policy.generation:
                             return refused(action, app.id, 'Политика доступа изменилась. Выбери окно повторно.', status='stale_target')
                         self._check_policy(app, 'close' if operation == 'close' else 'focus')
-                        state = self.backend.operate(app.path, selection.native, self._property, selection.marker, operation)
+                        image = selection.image or app.path
+                        if selection.image:
+                            self._check_companion(app, image)
+                            if not self.backend.child_of(selection.native.pid, self.backend.inspect(app.path).processes):
+                                return refused(action, app.id, 'Связь окна с процессом Steam изменилась.', status='stale_target')
+                        state = self.backend.operate(image, selection.native, self._property, selection.marker, operation)
                     if state == 'stale':
                         self._selections.pop(window_id, None)
                         return refused(action, app.id, 'Окно изменилось. Выбери его повторно.', status='stale_target')
@@ -526,7 +596,7 @@ class WindowTools:
                 try:
                     with self.target_provider(selection.app.id) as current:
                         if current == selection.app:
-                            self.backend.operate(current.path, selection.native, self._property, selection.marker, 'release')
+                            self.backend.operate(selection.image or current.path, selection.native, self._property, selection.marker, 'release')
                 except (AppError, OSError, ValueError, AttributeError):
                     pass
             self._selections.clear()

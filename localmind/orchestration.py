@@ -32,7 +32,7 @@ def status_request(text):
     text = action_clause(text)
     polite = r'(?:пожалуйста[, ]+)?'
     end = r'(?:[, ]+пожалуйста)?[?!.]?'
-    if re.fullmatch(polite + r'(?:(?:покажи|перечисли) (?:запущенные|работающие|открытые) (?:приложения|окна)|какие (?:окна|приложения) (?:сейчас )?открыты)' + end, text, re.I):
+    if re.fullmatch(polite + r'(?:(?:покажи|перечисли) (?:запущенные|работающие|открытые) (?:приложения|окна)|какие (?:окна|приложения) (?:сейчас )?открыты|что (?:сейчас )?открыто)' + end, text, re.I):
         return ToolIntent('apps.list_running', {})
     if re.fullmatch(polite + r'(?:какие (?:устройства|лампы) (?:сейчас )?включены|(?:настольная )?лампа (?:сейчас )?включена)' + end, text, re.I):
         return ToolIntent('devices.list_enabled', {})

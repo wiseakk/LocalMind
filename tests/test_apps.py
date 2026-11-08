@@ -38,6 +38,15 @@ def source(path, name='Editor', key='test', metadata=None):
     return apps.AppSource(key, name, lambda: (str(path), '', (metadata or ['source'])[0]))
 
 
+def test_steam_game_transport_does_not_match_the_steam_client_name(tmp_path):
+    steam = make_exe(tmp_path/'steam.exe')
+    game = apps.AppSource('steam:42', 'Example Game', lambda: (str(steam), '', 'test'), 'steam', 'steam', '42')
+    catalog = apps.AppCatalog(lambda: [source(steam, 'Steam'), game])
+    rows = {row['name']: row for row in catalog.refresh()}
+    assert catalog.resolve_alias('Steam') == [rows['Steam']['id']]
+    assert catalog.resolve_alias('Example Game') == [rows['Example Game']['id']]
+
+
 def test_permissions_default_deny_and_bind_current_picker(tmp_path):
     executable = make_exe(tmp_path / 'editor.exe')
     catalog = apps.AppCatalog(lambda: [source(executable)])
