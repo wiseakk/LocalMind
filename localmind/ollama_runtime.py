@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import socket
 import subprocess
+import sys
 from threading import Event, RLock, Thread
 import time
 from urllib.parse import urlsplit
@@ -159,6 +160,8 @@ class OllamaRuntime:
             return client.connect_ex(('127.0.0.1', parsed.port)) == 0
 
     def _executable(self):
+        if sys.platform == 'linux':
+            raise RuntimeFailure('Запустите локальный Ollama (ollama serve) и нажмите «Повторить».')
         if os.name != 'nt':
             raise RuntimeFailure('Встроенный движок поставляется для Windows x64.')
         index = ordinary_tree(self.bundle / 'runtime-manifest.json')

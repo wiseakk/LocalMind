@@ -19,6 +19,8 @@ def main():
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('LocalMind.Desktop.1')
     app = QApplication(sys.argv)
     app.setApplicationName('LocalMind')
+    if sys.platform == 'linux':
+        app.setDesktopFileName('localmind')
     app.setOrganizationName('LocalMind')
     app.setWindowIcon(QIcon(str(ICON_PATH)))
     app.setStyle('Fusion')
@@ -58,9 +60,10 @@ def main():
         return app.exec()
     except Exception:
         # Raw socket/Chromium tracebacks may contain URLs and personal paths.
+        recovery = ('Проверьте вывод команды python start.py в том же окружении.' if sys.platform == 'linux'
+                    else 'Если ошибка сохраняется, восстановите приложение установщиком. Модели и настройки сохранятся.')
         QMessageBox.critical(None, 'LocalMind — восстановление',
-            'Не удалось запустить LocalMind. Закройте предыдущий экземпляр и повторите попытку. '
-            'Если ошибка сохраняется, восстановите приложение установщиком. Модели и настройки сохранятся.')
+            'Не удалось запустить LocalMind. Закройте предыдущий экземпляр и повторите попытку. ' + recovery)
         return 1
     finally:
         if window is not None:

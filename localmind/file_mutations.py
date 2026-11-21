@@ -110,7 +110,9 @@ class FileMutations:
         if not isinstance(relative, str) or not 1 <= len(relative) <= 512:
             raise FileAccessError('Нужно точное относительное имя файла.')
         fragment = Path(relative)
-        if fragment.is_absolute() or fragment.drive or any(part in ('..', '.') for part in fragment.parts) or ':' in relative or '\x00' in relative:
+        if (fragment.is_absolute() or fragment.drive or '..' in fragment.parts
+                or ':' in relative or '\x00' in relative
+                or (os.name != 'nt' and '\\' in relative)):
             raise FileAccessError('Выбери обычный файл внутри разрешённой папки.')
         roots = self.access.personal_mode.roots()
         if scope not in roots:

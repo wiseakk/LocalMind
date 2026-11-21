@@ -11,7 +11,17 @@ import sys
 import secrets
 
 APP_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_ROOT = Path(os.environ.get('LOCALAPPDATA', Path.home() / '.local/share')) / 'LocalMind'
+
+
+def default_data_root():
+    fallback = Path.home() / '.local/share'
+    if sys.platform == 'linux':
+        xdg = Path(os.environ.get('XDG_DATA_HOME', ''))
+        return (xdg if xdg.is_absolute() else fallback) / 'LocalMind'
+    return Path(os.environ.get('LOCALAPPDATA', fallback)) / 'LocalMind'
+
+
+DEFAULT_ROOT = default_data_root()
 LOCATION_FILE = DEFAULT_ROOT / 'config' / 'storage-location.json'
 ENVIRONMENT_OVERRIDE = bool(os.environ.get('LOCALMIND_DATA_DIR'))
 
@@ -67,7 +77,7 @@ DOWNLOADS = DATA_ROOT / 'downloads'
 
 def python_runtime(kind='core'):
     release = APP_ROOT / 'runtime' / kind / 'python.exe'
-    if release.is_file():
+    if os.name == 'nt' and release.is_file():
         return release
     if getattr(sys, 'frozen', False):
         raise RuntimeError('Приватный Python runtime отсутствует. Восстановите установку LocalMind.')

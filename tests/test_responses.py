@@ -143,10 +143,12 @@ def test_disappearing_catalog_entry_is_denied_without_key_error():
         assert not agent._matches_app_command('Открой исчезнувшее', 'open_app', 'removed-id')
 
 
-def test_app_process_creation_is_not_window_observation():
+def test_app_process_creation_is_not_window_observation(tmp_path):
     from localmind.windows_state import LaunchCoordinator, ApplicationState
+    target = tmp_path / 'notepad.exe'
+    target.touch()
     with mock.patch.object(agent, 'launch_coordinator', LaunchCoordinator(inspector=lambda _: ApplicationState('absent'))), \
-         mock.patch.object(agent, 'resolve_windows_app', return_value=__import__('pathlib').Path('C:/Windows/System32/notepad.exe')), \
+         mock.patch.object(agent, 'resolve_windows_app', return_value=target), \
          mock.patch.object(agent.platform, 'system', return_value='Windows'), \
          mock.patch.object(agent.subprocess, 'Popen'):
         result = agent.open_app('notepad')
