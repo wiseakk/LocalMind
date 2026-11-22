@@ -23,7 +23,7 @@ def test_build_keeps_source_identity_through_runtime_and_asset_copies(tmp_path, 
         (root / folder).mkdir(parents=True)
     (root / 'static/index.html').write_text(
         '<span class="breadcrumb">Личное пространство</span>', encoding='utf-8')
-    for name in ('RELEASE_NOTES.md', 'KNOWN_ISSUES.md', 'MANUAL_QA.md'):
+    for name in ('LICENSE', 'RELEASE_NOTES.md', 'KNOWN_ISSUES.md', 'MANUAL_QA.md'):
         (root / name).write_text(name)
     asset = tmp_path / 'assets/silero/model.pt'
     asset.parent.mkdir(parents=True)
@@ -80,6 +80,8 @@ def test_build_keeps_source_identity_through_runtime_and_asset_copies(tmp_path, 
     monkeypatch.setattr(builder, 'write_source_archive', archive)
     builder.main()
     provenance = json.loads((output / 'build-provenance.json').read_text(encoding='utf-8'))
+    assert (output / 'LocalMind' / 'LICENSE').read_text() == 'LICENSE'
+    assert provenance['payload_sha256']['LICENSE'] == source['sources']['LICENSE']
     assert provenance['commit'] == source['commit']
     assert provenance['branch'] == source['branch']
     assert provenance['voice_assets_bundled'] is offline

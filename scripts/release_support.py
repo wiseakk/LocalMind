@@ -92,7 +92,7 @@ def validate_payload_layout(root, payload, inputs):
     """Reject stale payload assets and extras before resuming any mutation."""
     allowed = {name for name in inputs['source']['sources']
                if name.split('/')[0] in ('localmind', 'static', 'config')}
-    allowed.update(('LocalMind.exe', 'build-provenance.json', 'prerequisites/OllamaSetup.exe'))
+    allowed.update(('LICENSE', 'LocalMind.exe', 'build-provenance.json', 'prerequisites/OllamaSetup.exe'))
     folders = {'localmind', 'static', 'config', 'runtime', 'prerequisites'}
     if inputs['offline_gguf_sha256']:
         folders.add('offline-llm')
@@ -123,7 +123,7 @@ def copy_committed_sources(root, payload, identity):
     import shutil
     for name, digest in identity['sources'].items():
         relative = Path(name)
-        if relative.parts[0] not in ('localmind', 'static', 'config'):
+        if name != 'LICENSE' and relative.parts[0] not in ('localmind', 'static', 'config'):
             continue
         source, target = root / relative, payload / relative
         if source.is_symlink() or sha256(source) != digest:

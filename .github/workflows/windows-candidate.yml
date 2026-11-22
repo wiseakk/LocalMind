@@ -40,9 +40,11 @@ jobs:
             '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', ('/DIR="' + $destination + '"')
           ) -PassThru -Wait
           if ($process.ExitCode -ne 0) { throw "Setup failed: $($process.ExitCode)" }
-          foreach ($file in @('LocalMind.exe', 'runtime\core\python.exe', 'static\index.html', 'unins000.exe')) {
+          foreach ($file in @('LICENSE', 'LocalMind.exe', 'runtime\core\python.exe', 'static\index.html', 'unins000.exe')) {
             if (!(Test-Path (Join-Path $destination $file))) { throw "Missing installed file: $file" }
           }
+          $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'LocalMind\LocalMind.lnk'
+          if (!(Test-Path $shortcut)) { throw 'Start Menu shortcut was not installed' }
           Push-Location $destination
           try {
             & .\runtime\core\python.exe -c 'from PySide6.QtWebEngineWidgets import QWebEngineView; from localmind.desktop import main; assert callable(main)'
