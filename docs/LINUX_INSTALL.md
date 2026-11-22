@@ -1,5 +1,7 @@
 # Установка LocalMind на CachyOS и Arch
 
+Для текущего архива `1.0.0rc3-2` см. [команды и состояние финальной приёмки](LINUX_ALPHA_ACCEPTANCE.md).
+
 ## Запуск из исходников
 
 Проверенная среда — x86_64, Python 3.14.10, Hyprland / Wayland. Qt
