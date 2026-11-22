@@ -513,17 +513,18 @@ def ollama_chat(messages: list, tools: list, *, response_format: dict | None = N
         body['format'] = response_format
     # Serialize inference; Ollama schedules placement. Never unload other workloads.
     from .model_memory import memory
+    from .model_manager import LocalModelUnavailable
     with _inference_slot(), memory.using(config.model), httpx.Client(timeout=httpx.Timeout(30, connect=3), trust_env=False) as client:
         tags = client.get(f'{base_url}/api/tags')
         tags.raise_for_status()
         installed = next((m for m in tags.json().get('models', []) if m.get('name') == config.model), None)
         if not installed or installed.get('remote_host') or installed.get('remote_model') or installed.get('size', 0) <= 0:
-            raise ValueError('Requested local model unavailable')
+            raise LocalModelUnavailable('Requested local model unavailable')
         metadata = client.post(f'{base_url}/api/show', json={'model': config.model})
         metadata.raise_for_status()
         details = metadata.json()
         if details.get('remote_host') or details.get('remote_model'):
-            raise ValueError('Cloud inference disabled')
+            raise LocalModelUnavailable('Cloud inference disabled')
         if any(m.get('images') for m in messages) and 'vision' not in details.get('capabilities', []):
             raise VisionUnavailable('Выбранная локальная модель не поддерживает изображения. Выбери установленную модель с vision, например qwen3.5:9b.')
         if callback is None:

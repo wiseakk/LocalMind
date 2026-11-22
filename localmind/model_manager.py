@@ -21,6 +21,10 @@ _last = None
 MODEL_PROBE_TIMEOUT = 180
 
 
+class LocalModelUnavailable(ValueError):
+    """No eligible local model was available to produce a plan."""
+
+
 def positive(value, zero=False):
     return (isinstance(value, (int, float)) and not isinstance(value, bool)
             and (0 <= value <= 2**63 - 1) and math.isfinite(value)

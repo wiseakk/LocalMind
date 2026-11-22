@@ -17,6 +17,7 @@ from .generation import defaults, effective_generation, text_delta, check_cancel
 from .intents import command_negated
 from .results import ActionResult, refused, output_channels, file_output
 from .action_journal import journal
+from .model_manager import LocalModelUnavailable
 from .file_requests import SUMMARY_PREFIX, latest_download_request
 
 OPEN = r'откр\w*|запус\w*|запуст\w*'
@@ -230,6 +231,8 @@ def choose(text, conversation, generation, chat, *, native=False):
                 raise ValueError('Tool policy or duplicate call rejected')
             intents.append(intent)
         return intents, mode
+    except LocalModelUnavailable:
+        raise
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         raise InvalidPlan('План модели не прошёл проверку.') from exc
     finally:

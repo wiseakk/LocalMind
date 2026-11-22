@@ -31,6 +31,19 @@ def test_llm_selects_tool_and_arguments_without_exact_command_grammar(policy):
     assert 'calls' in seen[0][1]['properties']
 
 
+def test_missing_local_model_uses_checked_exact_demo_command(policy, monkeypatch):
+    from localmind.model_manager import LocalModelUnavailable
+
+    unavailable = Mock(side_effect=LocalModelUnavailable('Requested local model unavailable'))
+    monkeypatch.setattr(agent, 'ollama_chat', unavailable)
+    reply = agent.prepare_reply('Включи лампу', actions_authorized=True, compose_actions=False,
+                                conversation=Conversation('owner', 0), llm_first=True)
+    unavailable.assert_called_once()
+    assert reply.initial['planner_mode'] == 'unavailable_or_invalid'
+    assert reply.result.success and reply.result.mode == 'DEMO'
+    assert reply.result.observed_state == 'on'
+
+
 @pytest.mark.parametrize('text',['Не открывай блокнот','Не сворачивай блокнот','Как открыть блокнот?',
     'Он сказал «открой блокнот»','Повтори за мной: открой блокнот','Если я скажу открой блокнот',
     'Расскажи про блокнот','Я запрещаю открывать блокнот'])
