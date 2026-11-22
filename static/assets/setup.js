@@ -64,6 +64,7 @@
     const card=document.createElement('article');card.className='model-card';
     paragraph((kind==='asr'?'Распознавание речи · '+(row?.model||(selected==='gpu-quality'?'medium':'small')):'Озвучка · Silero xenia')+
       ' — '+(labels[row?.state]||'Состояние ресурса не подтверждено'),card);
+    if(row?.missing_dependencies?.length)paragraph('Не установлены библиотеки: '+row.missing_dependencies.join(', ')+'.',card);
     if(kind==='asr'&&row?.state!=='ready'){
       const mirror=row?.mirror_type==='direct_https'?'прямое HTTPS-зеркало':'зеркало Яндекс Диска';
       if(row?.download_bytes)paragraph('Hugging Face · '+(row.download_bytes/1048576).toFixed(1)+' МиБ. '+
@@ -172,7 +173,8 @@
     if(step===2){resourceCard('tts');checkbox(' Подготовить голос позже',skipTTS,v=>{skipTTS=v;saveProgress();});paragraph('Silero xenia работает на CPU. Уже проверенный голос повторно не загружается.');}
     if(step===3){
       const ollama=data?.ollama;
-      paragraph('Движок Ollama входит в установщик LocalMind. Отдельно скачивать или устанавливать Ollama не нужно.');
+      paragraph(data?.engine_external?'LocalMind подключается к локальному Ollama. Модели сохраняет сам сервис Ollama.':
+        'Движок Ollama входит в установщик LocalMind. Отдельно скачивать или устанавливать Ollama не нужно.');
       paragraph(ollama?.state==='ready'?(ollama.active_verified?'Нейросеть проверена и готова: '+ollama.active:'Движок работает. Выберите модель и проверьте её коротким запросом.'):(ollama?.message||'Проверяем встроенный движок…'));
       if(data?.engine)paragraph(data.engine.message);
       const storage=data?.model_storage;
@@ -208,11 +210,16 @@
             paragraph('RAM: от '+bytes(row.memory?.ram_minimum)+' · рекомендация '+bytes(row.memory?.ram_recommended)+' · свободно на диске '+bytes(row.disk?.free)+'. '+row.warning,card);
             const label=document.createElement('label');label.className='check';const accept=document.createElement('input');accept.type='checkbox';
             label.append(accept,' Я принимаю лицензию '+row.license+' и разрешаю эту загрузку');card.append(label);
+            const disk=document.createElement('input');disk.type='checkbox';
+            if(row.disk?.free==null){
+              const diskLabel=document.createElement('label');diskLabel.className='check';
+              diskLabel.append(disk,' Место на диске сервиса Ollama неизвестно. Разрешаю загрузку без проверки места.');card.append(diskLabel);
+            }
             const pull=button('Скачать выбранную модель',async()=>{
               pull.disabled=true;
-              try{await modelApi('/downloads',{source:row.source,identity:row.id,quantization:row.quantization,context:4096,accept_license:accept.checked,fingerprint:row.fingerprint});poll();}
+              try{await modelApi('/downloads',{source:row.source,identity:row.id,quantization:row.quantization,context:4096,accept_license:accept.checked,acknowledge_unknown_disk:disk.checked,fingerprint:row.fingerprint});poll();}
               catch(e){showError(e);pull.disabled=false;}
-            });pull.disabled=true;accept.onchange=()=>{pull.disabled=row.compatibility==='blocked'||!accept.checked;};card.append(pull);content.append(card);
+            });pull.disabled=true;accept.onchange=disk.onchange=()=>{pull.disabled=row.compatibility==='blocked'||!accept.checked||(row.disk?.free==null&&!disk.checked);};card.append(pull);content.append(card);
           }
         }catch(e){showError(e);catalog.disabled=false;}
       });catalog.disabled=ollama?.state!=='ready';content.append(catalog);

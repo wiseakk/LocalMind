@@ -74,6 +74,28 @@ def test_disk_uses_confirmed_server_location(tmp_path, monkeypatch):
     assert result['path'] == str(tmp_path) and result['free'] > 0
 
 
+def test_clean_default_can_be_pulled_but_installed_active_model_is_protected(hub, monkeypatch):
+    from localmind.model_manager import manager
+
+    model = 'gemma4:12b-it-q4_K_M'
+    tags = []
+    monkeypatch.setattr(manager, '_active', model)
+    monkeypatch.setattr(cat, 'ollama_json', lambda _, endpoint: {'version': '0.40.16'}
+                        if endpoint == 'version' else {'models': tags})
+    monkeypatch.setattr(cat, 'Thread', lambda **kwargs: type('Thread', (), {'start': lambda self: None})())
+    jobs = cat.DownloadJobs()
+    fingerprint = cat.curated()[0]['fingerprint']
+    options = {'accept_license': True, 'fingerprint': fingerprint}
+    with pytest.raises(ValueError, match='Свободное место'):
+        jobs.start('ollama', model, 'Q4_K_M', **options)
+    options['acknowledge_unknown_disk'] = True
+    job = jobs.start('ollama', model, 'Q4_K_M', **options)
+    assert job['status'] == 'starting' and job['destination'] is None
+    tags.append({'name': model})
+    with pytest.raises(ValueError, match='Активная модель'):
+        jobs.start('ollama', model, 'Q4_K_M', **options)
+
+
 def test_disk_exhaustion_and_license_prevent_start(hub, monkeypatch):
     jobs = cat.DownloadJobs()
     fingerprint = cat.curated()[0]['fingerprint']

@@ -128,11 +128,10 @@
       const accept = document.createElement('input'); accept.type = 'checkbox';
       consent.append(accept, document.createTextNode('Проверил(а) лицензию и разрешаю загрузить этот вариант'));
       const diskConsent = document.createElement('label'); diskConsent.className = 'check';
-      diskConsent.classList.add('expert-only');
       const diskAccept = document.createElement('input'); diskAccept.type = 'checkbox';
       diskConsent.append(diskAccept, document.createTextNode('Место на диске неизвестно. Разрешаю начать загрузку'));
       const diskNote=document.createElement('p');diskNote.className='mini';
-      diskNote.textContent=!row.size?'Размер модели неизвестен. Обновите карточку или выберите другой вариант.':row.disk?.free==null?'Место на диске не подтверждено. Настройте хранилище Ollama; ручное разрешение доступно в экспертном режиме.':'Свободно '+bytes(row.disk.free)+' · требуется около '+bytes(row.size*1.1+1073741824);
+      diskNote.textContent=!row.size?'Размер модели неизвестен. Обновите карточку или выберите другой вариант.':row.disk?.free==null?'Место на диске сервиса Ollama не подтверждено. Для загрузки потребуется явное согласие.':'Свободно '+bytes(row.disk.free)+' · требуется около '+bytes(row.size*1.1+1073741824);
       const pull = document.createElement('button'); pull.className = 'secondary'; pull.textContent = 'Установить';
       pull.disabled = row.compatibility === 'blocked'||!row.size;
       pull.addEventListener('click', async () => {
@@ -140,7 +139,7 @@
         try {
           await api('/downloads', {source: row.source, identity: row.id, quantization: row.quantization,
             context: Number($('contextTokens').value), accept_license: accept.checked,
-            acknowledge_unknown_disk: diskAccept.checked&&document.documentElement.dataset.expert==='true', fingerprint: row.fingerprint});
+            acknowledge_unknown_disk: diskAccept.checked, fingerprint: row.fingerprint});
           status.textContent = 'Загрузка начата. Активная модель сохранена.'; await resumePolling();window.localmindDownloads?.open();
         } catch (error) { status.textContent = error.message; }
         finally { pull.disabled = row.compatibility === 'blocked'||!row.size; }

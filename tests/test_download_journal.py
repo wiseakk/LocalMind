@@ -96,6 +96,8 @@ def test_failed_terminal_write_marks_only_a_terminal_error_in_memory(monkeypatch
 
 
 @pytest.mark.parametrize('error,expected',[(httpx.ConnectError('offline'),'network'),
+    (ValueError('dial tcp: i/o timeout'),'network'), (PermissionError('read-only directory'),'permission_denied'),
+    (ValueError('SHA-256 не совпадает'),'incompatible'),
     (ValueError('disk full'),'disk_full'),(ValueError('unsupported architecture'),'unsupported'),
     (ValueError('incompatible GGUF'),'incompatible'),(ValueError('interrupted pull'),'interrupted'),
     (ValueError('unauthorized Bearer secret-token'),'auth_required')])

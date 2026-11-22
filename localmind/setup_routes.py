@@ -48,6 +48,7 @@ def setup_status():
     from .ollama_runtime import runtime
     from .hardware import hardware_status
     return {**product, 'voice': resource_setup.status(), 'ollama': ollama, 'engine': runtime.status(),
+            'engine_external': runtime.external_only,
             'model_storage': runtime.model_stores(),
             'hardware': hardware_status(), 'model_disk': disk_status(), 'offline_model': offline_model,
             'offline_disk': disk_status() if offline_model else None,

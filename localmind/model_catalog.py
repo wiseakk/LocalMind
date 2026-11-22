@@ -217,6 +217,8 @@ def resolve_pull(source, identity, quant, context):
         reference = 'hf.co/' + identity + ':' + quant
     else:
         raise ValueError('Неизвестный источник.')
+    if row and row['compatibility'] == 'blocked' and row.get('ollama_version') is None:
+        raise ValueError('Ollama недоступен. Проверьте локальный сервер и обновите каталог.')
     if not row or row['compatibility'] == 'blocked':
         raise ValueError('Этот вариант несовместим или недоступен.')
     return reference, row
@@ -236,14 +238,18 @@ class DownloadJobs:
         reference, row = resolve_pull(source, identity, quant, context)
         from .model_manager import manager
         if manager.active == reference:
-            raise ValueError('Активная модель не перезаписывается загрузкой. Сначала выберите другую установленную модель.')
+            tags = ollama_json('GET', 'tags').get('models')
+            if not isinstance(tags, list):
+                raise ValueError('Не удалось проверить установленные модели Ollama.')
+            if any(isinstance(entry, dict) and entry.get('name') == reference for entry in tags):
+                raise ValueError('Активная модель не перезаписывается загрузкой. Сначала выберите другую установленную модель.')
         if fingerprint != row['fingerprint']:
             raise ValueError('Метаданные, лицензия или вариант изменились. Откройте карточку заново и подтвердите актуальные сведения.')
         disk, size = row['disk'], row.get('size')
         if not positive(size):
             raise ValueError('Размер модели неизвестен. Обновите карточку или выберите вариант с указанным размером.')
         if disk['free'] is None and not acknowledge_unknown_disk:
-            raise ValueError('Свободное место неизвестно. Настройте хранилище Ollama; ручное разрешение доступно в экспертном режиме.')
+            raise ValueError('Свободное место в хранилище Ollama неизвестно. Подтвердите загрузку без проверки места.')
         if positive(size) and disk['free'] is not None and disk['free'] < size * 1.1 + GIB:
             raise ValueError('Недостаточно места в подтверждённом хранилище Ollama.')
         with self.lock:

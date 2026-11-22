@@ -27,10 +27,15 @@ def download_error(exc, stage):
         code, message = 'auth_required', 'Требуется авторизация'
     elif status == 404:
         code, message = 'unavailable', 'Модель недоступна'
-    elif isinstance(exc, (httpx.NetworkError, httpx.TimeoutException)):
+    elif isinstance(exc, (httpx.NetworkError, httpx.TimeoutException)) or any(s in lower for s in (
+            'dial tcp', 'connection refused', 'connection reset', 'i/o timeout', 'no such host')):
         code, message = 'network', 'Нет соединения'
     elif getattr(exc, 'errno', None) == errno.ENOSPC or any(s in lower for s in ('disk full', 'no space', 'недостаточно места')):
         code, message = 'disk_full', 'Недостаточно места'
+    elif isinstance(exc, PermissionError) or any(s in lower for s in ('permission denied', 'read-only file system')):
+        code, message = 'permission_denied', 'Нет прав на каталог загрузки'
+    elif any(s in lower for s in ('sha-256', 'checksum', 'контрольная сумма')):
+        code, message = 'incompatible', 'Проверка SHA-256 не пройдена'
     elif any(s in lower for s in ('interrupt', 'прерван', 'cancel')):
         code, message = 'interrupted', 'Загрузка прервана'
     elif any(s in lower for s in ('unsupported', 'не поддерж', 'ollama version')):
