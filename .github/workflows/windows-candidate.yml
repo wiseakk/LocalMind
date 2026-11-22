@@ -19,9 +19,11 @@ jobs:
         run: |
           $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
           if (!(Test-Path $compiler)) { throw 'Inno Setup compiler missing from Windows runner' }
-          $version = (Get-Item $compiler).VersionInfo.ProductVersion
-          if ($version -notmatch '^6\.7\.1(?:\.|$)') { throw "Unexpected Inno Setup version: $version" }
-          "Inno Setup $version"
+          $installed = choco list --exact innosetup --limit-output
+          if ($LASTEXITCODE -ne 0 -or $installed -notcontains 'innosetup|6.7.1') {
+            throw "Unexpected Inno Setup package version: $installed"
+          }
+          $installed
       - name: Build source-only-onboarding installer
         run: |
           python scripts/build_windows.py
