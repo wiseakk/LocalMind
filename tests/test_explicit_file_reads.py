@@ -35,13 +35,15 @@ def saved_access(tmp_path, monkeypatch):
 
 
 def request(target, style):
+    if style == 'folder':
+        return f'Прочитай файл «{target.name}» в папке «{target.parent}»'
     if style == 'contents':
         return f'Что написано в файле {target}?'
     return (f'Прочитай файл {target} и скажи код проверки.' if style == 'absolute' else
             'Прочитай содержимое файла readme.txt в папке LocalMind_QA на рабочем столе.')
 
 
-@pytest.mark.parametrize('style', ['absolute', 'desktop'])
+@pytest.mark.parametrize('style', ['absolute', 'desktop', 'folder'])
 @pytest.mark.parametrize('route', ['exact', 'schema', 'native', 'offline'])
 def test_saved_restricted_grants_reach_reader_and_answer(saved_access, monkeypatch, style, route):
     access, root, target = saved_access

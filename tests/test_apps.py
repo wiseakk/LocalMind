@@ -163,6 +163,17 @@ def test_unique_catalog_id_alias_disambiguates_duplicate_names(tmp_path):
     assert catalog.resolve_alias(rows[0]['id']) == [rows[0]['id']]
 
 
+def test_steam_transport_aliases_resolve_to_client_only(tmp_path):
+    executable = make_exe(tmp_path / 'steam.exe')
+    game = apps.AppSource('steam-game', 'Demo Game', lambda: (str(executable), '', 'fixture'),
+                          launch_type='steam', launch_id='42')
+    catalog = apps.AppCatalog(lambda: [source(executable, name='Steam'), game])
+    ids = {item['name']: item['id'] for item in catalog.refresh()}
+    assert catalog.resolve_alias('Стим') == [ids['Steam']]
+    assert catalog.resolve_alias('Demo Game') == [ids['Demo Game']]
+    assert catalog.resolve_alias(ids['Demo Game']) == [ids['Demo Game']]
+
+
 def test_duplicate_sources_for_same_target_are_deduplicated(tmp_path):
     executable = make_exe(tmp_path / 'editor.exe')
     catalog = apps.AppCatalog(lambda: [source(executable, key='a'), source(executable, key='b')])

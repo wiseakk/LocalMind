@@ -967,7 +967,10 @@ class AppCatalog:
         if not self._refreshed:
             self.refresh()
         with self._lock:
-            return {key: item.aliases for key, item in self._entries.items()}
+            # Steam games use the client executable as a transport. Its aliases
+            # must resolve to the client, while games keep their own labels.
+            return {key: (normalize_name(item.name), key) if item.launch_type == 'steam' else item.aliases
+                    for key, item in self._entries.items()}
 
     def resolve_alias(self, name: str) -> list[str]:
         normalized = normalize_name(name)
