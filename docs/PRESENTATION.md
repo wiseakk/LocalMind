@@ -20,7 +20,7 @@
 - [Тесты, реальные интеграции, ограничения и команды](DEVELOPMENT_EVIDENCE.md).
 - [Примеры отладки и исправлений](TECHNICAL_CHALLENGES.md).
 - [Снимки действующего приложения](screenshots/README.md).
-- [Исходный код в checkout](../localmind/) и [локальные release notes](GITHUB_RELEASE_NOTES.md). На GitHub доступны [репозиторий](https://github.com/wiseakk/LocalMind) и [исходный релиз](https://github.com/wiseakk/LocalMind/releases/tag/v1.0.0-rc3.4-source).
+- [Исходный код в checkout](../localmind/) и [локальные release notes](GITHUB_RELEASE_NOTES.md). На GitHub доступны [репозиторий](https://github.com/wiseakk/LocalMind) и [исходный релиз](https://github.com/wiseakk/LocalMind/releases/tag/v1.0.0-rc3.4-source.1).
 
 Объясните собственный вклад на конкретном коммите, тесте или ручном сценарии. Укажите, какие действия выполнялись с помощью AI. Для развития проекта предложите проверку WER/CER, повторную аппаратную приёмку Windows и поддержку дополнительных композиторов. [Вопросы и ответы для защиты](DEFENSE_QA.md)
 

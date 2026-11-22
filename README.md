@@ -7,7 +7,7 @@
 | CachyOS / Arch x86_64 | Linux Alpha, пакет `1.0.0rc3-4`. Проверки проводились на CachyOS с Hyprland/Wayland. |
 | Windows 10/11 | RC3. Сохранены исходники, история и рецепты сборки. Микрофон и GPU для этой публикации не проверены. |
 
-[Установка Linux](docs/LINUX_INSTALL.md) · [Установка Windows](#windows-rc3) · [Материалы защиты](docs/PRESENTATION.md) · [Релиз исходников](https://github.com/wiseakk/LocalMind/releases/tag/v1.0.0-rc3.4-source)
+[Установка Linux](docs/LINUX_INSTALL.md) · [Установка Windows](#windows-rc3) · [Материалы защиты](docs/PRESENTATION.md) · [Релиз исходников](https://github.com/wiseakk/LocalMind/releases/tag/v1.0.0-rc3.4-source.1)
 
 ## Интерфейс
 

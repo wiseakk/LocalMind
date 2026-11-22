@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from localmind import agent, capabilities, devices, file_access, file_mutations, llm_planner, orchestration
+from localmind import agent, capabilities, devices, file_access, file_mutations, hyprland_windows, llm_planner, orchestration
 from localmind.conversations import Conversation, Reference
 from localmind.results import ActionResult, refused
 
@@ -82,6 +82,8 @@ def sandbox(tmp_path, monkeypatch):
         focus_app=lambda app: ActionResult(True, 'apps.focus', app, 'observed', 'visible_window'),
         select_app_window=lambda _: ('test-window', None),
         close_window_safely=lambda window: refused('apps.close_window_safely', window, 'Запрещено в QA'))
+    # A headless Linux runner must exercise the mocked window adapter too.
+    monkeypatch.setattr(hyprland_windows, 'available', lambda: True)
     for module in (capabilities, llm_planner, orchestration):
         monkeypatch.setattr(module, '_windows', lambda: windows)
     def planner_offline(*args, **kwargs):
