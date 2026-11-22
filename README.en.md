@@ -17,10 +17,10 @@ LocalMind is a Russian-language desktop assistant. It answers through a local mo
 
 ## Getting started
 
-- **CachyOS / Arch x86_64 (Linux Alpha).** The desktop was tested on CachyOS with Hyprland and Wayland. Follow the [Linux setup guide in Russian](docs/LINUX_INSTALL.md).
+- **CachyOS / Arch x86_64 (Linux Alpha).** The desktop was tested on CachyOS with Hyprland and Wayland. Install the Arch package with `pacman -U` if available for your system, then run `localmind`. See the [Linux setup guide in Russian](docs/LINUX_INSTALL.md) for source and voice setup.
 - **Windows 10/11 (RC3).** Start from the [Windows source branch](https://github.com/wiseakk/LocalMind/tree/release/1.0.0-rc3) using the [PowerShell setup guide in Russian](docs/WINDOWS_INSTALL.md). The current installer, microphone and GPU still need a hardware acceptance run.
 
-Releases provide source archives. Initial dependency and model setup can require an internet connection. After setup, compatible chat and voice workflows can run over loopback.
+Check Releases for source archives and available packages. Initial dependency and model setup can require an internet connection. After setup, compatible chat and voice workflows can run over loopback.
 
 ## Privacy and architecture
 

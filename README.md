@@ -21,10 +21,10 @@
 
 | Платформа | Как начать |
 | --- | --- |
-| **CachyOS / Arch x86_64 · Linux Alpha** | Проверенная графическая среда — CachyOS с Hyprland/Wayland. Подготовьте Python, модель и голосовые компоненты по [инструкции Linux](docs/LINUX_INSTALL.md). |
+| **CachyOS / Arch x86_64 · Linux Alpha** | Проверенная графическая среда — CachyOS с Hyprland/Wayland. Если в Releases есть пакет для вашей системы, установите его через `pacman -U` и запустите `localmind`. Запуск из исходников и настройка голоса — в [инструкции Linux](docs/LINUX_INSTALL.md). |
 | **Windows 10/11 · RC3** | Доступны [исходники Windows](https://github.com/wiseakk/LocalMind/tree/release/1.0.0-rc3) и [запуск через PowerShell](docs/WINDOWS_INSTALL.md). Приёмка актуального установщика, микрофона и GPU остаётся отдельной задачей. |
 
-[Releases](https://github.com/wiseakk/LocalMind/releases) содержит архивы исходников. Для первого запуска с моделями обычно нужна сеть. После подготовки диалог и голос могут работать через loopback без внешнего подключения.
+[Releases](https://github.com/wiseakk/LocalMind/releases) содержит исходники и доступные сборки. Для первого запуска с моделями обычно нужна сеть. После подготовки диалог и голос могут работать через loopback без внешнего подключения.
 
 ## Данные и разрешения
 

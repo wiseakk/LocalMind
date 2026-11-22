@@ -15,10 +15,10 @@
 | 22.11.2026 | `1dd41f7`, `84534ed` | Linux-адаптеры разрешений, выбор микрофона и CUDA для ASR. |
 | 22.11.2026 | `b7ccc08`, `d8655e1` | Голосовой runtime в пакете, исправление повторного запуска Desktop. |
 
-Linux `port/linux-arch` и Windows `release/1.0.0-rc3` имеют общую историю. В Windows-копии RC3 активна отдельная ветка `codex/rc3-semantic-intents`, доступная в Linux как `codex/rc3-semantic-intents`. Раннее состояние интерфейса сохранено в истории. Исходный тег остался в локальном архиве. Ранний Windows-репозиторий MVP содержит дополнительные рабочие ветки и резервные refs. Его коммит `b8282ba` входит в историю Linux.
+Linux-порт и Windows `release/1.0.0-rc3` имеют общую историю. Исторический указатель Linux-порта сохранён в теге `archive/port-linux-arch`. В Windows-копии RC3 активна отдельная ветка `codex/rc3-semantic-intents`, доступная в Linux как `codex/rc3-semantic-intents`. Раннее состояние интерфейса сохранено в истории. Исходный тег остался в локальном архиве. Ранний Windows-репозиторий MVP содержит дополнительные рабочие ветки и резервные refs. Его коммит `b8282ba` входит в историю Linux.
 
 ```sh
 git log --graph --oneline --decorate --all
-git merge-base port/linux-arch release/1.0.0-rc3
+git merge-base archive/port-linux-arch release/1.0.0-rc3
 git show --stat d8655e1
 ```
