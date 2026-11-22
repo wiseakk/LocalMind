@@ -34,4 +34,4 @@ npm run test:dom
 LOCALMIND_PORT=58626 LOCALMIND_DATA_DIR="$(mktemp -d)" OLLAMA_URL=http://127.0.0.1:9 python start.py
 ```
 
-Затем выполните `LOCALMIND_TEST_URL=http://127.0.0.1:58626 npm run test:ui`. Для реальных моделей и аудио используйте отдельную [локальную приёмку](LINUX_MANUAL_QA.md). GitHub Actions подготовлены в checkout. Для удалённого прогона нужен репозиторий.
+Затем выполните `LOCALMIND_TEST_URL=http://127.0.0.1:58626 npm run test:ui`. Для реальных моделей и аудио используйте отдельную [локальную приёмку](LINUX_MANUAL_QA.md). Проверки GitHub Actions доступны на [вкладке Actions](https://github.com/wiseakk/LocalMind/actions).
