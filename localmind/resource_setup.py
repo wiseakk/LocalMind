@@ -47,12 +47,21 @@ def verification_key(kind, profile='balanced'):
     return kind if kind != 'asr' or ASR_PROFILES[profile] == 'small' else kind + '-' + profile
 
 
+def missing_dependencies(kind):
+    modules = ('faster_whisper', 'av', 'ctranslate2') if kind == 'asr' else ('torch', 'numpy')
+    missing = []
+    for name in modules:
+        try:
+            if importlib.util.find_spec(name) is not None:
+                continue
+        except (ImportError, ValueError):
+            pass
+        missing.append(name)
+    return missing
+
+
 def dependencies(kind):
-    modules = ('faster_whisper', 'av') if kind == 'asr' else ('torch', 'numpy')
-    try:
-        return all(importlib.util.find_spec(name) for name in modules)
-    except (ImportError, ValueError):
-        return False
+    return not missing_dependencies(kind)
 
 
 def status():
@@ -86,12 +95,14 @@ def status():
             except (OSError, ValueError):
                 pass
         source_info = {}
+        if state == 'dependency_missing':
+            source_info['missing_dependencies'] = missing_dependencies(kind)
         if kind == 'asr':
             mirror = asr_sources.mirror_for(ASR_PROFILES[profile], assets)
-            source_info = {'download_bytes': sum(a['bytes'] for a in assets),
+            source_info.update({'download_bytes': sum(a['bytes'] for a in assets),
                            'import_files': [{'name': Path(a['path']).name, 'bytes': a['bytes']} for a in assets],
                            'mirror_configured': mirror is not None,
-                           'mirror_type': mirror['type'] if mirror else None}
+                           'mirror_type': mirror['type'] if mirror else None})
         rows.append({'kind': kind, 'profile': profile if kind == 'asr' else None,
                      'required': kind != 'asr' or profile == default_stt_profile(),
                      'model': ASR_PROFILES[profile] if kind == 'asr' else 'Silero · xenia', 'state': state,
@@ -141,7 +152,8 @@ def start(kind, profile='balanced', *, source='huggingface', fingerprint=None, i
                 or mirror['fingerprint'] != fingerprint):
             raise ValueError('Зеркало не настроено или изменилось. Повторите проверку источника.')
     if not dependencies(kind):
-        raise ValueError('Компоненты голоса отсутствуют. Восстановите LocalMind установщиком; Python и pip не нужны.')
+        missing = ', '.join(missing_dependencies(kind))
+        raise ValueError(f'Не установлены библиотеки голоса: {missing or "отсутствует голосовой runtime"}. Восстановите пакет LocalMind.')
     key, cancel = uuid.uuid4().hex, threading.Event()
     job = {'id': key, 'kind': kind, 'model': 'Русская речь · ' + ASR_PROFILES[profile] if kind == 'asr' else 'Silero · xenia',
            'profile': profile if kind == 'asr' else None,

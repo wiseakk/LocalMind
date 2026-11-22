@@ -1,6 +1,6 @@
 # Установка LocalMind на CachyOS и Arch
 
-Для текущего архива `1.0.0rc3-2` см. [команды и состояние финальной приёмки](LINUX_ALPHA_ACCEPTANCE.md).
+Для архива `1.0.0rc3-3` см. [приёмку исправления загрузок](LINUX_RC3_3_DOWNLOADS.md).
 
 ## Запуск из исходников
 
@@ -67,10 +67,15 @@ env LOCALMIND_DATA_DIR="$PWD/.test-artifacts/linux-profile" OLLAMA_URL=http://12
 
 ## Arch-пакет из checkout
 
-На машине с доступным `sudo` установите `base-devel`, затем из корня
-checkout соберите и установите пакет одной командой:
+Архив `1.0.0rc3-3` содержит голосовой runtime для Python 3.14 x86_64.
+Установите готовый архив через `sudo pacman -U /путь/к/пакету.pkg.tar.zst`.
+Для пересборки нужен `base-devel`, `python-pip` и комплект wheel с хешами
+из `installer/linux/voice-wheels.lock`. Подготовьте его из корня checkout:
 
 ```sh
+python -m pip download --no-deps --only-binary=:all: --require-hashes \
+  --extra-index-url https://download.pytorch.org/whl/cpu \
+  --dest .test-artifacts/rc3-runtime-wheels -r installer/linux/voice-wheels.lock
 makepkg -si
 ```
 
@@ -81,16 +86,10 @@ makepkg -si
 проверены сборкой. Установка с системными зависимостями требует ручной
 приёмки на CachyOS.
 
-Для голоса в установленной копии подготовьте отдельное окружение с
-доступом к системным зависимостям Qt. Launcher использует этот фиксированный
-runtime под XDG data home при его наличии.
-
-```sh
-localmind_runtime="${XDG_DATA_HOME:-$HOME/.local/share}/LocalMind/runtime/linux"
-python -m venv --system-site-packages "$localmind_runtime"
-"$localmind_runtime/bin/python" -m pip install --only-binary=:all: -r /usr/lib/localmind/requirements-voice.txt
-"$localmind_runtime/bin/python" -m pip install --only-binary=:all: --index-url https://download.pytorch.org/whl/cpu 'torch==2.15.0+cpu'
-```
+Для голоса в установленной копии откройте мастер и подготовьте модели.
+Пакет использует отдельный каталог зависимостей под `/usr/lib/localmind`.
+Модели сохраняются в пользовательском профиле. Вручную создавать venv для
+установленной копии больше не требуется.
 
 Обновление и удаление пакета меняют только файлы пакета.
 `sudo pacman -R localmind` оставляет профиль, историю и модели, размещённые

@@ -48,7 +48,8 @@ class WarmASRWorker(WarmSpeechWorker):
                        'DO_NOT_TRACK': '1', 'OMP_NUM_THREADS': '4', 'MKL_NUM_THREADS': '4',
                        'PYTHONIOENCODING': 'utf-8'}
         if sys.platform == 'linux' and profile == 'gpu-quality':
-            nvidia = Path(sysconfig.get_path('purelib')) / 'nvidia'
+            bundled = ROOT / 'voice-runtime' / 'nvidia'
+            nvidia = bundled if bundled.is_dir() else Path(sysconfig.get_path('purelib')) / 'nvidia'
             libraries = [str(nvidia / name / 'lib') for name in ('cublas', 'cudnn', 'cuda_nvrtc')
                          if (nvidia / name / 'lib').is_dir()]
             if libraries:

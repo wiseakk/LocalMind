@@ -114,3 +114,13 @@ def test_source_start_respects_reviewed_migration_consent(monkeypatch, interacti
     assert bool(copied) is expected
     if expected:
         assert copied == [{'consent': True, 'reviewed_plan': plan}]
+def test_voice_admission_names_the_missing_runtime_modules(monkeypatch):
+    from localmind import resource_setup
+
+    missing = {'ctranslate2', 'torch'}
+    monkeypatch.setattr(resource_setup.importlib.util, 'find_spec', lambda name: None if name in missing else object())
+    assert resource_setup.missing_dependencies('asr') == ['ctranslate2']
+    assert resource_setup.missing_dependencies('tts') == ['torch']
+    for kind, module in (('asr', 'ctranslate2'), ('tts', 'torch')):
+        with pytest.raises(ValueError, match=module):
+            resource_setup.start(kind)
