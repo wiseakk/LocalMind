@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+app_dir=/usr/lib/localmind
+case ${XDG_DATA_HOME:-} in
+    /*) data_dir=$XDG_DATA_HOME ;;
+    *) data_dir=$HOME/.local/share ;;
+esac
+python=$data_dir/LocalMind/runtime/linux/bin/python
+if [ ! -x "$python" ]; then
+    python=/usr/bin/python
+fi
+cd "$app_dir"
+exec "$python" -m localmind.desktop "$@"

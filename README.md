@@ -1,6 +1,7 @@
 # LocalMind 1.0.0-rc3
 
-Для CachyOS / Arch см. [запуск Desktop из исходников и карту Linux-порта](docs/LINUX_PORT.md).
+Для CachyOS / Arch доступны [установка и запуск](docs/LINUX_INSTALL.md),
+[статус Linux-порта](docs/LINUX_PORT_STATUS.md) и [ручная QA](docs/LINUX_MANUAL_QA.md).
 
 RC3 продолжает WIP 0134e2e поверх RC2 31fad86; целевая ветка release/1.0.0-rc3.
 [Передача RC3: проверки, блокеры сборки и ручная приёмка](docs/RC3_HANDOFF.md).

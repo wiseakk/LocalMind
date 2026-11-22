@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=LocalMind
+Comment=Local voice and AI assistant
+Comment[ru]=Локальный голосовой и ИИ-ассистент
+Exec=/usr/bin/localmind
+Icon=localmind
+Terminal=false
+Categories=Utility;
+StartupNotify=true

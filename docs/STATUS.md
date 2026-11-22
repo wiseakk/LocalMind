@@ -1,5 +1,17 @@
 # RC2 — сборка и окончательная проверка 2026-11-04
 
+## 2026-11-22 — Linux, ядро приложения и офлайн-контур
+
+Реальная Gemma 4 12B Q4_K_M, native tools и LocalMind API проверены на RTX 4070.
+Проверены реальный запуск Kitty, перечисление и фокус окон Hyprland,
+чтение и пересказ разрешённого файла, история после перезапуска. Silero xenia,
+Whisper Small CPU, Medium CUDA и CPU fallback прошли на синтетическом аудио.
+В отдельном сетевом namespace с одним loopback прошёл полный голосовой контур.
+Python: 1734 passed, 31 skipped, 35 subtests passed. Chromium: 37 passed.
+Собран локальный Arch payload. Установка pacman, физический микрофон,
+Windows-аудио и Windows GPU остаются отдельной приёмкой.
+[Данные прогонов и ограничения](LINUX_PORT_STATUS.md).
+
 ## 2026-11-21 — Linux, аудит и первый запуск
 
 Ветка `port/linux-arch`, исходный коммит `0615b9e`. На CachyOS в отдельном
