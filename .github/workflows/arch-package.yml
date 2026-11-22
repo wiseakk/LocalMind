@@ -30,10 +30,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          epoch=$(git show -s --format=%ct HEAD)
+          epoch=$(git -c safe.directory="$GITHUB_WORKSPACE" show -s --format=%ct HEAD)
           useradd --create-home builder
           install -d /tmp/localmind-source /tmp/localmind-build /tmp/output/first /tmp/output/second
-          git archive HEAD | tar -x -C /tmp/localmind-source
+          git -c safe.directory="$GITHUB_WORKSPACE" archive HEAD | tar -x -C /tmp/localmind-source
           chown -R builder:builder /tmp/localmind-source /tmp/localmind-build /tmp/output
           cd /tmp/localmind-source
           for pass in first second; do
@@ -62,7 +62,7 @@ jobs:
           data=$(mktemp -d)
           env LOCALMIND_DATA_DIR="$data" LOCALMIND_PORT=58723 OLLAMA_URL=http://127.0.0.1:9 DEMO_MODE=true python start.py &
           server=$!
-          trap 'kill "$server"; wait "$server"' EXIT
+          trap 'kill "$server"; wait "$server" || test "$?" -eq 143' EXIT
           curl --retry 15 --retry-connrefused --retry-delay 1 --fail --silent --show-error \
             http://127.0.0.1:58723/api/info | python -c 'import json, sys; assert json.load(sys.stdin)["demo"]'
       - uses: actions/upload-artifact@v4
