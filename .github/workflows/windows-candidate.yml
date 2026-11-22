@@ -1,0 +1,49 @@
+name: Windows installer validation
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-2025
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Set up installer compiler
+        run: choco install innosetup --version=6.4.3 --yes --no-progress
+      - name: Build source-only-onboarding installer
+        run: |
+          python scripts/build_windows.py
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
+      - name: Validate setup, launcher and uninstall
+        run: |
+          $candidate = @(Get-ChildItem -Path dist -Filter '*-Setup.exe' -File)
+          if ($candidate.Count -ne 1) { throw 'Expected exactly one setup' }
+          Get-FileHash -Algorithm SHA256 $candidate[0].FullName
+          $destination = Join-Path $env:RUNNER_TEMP 'LocalMindSetupSmoke'
+          $process = Start-Process -FilePath $candidate[0].FullName -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', ('/DIR="' + $destination + '"')
+          ) -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Setup failed: $($process.ExitCode)" }
+          foreach ($file in @('LocalMind.exe', 'runtime\core\python.exe', 'static\index.html', 'unins000.exe')) {
+            if (!(Test-Path (Join-Path $destination $file))) { throw "Missing installed file: $file" }
+          }
+          Push-Location $destination
+          try {
+            & .\runtime\core\python.exe -c 'from PySide6.QtWebEngineWidgets import QWebEngineView; from localmind.desktop import main; assert callable(main)'
+            if ($LASTEXITCODE -ne 0) { throw 'Installed imports failed' }
+          } finally {
+            Pop-Location
+          }
+          $uninstall = Start-Process -FilePath (Join-Path $destination 'unins000.exe') -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
+          ) -PassThru -Wait
+          if ($uninstall.ExitCode -ne 0 -or (Test-Path (Join-Path $destination 'LocalMind.exe'))) {
+            throw 'Uninstall failed'
+          }

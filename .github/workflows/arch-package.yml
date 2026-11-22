@@ -1,0 +1,73 @@
+name: Arch package
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/arch-package.yml'
+      - 'PKGBUILD'
+      - 'installer/linux/**'
+      - 'scripts/verify_arch_package.py'
+  push:
+    branches: [main, 'launch/packaging']
+    paths:
+      - '.github/workflows/arch-package.yml'
+      - 'PKGBUILD'
+      - 'installer/linux/**'
+      - 'scripts/verify_arch_package.py'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    steps:
+      - name: Install build and validation tools
+        run: pacman -Syu --noconfirm --needed git python desktop-file-utils curl
+      - uses: actions/checkout@v4
+      - name: Build twice from the selected commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          epoch=$(git -c safe.directory="$GITHUB_WORKSPACE" show -s --format=%ct HEAD)
+          useradd --create-home builder
+          install -d /tmp/localmind-source /tmp/localmind-build /tmp/output/first /tmp/output/second
+          git -c safe.directory="$GITHUB_WORKSPACE" archive HEAD | tar -x -C /tmp/localmind-source
+          chown -R builder:builder /tmp/localmind-source /tmp/localmind-build /tmp/output
+          cd /tmp/localmind-source
+          for pass in first second; do
+            runuser -u builder -- env SOURCE_DATE_EPOCH="$epoch" BUILDDIR=/tmp/localmind-build \
+              PACKAGER='LocalMind <96255527+wiseakk@users.noreply.github.com>' \
+              PKGDEST="/tmp/output/$pass" makepkg --noconfirm --nodeps --cleanbuild
+          done
+          shopt -s nullglob
+          packages=(/tmp/output/first/*.pkg.tar.zst)
+          test "${#packages[@]}" = 1
+          package="${packages[0]}"
+          cmp "$package" "/tmp/output/second/${package##*/}"
+          python scripts/verify_arch_package.py "$package"
+          cd /tmp/output/first
+          sha256sum ./*.pkg.tar.zst > SHA256SUMS
+      - name: Install package and smoke test the deployed application
+        shell: bash
+        run: |
+          set -euo pipefail
+          pacman -U --noconfirm /tmp/output/first/*.pkg.tar.zst
+          pacman -Q localmind
+          desktop-file-validate /usr/share/applications/localmind.desktop
+          test -x /usr/bin/localmind
+          cd /usr/lib/localmind
+          python -c 'from PySide6.QtWebEngineWidgets import QWebEngineView; from localmind.desktop import main; assert callable(main)'
+          data=$(mktemp -d)
+          env LOCALMIND_DATA_DIR="$data" LOCALMIND_PORT=58723 OLLAMA_URL=http://127.0.0.1:9 DEMO_MODE=true python start.py &
+          server=$!
+          trap 'kill "$server"; wait "$server" || test "$?" -eq 143' EXIT
+          curl --retry 15 --retry-connrefused --retry-delay 1 --fail --silent --show-error \
+            http://127.0.0.1:58723/api/info | python -c 'import json, sys; assert json.load(sys.stdin)["demo"]'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: localmind-arch-x86_64
+          path: /tmp/output/first/*
+          if-no-files-found: error
+          retention-days: 7

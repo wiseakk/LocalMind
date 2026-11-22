@@ -1,7 +1,6 @@
 #!/bin/sh
 set -eu
 app_dir=/usr/lib/localmind
-export PYTHONPATH="$app_dir/voice-runtime"
 export PYTHONNOUSERSITE=1
 cd "$app_dir"
 exec /usr/bin/python -m localmind.desktop "$@"
