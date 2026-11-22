@@ -1,0 +1,10 @@
+name: Предложение
+description: Предложить улучшение сценария
+title: "[Feature] "
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: Сценарий и ожидаемый результат
+    validations:
+      required: true

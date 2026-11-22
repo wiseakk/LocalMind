@@ -1,0 +1,17 @@
+name: Ошибка
+description: Описать воспроизводимую проблему LocalMind
+title: "[Bug] "
+body:
+  - type: input
+    id: platform
+    attributes:
+      label: Платформа и версия LocalMind
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Шаги, наблюдаемое и ожидаемое поведение
+      description: Используйте демонстрационные данные. Удалите токены, личные пути и тексты бесед.
+    validations:
+      required: true

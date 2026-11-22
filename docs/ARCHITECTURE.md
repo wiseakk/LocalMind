@@ -111,3 +111,23 @@ https://docs.ollama.com/api/chat, https://docs.ollama.com/capabilities/thinking,
 https://docs.ollama.com/api/ps. Installed template behavior is measured separately:
 API documentation does not prove a local template honors non-thinking requests.
 See MODEL_COMPARISON.md and retained evidence.
+
+## Поток данных в Linux Alpha
+
+```mermaid
+flowchart TD
+    UI["Qt WebEngine или браузер"] --> API["FastAPI на 127.0.0.1"]
+    UI -->|"Запись по кнопке"| ASR["ASR worker · Whisper"]
+    ASR -->|"Расшифровка для редактирования"| UI
+    API -->|"Запрос"| AG["Agent и планировщик"]
+    AG -->|"Контекст и заявленные инструменты"| LLM["Ollama · локальная модель"]
+    LLM -->|"Ответ или предложение инструмента"| AG
+    AG -->|"Типизированная цель"| POLICY["Политика, разрешение и подтверждение"]
+    POLICY --> OS["Windows / XDG / Hyprland"]
+    OS -->|"Проверенный результат"| API
+    API --> DB["SQLite · история"]
+    API --> TTS["TTS worker · Silero"]
+    TTS -->|"Аудио ответа"| UI
+```
+
+Компоненты запускаются через `localmind/desktop.py` или `start.py`. В Desktop Qt управляет окном, а Uvicorn обслуживает локальный HTTP из отдельного потока. Ollama остаётся отдельным процессом. ASR и TTS работают в отдельных рабочих процессах. Входные данные от модели и текст документов проходят проверку в слое инструментов. Состояние приложения сохраняется в локальном профиле. История беседы и разрешения имеют разные механизмы хранения. См. [политику доступа](ACCESS_POLICY.md) и [жизненный цикл Desktop](LINUX_RC3_4_RELAUNCH.md).

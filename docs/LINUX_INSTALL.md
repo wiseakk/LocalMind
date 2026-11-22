@@ -55,14 +55,14 @@ QT_QPA_PLATFORM=wayland .venv/bin/python -m localmind.desktop
 В первом терминале из корня checkout:
 
 ```sh
-env HOME="$PWD/.test-artifacts/linux-offline-home" OLLAMA_HOST=127.0.0.1:18766 \\
+env HOME="$PWD/.test-artifacts/linux-offline-home" OLLAMA_HOST=127.0.0.1:18766 \
   OLLAMA_MODELS="$PWD/.test-artifacts/linux-ollama" OLLAMA_NO_CLOUD=1 OLLAMA_NOPRUNE=1 ollama serve
 ```
 
 Во втором терминале одна команда запуска Desktop с этим профилем:
 
 ```sh
-env LOCALMIND_DATA_DIR="$PWD/.test-artifacts/linux-profile" OLLAMA_URL=http://127.0.0.1:18766 \\
+env LOCALMIND_DATA_DIR="$PWD/.test-artifacts/linux-profile" OLLAMA_URL=http://127.0.0.1:18766 \
   QT_QPA_PLATFORM=wayland .venv/bin/python -m localmind.desktop
 ```
 

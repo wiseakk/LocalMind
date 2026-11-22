@@ -35,3 +35,15 @@ models/
 
 dist/
 build/
+
+# Local credentials, profile databases and package output
+.env.*
+!.env.example
+*.sqlite
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3-shm
+*.sqlite3-wal
+*.pkg.tar.zst
+*.pkg.tar.zst.sig

@@ -1,0 +1,50 @@
+name: Source checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DEMO_MODE: 'true'
+  OLLAMA_URL: 'http://127.0.0.1:9'
+
+jobs:
+  python:
+    name: Python unit and API tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+
+  linux-smoke:
+    name: Linux syntax, imports and socket smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m compileall -q localmind scripts start.py
+      - run: LOCALMIND_DATA_DIR="$RUNNER_TEMP/localmind-smoke" python -c "from localmind.server import app; from localmind.desktop import main; assert app.routes and callable(main)"
+      - run: python -m pytest -q tests/test_linux_paths.py tests/test_linux_integration.py tests/test_desktop_listener.py
+
+  ui:
+    name: UI syntax, assets and DOM
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npm run check:ui
+      - run: npm run check:assets
+      - run: npm run test:dom
