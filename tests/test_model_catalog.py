@@ -208,7 +208,7 @@ def test_changed_metadata_requires_new_acknowledgement_and_retry_is_explicit(hub
 
 
 def test_worker_start_failure_leaves_no_ghost_download(hub,monkeypatch):
-    fingerprint=cat.curated()[0]['fingerprint']
+    fingerprint=next(row['fingerprint'] for row in cat.curated() if row['id']=='qwen3:4b-q4_K_M')
     class FailedThread:
         def __init__(self,**kw):pass
         def start(self):raise RuntimeError('cannot start thread')

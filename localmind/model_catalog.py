@@ -96,7 +96,10 @@ def disk_status():
 def memory_estimate(row, context):
     size = row.get('size')
     kv = None
-    if all(positive(row.get(k)) for k in ('kv_layers', 'kv_heads', 'head_dim')):
+    if positive(row.get('kv_elements_per_token')):
+        # Verified mixed-head models supply the sum of layer head widths.
+        kv = int(4 * row['kv_elements_per_token'] * context)
+    elif all(positive(row.get(k)) for k in ('kv_layers', 'kv_heads', 'head_dim')):
         kv = int(2 * row['kv_layers'] * row['kv_heads'] * row['head_dim'] * 2 * context)
     known = positive(size) and kv is not None
     minimum = int(size + kv + GIB) if known else None

@@ -59,13 +59,15 @@ class OwnedJob:
 
 
 class OllamaRuntime:
-    def __init__(self, bundle=None, models=None, *, endpoint=None, popen=subprocess.Popen, job_factory=OwnedJob):
+    def __init__(self, bundle=None, models=None, *, endpoint=None, popen=subprocess.Popen, job_factory=OwnedJob,
+                 external_only=False):
         self.bundle = Path(bundle or APP_ROOT / 'runtime/ollama')
         self.models = Path(models or LLM)
         self.explicit_models = models is not None
         from .model_stores import ModelStores
         self.stores = ModelStores(self.models)
         self.endpoint = endpoint
+        self.external_only = external_only
         self.popen, self.job_factory = popen, job_factory
         self.lock, self.stop = RLock(), Event()
         self.thread = self.process = self.job = None
@@ -95,10 +97,13 @@ class OllamaRuntime:
         rows = self.stores.discover()
         state = self.status()
         shared = state['state'] == 'ready' and not state['owned']
-        return {'candidates': rows, 'choice_required': not shared and not self.explicit_models and self.stores.resolve() is None,
-                'switch_available': not shared, 'current_path': str(self.models) if state['owned'] else None}
+        switch_available = not shared and not self.external_only
+        return {'candidates': rows, 'choice_required': switch_available and not self.explicit_models and self.stores.resolve() is None,
+                'switch_available': switch_available, 'current_path': str(self.models) if state['owned'] else None}
 
     def select_store(self, store_id, fingerprint):
+        if self.external_only:
+            raise RuntimeFailure('Каталог задаётся в окружении отдельного процесса Ollama.')
         # A shared daemon's directory cannot be changed from this process.
         if self.process is None:
             try:
@@ -215,6 +220,8 @@ class OllamaRuntime:
         else:
             self._set(state='ready', owned=False, version=version, message='Используется уже работающий локальный Ollama.')
             return False
+        if self.external_only:
+            raise RuntimeFailure('Запустите локальный Ollama (ollama serve) и нажмите «Повторить».')
         if not self.explicit_models:
             selected = self.stores.resolve()
             if selected is None:
@@ -285,4 +292,4 @@ class OllamaRuntime:
         self._set(state='stopped', owned=False, message='Движок LocalMind остановлен.')
 
 
-runtime = OllamaRuntime()
+runtime = OllamaRuntime(external_only=sys.platform == 'linux')

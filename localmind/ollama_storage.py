@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 from threading import RLock
 import time
 from urllib.parse import urlsplit
@@ -73,6 +74,12 @@ def storage_status():
 def instructions(raw):
     from .storage import checked_destination, free_space
     path = checked_destination(raw)
+    if sys.platform == 'linux':
+        return {'path': str(path), 'free_bytes': free_space(path), 'restart_required': True,
+                'steps': ['Дождитесь завершения запросов в Ollama.',
+                          'Остановите собственный daemon обычным способом.',
+                          'Укажите OLLAMA_MODELS при запуске локального daemon и нажмите «Проверить».'],
+                'notice': 'Другие процессы и старые модели остаются у владельца.'}
     return {'path': str(path), 'free_bytes': free_space(path), 'restart_required': True,
             'steps': ['Дождитесь завершения запросов всех приложений.',
                       'Если используете общий Ollama: самостоятельно выберите Quit в трее.',
@@ -103,13 +110,21 @@ def start_managed(raw, consent=False):
             pass
         else:
             raise ValueError('Ollama уже работает. Используйте настройку существующего сервера.')
-        executable = shutil.which('ollama')
+        executable = '/usr/bin/ollama' if sys.platform == 'linux' else shutil.which('ollama')
         if not executable or Path(executable).name.casefold() not in ('ollama', 'ollama.exe'):
             raise ValueError('Установите Ollama и повторите запуск.')
+        if sys.platform == 'linux':
+            if not Path(executable).is_file() or Path(executable).stat().st_uid != 0:
+                raise ValueError('Не найден установленный системный Ollama.')
         ordinary_tree(executable)
         path.mkdir(parents=True, exist_ok=True)
         environment = dict(os.environ, OLLAMA_MODELS=str(path),
                            OLLAMA_HOST=f'127.0.0.1:{endpoint.port or 11434}', OLLAMA_NO_CLOUD='1')
+        if sys.platform == 'linux':
+            from .paths import PRIVATE
+            home = ordinary_tree(PRIVATE / 'ollama-home')
+            home.mkdir(parents=True, exist_ok=True, mode=0o700)
+            environment.update(HOME=str(home), OLLAMA_NOPRUNE='1')
         child = subprocess.Popen([str(Path(executable).resolve()), 'serve'], shell=False,
                                  env=environment, stdin=subprocess.DEVNULL,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

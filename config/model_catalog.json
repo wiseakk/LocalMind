@@ -1,5 +1,14 @@
 [
   {
+    "id": "gemma4:12b-it-q4_K_M", "name": "Gemma 4 12B Q4_K_M", "publisher": "Google",
+    "source": "ollama", "source_url": "https://ollama.com/library/gemma4:12b-it-q4_K_M",
+    "license": "Apache-2.0", "parameters": 11900000000, "quantization": "Q4_K_M",
+    "size": 8021618941, "size_is_estimate": true, "architecture": "gemma4",
+    "max_context": 262144, "capabilities": ["chat", "tools", "vision", "reasoning"],
+    "kv_elements_per_token": 86016,
+    "metadata_date": "2026-11-22", "minimum_ollama": "0.40.16", "benchmarks": []
+  },
+  {
     "id": "qwen3:4b-q4_K_M", "name": "Qwen3 4B Q4_K_M", "publisher": "Qwen",
     "source": "ollama", "source_url": "https://ollama.com/library/qwen3:4b-q4_K_M",
     "license": "Apache-2.0", "parameters": 4022468096, "quantization": "Q4_K_M",
