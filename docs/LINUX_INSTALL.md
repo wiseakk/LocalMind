@@ -1,6 +1,7 @@
 # Установка LocalMind на CachyOS и Arch
 
-Для архива `1.0.0rc3-3` см. [приёмку исправления загрузок](LINUX_RC3_3_DOWNLOADS.md).
+Для текущего архива `1.0.0rc3-4` см. [обновление и проверку повторного запуска](LINUX_RC3_4_RELAUNCH.md).
+Результаты исправления загрузок описаны в [приёмке rc3-3](LINUX_RC3_3_DOWNLOADS.md).
 
 ## Запуск из исходников
 
@@ -67,7 +68,7 @@ env LOCALMIND_DATA_DIR="$PWD/.test-artifacts/linux-profile" OLLAMA_URL=http://12
 
 ## Arch-пакет из checkout
 
-Архив `1.0.0rc3-3` содержит голосовой runtime для Python 3.14 x86_64.
+Начиная с `1.0.0rc3-3` архив содержит голосовой runtime для Python 3.14 x86_64.
 Установите готовый архив через `sudo pacman -U /путь/к/пакету.pkg.tar.zst`.
 Для пересборки нужен `base-devel`, `python-pip` и комплект wheel с хешами
 из `installer/linux/voice-wheels.lock`. Подготовьте его из корня checkout:

@@ -1,7 +1,7 @@
 # Local build from a LocalMind source checkout on CachyOS / Arch.
 pkgname=localmind
 pkgver=1.0.0rc3
-pkgrel=3
+pkgrel=4
 pkgdesc='Local, offline-capable desktop AI assistant'
 arch=('x86_64')
 license=('LicenseRef-Unspecified')
