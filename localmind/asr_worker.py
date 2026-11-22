@@ -7,9 +7,11 @@ import atexit
 import base64
 import json
 import os
+from pathlib import Path
 from queue import Queue, Empty
 import subprocess
 import sys
+import sysconfig
 from threading import Thread
 import time
 import uuid
@@ -45,6 +47,13 @@ class WarmASRWorker(WarmSpeechWorker):
         environment = {**os.environ, 'HF_HUB_OFFLINE': '1', 'HF_HUB_DISABLE_TELEMETRY': '1',
                        'DO_NOT_TRACK': '1', 'OMP_NUM_THREADS': '4', 'MKL_NUM_THREADS': '4',
                        'PYTHONIOENCODING': 'utf-8'}
+        if sys.platform == 'linux' and profile == 'gpu-quality':
+            nvidia = Path(sysconfig.get_path('purelib')) / 'nvidia'
+            libraries = [str(nvidia / name / 'lib') for name in ('cublas', 'cudnn', 'cuda_nvrtc')
+                         if (nvidia / name / 'lib').is_dir()]
+            if libraries:
+                inherited = environment.get('LD_LIBRARY_PATH')
+                environment['LD_LIBRARY_PATH'] = ':'.join([*libraries, *([inherited] if inherited else [])])
         with self.state_lock:
             if self.closing:
                 raise SpeechWorkerError('cancelled')

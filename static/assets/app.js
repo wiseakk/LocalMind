@@ -421,6 +421,26 @@ function showSTTProfile(){
   if($('sttProfileMeasurement'))$('sttProfileMeasurement').textContent=measured?`Последний замер worker (${measured.device}/${measured.compute_type}): RAM ${mib(measured.resources?.rss_bytes)}, VRAM ${mib(measured.resources?.vram_bytes)}, inference ${measured.inference_ms??'—'} мс. ${measured.resources?.gpu||measured.resources?.cpu||'Оборудование неизвестно'}. Замер после запроса, не пик; включает весь worker.`:'RAM, VRAM и задержка: ещё не измерены на этом компьютере.';
 }
 $('voiceProfile').addEventListener('change',()=>{try{localStorage.setItem('localmind.sttProfile.v1',$('voiceProfile').value);}catch(_){}showSTTProfile();});
+async function refreshMicrophones(){
+  const selector=$('microphoneDevice');
+  if(!selector || !navigator.mediaDevices?.enumerateDevices)return;
+  const devices=await navigator.mediaDevices.enumerateDevices();
+  const selected=selector.value;
+  const options=[new Option('Системный по умолчанию','')];
+  for(const device of devices){
+    if(device.kind==='audioinput' && device.deviceId && device.deviceId!=='default'){
+      options.push(new Option(device.label || `Микрофон ${options.length}`,device.deviceId));
+    }
+  }
+  // Keep a disconnected selection explicit. The browser reports an error on
+  // the next attempt instead of recording from an unexpected input.
+  if(selected && !options.some(option=>option.value===selected)){
+    options.push(new Option('Выбранный микрофон недоступен',selected));
+  }
+  selector.replaceChildren(...options);
+  selector.value=selected;
+}
+$('refreshMicrophones')?.addEventListener('click',()=>refreshMicrophones().catch(()=>showError('Не удалось получить список микрофонов.')));
 $('mic').addEventListener('click',async()=>{
   if (recording) {recording.stop(); return;}
   if (busy || voiceBusy || resetting) return;
@@ -429,14 +449,16 @@ $('mic').addEventListener('click',async()=>{
   const captureEpoch=voiceEpoch;
   voiceBusy=true; $('mic').disabled=true; $('send').disabled=true;
   try {
-    stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const deviceId=$('microphoneDevice')?.value;
+    stream=await navigator.mediaDevices.getUserMedia({audio:deviceId?{deviceId:{exact:deviceId}}:true});
+    refreshMicrophones().catch(()=>{});
     if(pageClosing||captureEpoch!==voiceEpoch){stream.getTracks().forEach(t=>t.stop());voiceBusy=false;$('mic').disabled=busy||resetting;$('send').disabled=busy||resetting;return}
     const type=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'].find(t=>MediaRecorder.isTypeSupported(t));
     if(!type)throw Error('Нет поддерживаемого аудиоформата');
     const mr=new MediaRecorder(stream,{mimeType:type}),chunks=[];let bytes=0;
     const settings=stream.getAudioTracks?.()[0]?.getSettings?.()||{};
     // Only technical capture settings: no device IDs, labels or retained audio.
-    const capture={container_codec:mr.mimeType||type,requested_constraints:'audio:true (browser defaults)',...Object.fromEntries(['sampleRate','channelCount','echoCancellation','noiseSuppression','autoGainControl','latency'].filter(k=>settings[k]!==undefined).map(k=>[k,settings[k]]))};
+    const capture={container_codec:mr.mimeType||type,requested_constraints:deviceId?'Выбранный аудиовход':'audio:true (browser defaults)',...Object.fromEntries(['sampleRate','channelCount','echoCancellation','noiseSuppression','autoGainControl','latency'].filter(k=>settings[k]!==undefined).map(k=>[k,settings[k]]))};
     recording=mr;recordingStartedAt=performance.now();$('mic').classList.add('active');window.localmindIcon?.($('mic'),'stop');$('mic').setAttribute('aria-pressed','true');$('mic').setAttribute('aria-label','Остановить запись');$('send').disabled=true;
     voiceBusy=false;$('mic').disabled=false;
     state('Слушаю… Нажмите ■, чтобы закончить. Максимум 30 секунд.');

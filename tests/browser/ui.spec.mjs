@@ -9,7 +9,7 @@ test.beforeEach(async({page,baseURL})=>{
   await page.route('**/*',route=>{
     const url=route.request().url();
     if(/^https?:/.test(url)&&new URL(url).origin!==origin){attempts.push(url);return route.abort('blockedbyclient');}
-    return route.continue();
+    return route.fallback();
   });
 });
 test.afterEach(async({page},testInfo)=>{
@@ -113,4 +113,30 @@ test('phone layout and reduced motion',async({page})=>{
   await page.locator('#sidebarToggle').click();await expect(page.locator('#settingsOpen')).toBeInViewport();
   await page.locator('#settingsOpen').click();await expect(page.locator('#settingsDialog')).toBeVisible();
   await page.keyboard.press('Escape');await page.screenshot({path:'test-results/phone.png',fullPage:true});
+});
+
+test('choosing a microphone uses its exact device ID only when recording is requested',async({page})=>{
+  await fakeInfo(page);
+  await page.addInitScript(()=>{
+    window.captureRequests=[];
+    navigator.mediaDevices.enumerateDevices=async()=>[
+      {kind:'audioinput',deviceId:'fixture-mic',label:'Тестовый микрофон'},
+      {kind:'audiooutput',deviceId:'fixture-speaker',label:'Тестовый выход'},
+    ];
+    navigator.mediaDevices.getUserMedia=async constraints=>{
+      window.captureRequests.push(constraints);
+      throw new DOMException('Removed test microphone','NotFoundError');
+    };
+  });
+  await page.goto('/');
+  await page.locator('#settingsOpen').click();
+  await page.locator('#tab-voice').click();
+  await page.locator('#refreshMicrophones').click();
+  await expect(page.locator('#microphoneDevice option')).toHaveCount(2);
+  await page.locator('#microphoneDevice').selectOption('fixture-mic');
+  expect(await page.evaluate(()=>window.captureRequests)).toEqual([]);
+  await page.keyboard.press('Escape');
+  await page.locator('#mic').click();
+  await expect.poll(()=>page.evaluate(()=>window.captureRequests)).toEqual([{audio:{deviceId:{exact:'fixture-mic'}}}]);
+  await expect(page.locator('#mic')).toBeEnabled();
 });
