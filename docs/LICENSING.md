@@ -7,7 +7,8 @@
 | Встроенный компонент | Условия |
 | --- | --- |
 | Marked 15.0.12 | [MIT и историческое уведомление Markdown](../static/assets/licenses/Marked.md) |
-| KaTeX 0.19.1 и ресурсы его дистрибутива | [MIT](../static/assets/licenses/KaTeX.txt) |
+| KaTeX 0.19.1, JS и CSS | [MIT](../static/assets/licenses/KaTeX.txt) |
+| Шрифты KaTeX | [OFL 1.1 с исходными уведомлениями](../static/assets/fonts/KaTeX-OFL.txt) |
 | DOMPurify 3.4.17 | Вариант [Apache 2.0](../static/assets/licenses/DOMPurify-Apache-2.0.txt) из поставляемого двойного лицензирования |
 | Onest, Unbounded | [OFL](../static/assets/fonts/Onest-OFL.txt), [OFL](../static/assets/fonts/Unbounded-OFL.txt) |
 
