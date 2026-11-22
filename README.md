@@ -4,7 +4,7 @@
 
 **Ваш компьютер. Ваш помощник. Ваши правила.** LocalMind отвечает на русском с помощью локальной модели и выполняет разрешённые действия с приложениями и файлами. Можно написать вопрос или произнести его. Расшифровку можно исправить до отправки.
 
-[Скачать исходники](https://github.com/wiseakk/LocalMind/releases) · [Установить](#установка) · [Сценарий демонстрации](docs/QUICK_DEMO.md) · [English](README.en.md)
+[Скачать LocalMind](https://github.com/wiseakk/LocalMind/releases) · [Установить](#установка) · [Сценарий демонстрации](docs/QUICK_DEMO.md) · [English](README.en.md)
 
 ![Работающий LocalMind. Главный экран с полем диалога, микрофоном и историей бесед](docs/screenshots/home.png)
 
@@ -21,7 +21,7 @@
 
 | Платформа | Как начать |
 | --- | --- |
-| **CachyOS / Arch x86_64 · Linux Alpha** | Проверенная графическая среда — CachyOS с Hyprland/Wayland. Если в Releases есть пакет для вашей системы, установите его через `pacman -U` и запустите `localmind`. Запуск из исходников и настройка голоса — в [инструкции Linux](docs/LINUX_INSTALL.md). |
+| **CachyOS / Arch x86_64 · Linux Alpha** | Проверенная графическая среда — CachyOS с Hyprland/Wayland. Скачайте [пакет rc3-5 и SHA‑256](https://github.com/wiseakk/LocalMind/releases/tag/v1.0.0-rc3.5-arch). Установите через `pacman -U` и запустите `localmind`. Запуск из исходников и настройка голоса — в [инструкции Linux](docs/LINUX_INSTALL.md). |
 | **Windows 10/11 · RC3** | Доступны [исходники Windows](https://github.com/wiseakk/LocalMind/tree/release/1.0.0-rc3) и [запуск через PowerShell](docs/WINDOWS_INSTALL.md). Приёмка актуального установщика, микрофона и GPU остаётся отдельной задачей. |
 
 [Releases](https://github.com/wiseakk/LocalMind/releases) содержит исходники и доступные сборки. Для первого запуска с моделями обычно нужна сеть. После подготовки диалог и голос могут работать через loopback без внешнего подключения.

@@ -69,7 +69,8 @@ env LOCALMIND_DATA_DIR="$PWD/.test-artifacts/linux-profile" OLLAMA_URL=http://12
 ## Arch-пакет
 
 Сборка rc3-5 использует системные зависимости и не включает голосовые
-библиотеки. Установите пакет через `sudo pacman -U ./localmind-1.0.0rc3-5-x86_64.pkg.tar.zst`.
+библиотеки. Скачайте [пакет rc3-5 и SHA‑256](https://github.com/wiseakk/LocalMind/releases/tag/v1.0.0-rc3.5-arch).
+Сверьте скачанный файл командой `sha256sum --check SHA256SUMS`. Установите пакет через `sudo pacman -U ./localmind-1.0.0rc3-5-x86_64.pkg.tar.zst`.
 После установки откройте **LocalMind** из меню или выполните `localmind`.
 Чтобы проверить и воспроизвести сборку, см. [сборочные инструкции](PACKAGING.md).
 
