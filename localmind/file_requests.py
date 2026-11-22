@@ -59,15 +59,27 @@ def _resolve_target(target, operation):
     """Resolve lexically, without enumeration, reading bytes or creating grants."""
     from .file_access import file_access
     from .personal_permissions import known_folder
-    target = _unquote_target(target)
+    unquoted = _unquote_target(target)
     try:
-        named = re.fullmatch(r'([^/\\:]+)\s+в\s+папке\s+([^/\\:]+)\s+на\s+рабочем\s+столе', target, re.I)
+        named = re.fullmatch(r'([^/\\:]+)\s+в\s+папке\s+([^/\\:]+)\s+на\s+рабочем\s+столе', unquoted, re.I)
+        scoped = re.fullmatch(r'([^/\\:]+?)\s+(?:в|из)\s+папк[еи]\s+(.+)', target, re.I)
         if named:
             filename, folder = (value.strip() for value in named.groups())
             if any(value in ('.', '..') or value.rstrip(' .') != value for value in (filename, folder)):
                 raise FileAccessError('Некорректное имя файла или папки.')
             path = known_folder('desktop') / folder / filename
+            target = str(path)
+        elif scoped:
+            filename, folder = (_unquote_target(value.strip()) for value in scoped.groups())
+            if not filename or filename in ('.', '..') or filename.rstrip(' .') != filename:
+                raise FileAccessError('Некорректное имя файла.')
+            parent = Path(folder)
+            if not parent.is_absolute():
+                raise FileAccessError('Укажи полный локальный путь к папке.')
+            path = parent / filename
+            target = str(path)
         else:
+            target = unquoted
             path = Path(target)
         if (not path.is_absolute() or str(path).startswith(('\\\\', '//'))
                 or '..' in path.parts or not path.name or len(str(path)) > 1024
