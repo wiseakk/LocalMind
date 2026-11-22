@@ -6,6 +6,7 @@ OS identity and permissions before every side effect.
 """
 from dataclasses import dataclass
 import os
+import sys
 
 from .results import ActionResult, refused
 from .generation import check_cancelled
@@ -42,6 +43,10 @@ def _windows():
 
 def _open(args, owner):
     from .agent import open_app
+    if sys.platform == 'linux':
+        from .hyprland_windows import available
+        if not available():
+            return open_app(args['app_id'])
     return _windows().open_app(args['app_id'], open_app)
 
 
@@ -156,8 +161,17 @@ class CapabilityRegistry:
         return result
 
     def snapshot(self):
+        linux = set()
+        if sys.platform == 'linux':
+            from .hyprland_windows import available
+            linux.update(('apps.open', 'files.search', 'files.read_selected_file', 'files.read_file',
+                          'files.find_latest_pdf_in_downloads',
+                          'files.list_directory', 'files.describe_selected_file', 'files.prepare_mutation',
+                          'devices.list_enabled'))
+            if available():
+                linux.update(('apps.list_running', 'apps.focus', 'apps.focus_window'))
         return [{'name': t.name, 'arguments': t.schema(), 'permission': t.permission,
-                 'available': t.name == 'set_light' or os.name == 'nt', 'description': t.description}
+                 'available': t.name == 'set_light' or os.name == 'nt' or t.name in linux, 'description': t.description}
                 for t in self.tools.values()]
 
 

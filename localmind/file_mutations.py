@@ -12,9 +12,11 @@ import hashlib
 import os
 from pathlib import Path
 import secrets
+import stat
 import time
 
-from .file_access import FileAccessError, _checked, _fingerprint, _hold, _identity, _stream_fingerprint, file_access
+from .file_access import (FileAccessError, _checked, _directory_fd, _fingerprint, _hold, _identity,
+                          _stream_fingerprint, file_access)
 from .personal_permissions import ordinary_path
 from .results import ActionResult, refused
 
@@ -48,12 +50,14 @@ def _parents_held(path):
 
 
 @contextmanager
-def _exact_handle(path, create=False):
+def _exact_handle(path, create=False, directory=None):
     """Windows deny-write/delete handle; ancestors are already held by caller."""
     if os.name != 'nt':
-        descriptor = os.open(path, os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0) | (os.O_CREAT | os.O_EXCL if create else 0), 0o600)
+        descriptor = os.open(path.name, os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK
+                             | (os.O_CREAT | os.O_EXCL if create else 0), 0o600, dir_fd=directory)
         with os.fdopen(descriptor, 'r+b') as stream:
-            if _identity(path) != (os.fstat(stream.fileno()).st_dev, os.fstat(stream.fileno()).st_ino):
+            opened = os.fstat(stream.fileno())
+            if not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1 or _identity(path) != (opened.st_dev, opened.st_ino):
                 raise FileAccessError('Цель изменилась.')
             yield stream, None
         return
@@ -99,6 +103,25 @@ def _handle_move(handle, destination):
     kernel.SetFileInformationByHandle.argtypes = [w.HANDLE, ctypes.c_int, ctypes.c_void_p, w.DWORD]
     if not kernel.SetFileInformationByHandle(handle, 3, ctypes.byref(rename), ctypes.sizeof(rename)):
         raise FileAccessError('Windows отклонила перемещение. Существующие цели не заменяются.')
+
+
+def _verified_directory(stack, path, expected):
+    directory = stack.enter_context(_directory_fd(path))
+    info = os.fstat(directory)
+    if (info.st_dev, info.st_ino) != expected:
+        raise FileAccessError('Родительская папка изменилась.')
+    return directory
+
+
+def _move_noreplace(directory, name, target_directory, new_name):
+    # Linux atomic rename without replacing a target created concurrently.
+    libc = ctypes.CDLL(None, use_errno=True)
+    rename = getattr(libc, 'renameat2', None)
+    if rename is None:
+        raise FileAccessError('Безопасное перемещение недоступно на этой системе.')
+    rename.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint]
+    if rename(directory, os.fsencode(name), target_directory, os.fsencode(new_name), 1) != 0:
+        raise FileAccessError('Не удалось переместить файл без перезаписи цели.')
 
 
 class FileMutations:
@@ -205,15 +228,20 @@ class FileMutations:
                     raise FileAccessError('Разрешение отозвано.')
                 path = self._target(pending.scope, str(pending.path.relative_to(root)), pending.operation)
                 with ExitStack() as stack:
+                    directory = target_directory = None
                     stack.enter_context(_parents_held(path))
                     if _identity(_checked(path.parent)) != pending.parent_identity:
                         raise FileAccessError('Родительская папка изменилась.')
+                    if os.name != 'nt':
+                        directory = _verified_directory(stack, path.parent, pending.parent_identity)
                     if pending.destination:
                         destination = self._target(pending.scope, str(pending.destination.relative_to(root)), pending.operation)
                         stack.enter_context(_parents_held(destination))
                         if destination.exists() or _identity(destination.parent) != pending.destination_parent_identity:
                             raise FileAccessError('Цель перемещения изменилась.')
-                    with _exact_handle(path, pending.operation == 'create') as (stream, handle):
+                        if os.name != 'nt':
+                            target_directory = _verified_directory(stack, destination.parent, pending.destination_parent_identity)
+                    with _exact_handle(path, pending.operation == 'create', directory) as (stream, handle):
                         if pending.expected is not None:
                             # Hash the locked handle, not a pathname reopened after validation.
                             if _stream_fingerprint(stream, path.suffix.casefold()) != pending.expected:
@@ -221,6 +249,11 @@ class FileMutations:
                         self.access.personal_mode.check_file(path, pending.operation)
                         if pending.destination:
                             self.access.personal_mode.check_file(pending.destination, pending.operation)
+                        if directory is not None:
+                            found = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
+                            opened = os.fstat(stream.fileno())
+                            if not os.path.samestat(found, opened) or found.st_nlink != 1:
+                                raise FileAccessError('Цель изменилась.')
                         if pending.operation in ('create', 'overwrite'):
                             stream.seek(0)
                             stream.write(pending.content)
@@ -234,14 +267,12 @@ class FileMutations:
                             if handle:
                                 _handle_delete(handle)
                             else:
-                                path.unlink()
+                                os.unlink(path.name, dir_fd=directory)
                         else:
                             if handle:
                                 _handle_move(handle, pending.destination)
                             else:
-                                # Hard-link + unlink avoids overwriting an unexpected destination.
-                                os.link(path, pending.destination, follow_symlinks=False)
-                                path.unlink()
+                                _move_noreplace(directory, path.name, target_directory, destination.name)
                     if pending.operation == 'delete' and path.exists():
                         raise FileAccessError('Удаление запрошено, но файл всё ещё существует.')
                     if pending.operation == 'move' and (path.exists() or not pending.destination.is_file()):

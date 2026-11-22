@@ -9,7 +9,7 @@ import time
 from urllib.parse import urlsplit
 import httpx
 from .paths import PRIVATE, atomic_json, ordinary_tree
-from .secret_store import protect, unprotect
+from .secret_store import protect, release, unprotect
 from .results import ActionResult, refused
 
 ENTITY = re.compile(r'(light|switch)\.[a-z0-9_]{1,100}')
@@ -57,6 +57,7 @@ class HomeAssistant:
         self.clock, self.sleep = clock, sleep
         self.lock = RLock()
         self.origin, self.token, self.approved = '', '', {}
+        self._token_reference = None
         self.demo_requested = False
         self.discovery = {}
         self.problem = None
@@ -70,6 +71,7 @@ class HomeAssistant:
                     return
                 self.origin = local_origin(config['origin'])
                 self.token = self.unprotect_token(config['token'])
+                self._token_reference = config['token']
                 for item in config.get('approved', [])[:100]:
                     entity = entity_id(item['entity_id'])
                     key = 'ha-' + hashlib.sha256(entity.encode()).hexdigest()[:24]
@@ -121,7 +123,14 @@ class HomeAssistant:
             # Encryption and disk write must succeed before changing live state.
             approved = self.approved if self.origin == origin and self.token == token else {}
             if self.path:
-                atomic_json(self.path, {'origin': origin, 'token': self.protect_token(token), 'approved': list(approved.values())})
+                reference = self.protect_token(token)
+                try:
+                    atomic_json(self.path, {'origin': origin, 'token': reference, 'approved': list(approved.values())})
+                except Exception:
+                    release(reference)
+                    raise
+                release(self._token_reference)
+                self._token_reference = reference
             self.origin, self.token, self.approved = origin, token, approved
             self.demo_requested = False
             self.discovery, self.problem = {}, None
@@ -131,6 +140,8 @@ class HomeAssistant:
         with self.lock:
             if self.path:
                 atomic_json(self.path, {'mode': 'DEMO'})
+                release(self._token_reference)
+                self._token_reference = None
             self.origin, self.token, self.approved, self.discovery, self.problem = '', '', {}, {}, None
             self.demo_requested = True
         return self.public()
@@ -183,7 +194,7 @@ class HomeAssistant:
             else:
                 changed.pop(key, None)
             if self.path:
-                atomic_json(self.path, {'origin': self.origin, 'token': self.protect_token(self.token), 'approved': list(changed.values())})
+                atomic_json(self.path, {'origin': self.origin, 'token': self._token_reference, 'approved': list(changed.values())})
             self.approved = changed
             return self.public()
 

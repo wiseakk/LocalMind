@@ -17,6 +17,7 @@ from pathlib import Path
 import re
 import struct
 import subprocess
+import sys
 import threading
 import time
 import unicodedata
@@ -275,6 +276,7 @@ class AppSource:
     launch_type: str = 'win32'
     launch_id: str = ''
     icon: str = ''
+    aliases: tuple[str, ...] = ()
 
 
 def _shortcut_source(path: Path) -> AppSource:
@@ -292,6 +294,10 @@ def _shortcut_source(path: Path) -> AppSource:
 
 def discover_sources(report=None, portable_roots=()) -> Iterable[AppSource]:
     """Bounded read-only scan; never follows directory reparse points."""
+    if sys.platform == 'linux':
+        from .linux_apps import discover
+        yield from discover(report)
+        return
     if os.name != 'nt':
         if report is not None:
             report['unavailable_providers'].append('Windows')
@@ -617,8 +623,12 @@ def _entry(source: AppSource, digest_cache=None) -> AppEntry:
                  r'удалени[ея]\s+программ|сброс\s+настроек)', normalize_name(source.name)):
         raise AppError('Служебный или изменяющий настройки компонент не является приложением.')
     raw, arguments, source_digest = source.read()
-    target = validate_executable(raw, arguments)
-    if source.launch_type not in ('win32', 'packaged', 'steam'):
+    if source.launch_type == 'linux' and sys.platform == 'linux':
+        from .linux_apps import _executable
+        target = _executable(raw)
+    else:
+        target = validate_executable(raw, arguments)
+    if source.launch_type not in ('win32', 'packaged', 'steam', 'linux'):
         raise AppError('Неподдерживаемый тип запуска.')
     if source.launch_type == 'steam' and not re.fullmatch(r'[1-9][0-9]{0,9}', source.launch_id):
         raise AppError('Неверный идентификатор Steam.')
@@ -635,11 +645,14 @@ def _entry(source: AppSource, digest_cache=None) -> AppEntry:
     fingerprint = hashlib.sha256((source_digest + '\0' + str(target).casefold() + '\0' + target_digest).encode()).hexdigest()
     # Start Menu, App Paths and a running process describe the same launch
     # identity. Its ID must survive changes in provider enumeration order.
-    identity = '\0'.join((str(target).casefold(), source.launch_type, source.launch_id))
+    identity = '\0'.join((str(target) if source.launch_type == 'linux' else str(target).casefold(),
+                          source.launch_type, source.launch_id))
     app_id = 'app-' + hashlib.sha256(identity.encode()).hexdigest()[:20]
     name = source.name[:120]
     aliases = tuple(dict.fromkeys(normalize_name(item) for item in (
         name, target.stem, *KNOWN_ALIASES.get(target.stem.casefold(), ()), app_id,
+        *(('терминал', 'китти') if source.launch_id == 'kitty.desktop' else ()),
+        *source.aliases,
     ) if normalize_name(item)))
     return AppEntry(app_id, name, target, aliases, fingerprint, source, (source.origin,),
                     source.launch_type, source.launch_id, source.icon or str(target))
@@ -803,6 +816,10 @@ class AppCatalog:
 
     @staticmethod
     def _target_permitted(entry):
+        if entry.launch_type == 'linux':
+            # Catalog entries are constructed and revalidated by the Linux
+            # adapter against root-owned executable roots.
+            return sys.platform == 'linux'
         from .personal_permissions import ordinary_path, known_folder, foreign_profile_roots
         try:
             profile = known_folder('profile')
@@ -996,7 +1013,10 @@ class AppCatalog:
                 with _launch_guard(entry.target):
                     self._revalidate(app_id)
                     self.check_permission(app_id)
-                    if entry.launch_type == 'steam':
+                    if entry.launch_type == 'linux':
+                        from .linux_apps import launch
+                        result = launch(entry)
+                    elif entry.launch_type == 'steam':
                         from .results import ActionResult
                         if app_id in self._steam_requested:
                             result = ActionResult(True, 'open_app', target, 'launch_pending',
@@ -1021,7 +1041,7 @@ class AppCatalog:
             return {**result.to_dict(), 'duration_ms': round((time.perf_counter() - started) * 1000, 2)}
         except (AppError, OSError) as exc:
             # Exception text is controlled here, OS errors/paths are not reflected.
-            error = str(exc) if isinstance(exc, AppError) else 'Windows отклонила запуск приложения.'
+            error = str(exc) if isinstance(exc, AppError) else 'Система отклонила запуск приложения.'
             self.policy.record('launch', app_id, 'denied', reason=error)
             return {'success': False, 'action': 'open_app', 'resolved_target': target,
                     'execution_status': 'not_executed', 'observed_state': None,

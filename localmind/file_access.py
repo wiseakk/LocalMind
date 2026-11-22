@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 import secrets
 import stat
+import sys
 import time
 from threading import RLock
 
@@ -25,6 +26,9 @@ class FileAccessError(ValueError):
 
 
 def downloads_folder():
+    if sys.platform == 'linux':
+        from .linux_paths import user_directory
+        return user_directory('downloads')
     if os.name != 'nt':
         raise FileAccessError('Системная папка Загрузки доступна только в Windows.')
     # FOLDERID_Downloads; do not use a model/environment supplied folder.
@@ -114,11 +118,42 @@ def _locked_path(path, directory=False):
         yield
 
 
+@contextmanager
+def _directory_fd(path):
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    descriptor = os.open(path.anchor, flags)
+    try:
+        for part in path.parts[1:]:
+            if part == '..':
+                raise FileAccessError('Переходы к родительским папкам запрещены.')
+            child = os.open(part, flags, dir_fd=descriptor)
+            os.close(descriptor)
+            descriptor = child
+        yield descriptor
+    finally:
+        os.close(descriptor)
+
+
+@contextmanager
+def _read_handle(path, identity):
+    if os.name == 'nt':
+        with path.open('rb') as stream:
+            yield stream
+        return
+    with _directory_fd(path.parent) as directory:
+        fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        with os.fdopen(fd, 'rb') as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or (info.st_dev, info.st_ino) != identity:
+                raise FileAccessError('Файл изменился во время проверки.')
+            yield stream
+
+
 def _fingerprint(path):
     before = path.stat(follow_symlinks=False)
     if not stat.S_ISREG(before.st_mode) or before.st_size > 64 * 1024 * 1024:
         raise FileAccessError('Документ должен быть обычным файлом размером до 64 МБ.')
-    with path.open('rb') as source:
+    with _read_handle(path, (before.st_dev, before.st_ino)) as source:
         snapshot = _stream_fingerprint(source, path.suffix.casefold())
         # Bind the checked pathname to the hashed handle. Compare only identity
         # across these APIs: Windows ctime semantics are not interchangeable.
@@ -579,7 +614,8 @@ class FileAccess:
                 raise FileAccessError('Некорректная цель чтения.')
             relative = Path(relative_path)
             if (relative.is_absolute() or relative.drive or '..' in relative.parts
-                    or ':' in relative_path or '\x00' in relative_path):
+                    or ':' in relative_path or '\x00' in relative_path
+                    or (os.name != 'nt' and '\\' in relative_path)):
                 raise FileAccessError('Нужен точный относительный путь внутри разрешённой области.')
             with self._lock, self.personal_mode._lock:
                 self._sync_policy()
@@ -622,7 +658,12 @@ class FileAccess:
                         raise FileAccessError('Файл изменился. Найди его повторно.')
                     if selected.stamp[2] > 10 * 1024 * 1024:
                         raise FileAccessError('Для извлечения текста выбери документ до 10 МиБ.')
-                    data = selected.path.read_bytes()
+                    with _read_handle(selected.path, selected.stamp[:2]) as stream:
+                        data = stream.read(10 * 1024 * 1024 + 1)
+                        if len(data) > 10 * 1024 * 1024 or not self._verify_selected(selected):
+                            raise FileAccessError('Файл изменился во время чтения.')
+                        if selected.digest and hashlib.sha256(data).hexdigest() != selected.digest:
+                            raise FileAccessError('Файл изменился во время чтения.')
                     name = selected.path.name
                     if selected.path.suffix.casefold() == '.markdown':
                         name += '.md'

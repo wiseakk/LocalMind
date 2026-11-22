@@ -14,6 +14,7 @@ from dataclasses import dataclass, replace
 import os
 from pathlib import Path
 import secrets
+import sys
 import threading
 import time
 import uuid
@@ -194,7 +195,8 @@ class WindowTools:
 
     def _catalog_ids(self):
         catalog.aliases()  # Discover once; launch permission is not inferred.
-        return [item['id'] for item in catalog.entries() if any(item['permissions'].values())] + ['calculator', 'notepad']
+        builtins = ['calculator', 'notepad'] if os.name == 'nt' else []
+        return [item['id'] for item in catalog.entries() if any(item['permissions'].values())] + builtins
 
     @contextmanager
     def _catalog_target(self, app_id):
@@ -245,7 +247,9 @@ class WindowTools:
         if len(self._selections) >= self.capacity:
             return None
         marker = secrets.randbits(ctypes.sizeof(ctypes.c_void_p) * 8 - 1) or 1
-        if self.backend.operate(app.path, native, self._property, marker, 'stamp') != 'stamped':
+        native_markers = getattr(self.backend, 'native_markers', True)
+        operation, expected = ('stamp', 'stamped') if native_markers else ('verify', 'verified')
+        if self.backend.operate(app.path, native, self._property, marker, operation) != expected:
             return None
         record = WindowSelection('win-' + uuid.uuid4().hex, app, native, marker, self.clock() + self.ttl)
         record.policy_generation = generation
@@ -311,7 +315,10 @@ class WindowTools:
                                 break
                             record = self._record(app, native)
                             if record:
-                                windows.append(self._public(record))
+                                details = self._public(record)
+                                if hasattr(self.backend, 'is_active'):
+                                    details['active'] = self.backend.is_active(app.path, native)
+                                windows.append(details)
                             else:
                                 unknown.append(key)
                     except (AppError, OSError, ValueError, AttributeError):
@@ -490,7 +497,9 @@ class WindowTools:
                                                 status_text=f'{app.name}: выбранное окно закрыто.', data=facts)
                         return ActionResult(True, action, app.id, 'request_accepted', None,
                             status_text=f'{app.name}: запрос закрытия отправлен; исчезновение окна пока не подтверждено.', data=facts)
-                    message = ('Windows не разрешила вывести окно на передний план. Выбери его через панель задач.'
+                    denied = ('Hyprland не подтвердил фокус выбранного окна.' if hasattr(self.backend, 'is_active')
+                              else 'Windows не разрешила вывести окно на передний план. Выбери его через панель задач.')
+                    message = (denied
                                if state == 'foreground_denied' else
                                'Окно осталось свёрнутым после запроса восстановления. Открой его через панель задач.'
                                if state == 'restore_pending' else 'Windows отклонила запрос к выбранному окну.')
@@ -532,4 +541,8 @@ class WindowTools:
             self._selections.clear()
 
 
-window_tools = WindowTools()
+if sys.platform == 'linux':
+    from .hyprland_windows import HyprlandWindowBackend
+    window_tools = WindowTools(backend=HyprlandWindowBackend())
+else:
+    window_tools = WindowTools()

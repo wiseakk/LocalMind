@@ -13,7 +13,7 @@ import re
 import stat
 from threading import RLock
 
-from .file_access import _checked, _locked_path
+from .file_access import _checked, _locked_path, _read_handle
 from .settings import ROOT
 
 MAX_SOURCES = 16
@@ -91,7 +91,7 @@ class LocalRetrieval:
             self.policy.check_file(path, 'read', legacy=True)
             if self._metadata(source_id) != (path, stamp, fingerprint):
                 raise RetrievalError('Источник изменился во время проверки.')
-            with path.open('rb') as stream:
+            with _read_handle(path, stamp[:2]) as stream:
                 data = stream.read(MAX_SOURCE_BYTES + 1)
             if len(data) > MAX_SOURCE_BYTES or _stamp(path) != stamp:
                 raise RetrievalError('Источник изменился во время чтения.')

@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import sys
 import copy
 import time
 from threading import RLock
@@ -62,6 +63,9 @@ def ordinary_path(path):
          *(APP_ROOT / name for name in ('package.json', 'package-lock.json', 'start.py', 'AGENTS.md', 'DEV_CREW_START.txt')))
     if any(candidate == root or root in candidate.parents for root in protected):
         return False
+    if sys.platform == 'linux' and any(candidate.is_relative_to(root) for root in (
+            '/boot', '/dev', '/etc', '/proc', '/run', '/sys', '/usr', '/var/lib')):
+        return False
     # A folder grant never includes another Windows account or shared profiles.
     if os.name == 'nt':
         profile = known_folder('profile')
@@ -108,6 +112,9 @@ MAX_POLICY_BYTES = 1024 * 1024
 
 def known_folder(name):
     """Current token's Known Folders, including redirected fixed-drive folders."""
+    if sys.platform == 'linux':
+        from .linux_paths import user_directory
+        return user_directory(name)
     if os.name != 'nt':
         return Path.home() if name == 'profile' else Path.home() / name.title()
     import uuid
