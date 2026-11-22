@@ -23,7 +23,7 @@ def test_build_keeps_source_identity_through_runtime_and_asset_copies(tmp_path, 
         (root / folder).mkdir(parents=True)
     (root / 'static/index.html').write_text(
         '<span class="breadcrumb">Личное пространство</span>', encoding='utf-8')
-    for name in ('RELEASE_NOTES.md', 'KNOWN_ISSUES.md', 'MANUAL_QA.md'):
+    for name in ('LICENSE', 'RELEASE_NOTES.md', 'KNOWN_ISSUES.md', 'MANUAL_QA.md'):
         (root / name).write_text(name)
     asset = tmp_path / 'assets/silero/model.pt'
     asset.parent.mkdir(parents=True)
@@ -41,7 +41,7 @@ def test_build_keeps_source_identity_through_runtime_and_asset_copies(tmp_path, 
     source['sources'] = {p.relative_to(root).as_posix(): builder.sha256(p)
                          for p in root.rglob('*') if p.is_file()}
     monkeypatch.setattr(builder, 'ROOT', root)
-    monkeypatch.setattr(builder, 'source_identity', lambda _: dict(source))
+    monkeypatch.setattr(builder, 'source_identity', lambda _, **kwargs: dict(source))
     args = ['build_windows.py', '--output', str(output), '--iscc', str(iscc)]
     if offline:
         args += ['--offline-assets', str(asset.parents[1]), '--offline-gguf', str(gguf), '--offline-license', 'MIT']
@@ -80,6 +80,8 @@ def test_build_keeps_source_identity_through_runtime_and_asset_copies(tmp_path, 
     monkeypatch.setattr(builder, 'write_source_archive', archive)
     builder.main()
     provenance = json.loads((output / 'build-provenance.json').read_text(encoding='utf-8'))
+    assert (output / 'LocalMind' / 'LICENSE').read_text() == 'LICENSE'
+    assert provenance['payload_sha256']['LICENSE'] == source['sources']['LICENSE']
     assert provenance['commit'] == source['commit']
     assert provenance['branch'] == source['branch']
     assert provenance['voice_assets_bundled'] is offline
@@ -116,3 +118,22 @@ def test_resume_rejects_changed_dependencies_archive_or_inputs(tmp_path, builder
 def test_resume_cannot_download_missing_runtime_or_archive(tmp_path, builder):
     with pytest.raises(ValueError, match='runtime/archive missing'):
         builder.dependency_stage({}, tmp_path / 'runtime', tmp_path / 'python.zip')
+
+
+def test_build_candidate_requires_the_exact_commit(tmp_path, monkeypatch, builder):
+    support = importlib.import_module('release_support')
+    current = 'a' * 40
+    answers = {
+        ('rev-parse', 'HEAD'): current,
+        ('branch', '--show-current'): 'main',
+        ('status', '--porcelain', '--untracked-files=all'): '',
+        ('merge-base', '--is-ancestor', support.RELEASE_BASE, current): '',
+        ('tag', '--points-at', current): '',
+    }
+    monkeypatch.setattr(support, 'git', lambda _, *args: answers[args])
+    monkeypatch.setattr(support.subprocess, 'check_output', lambda *args: b'')
+    with pytest.raises(ValueError, match='full SHA'):
+        support.source_identity(tmp_path, candidate_commit=current[:7])
+    with pytest.raises(ValueError, match='Build from release'):
+        support.source_identity(tmp_path)
+    assert support.source_identity(tmp_path, candidate_commit=current)['commit'] == current

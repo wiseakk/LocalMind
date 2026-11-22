@@ -37,6 +37,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--offline-assets', type=Path, help='Previously prepared model directory; validated against release manifest')
     parser.add_argument('--iscc', type=Path, default=Path('C:/Program Files (x86)/Inno Setup 6/ISCC.exe'))
+    parser.add_argument('--candidate-commit', help='Full SHA of the clean checkout for a validation build')
     parser.add_argument('--resume', action='store_true', help='Validate and finish an interrupted build in dist/LocalMind')
     parser.add_argument('--offline-gguf', type=Path, help='Optional reviewed GGUF included for offline import into Ollama')
     parser.add_argument('--offline-license', help='License identifier for the optional GGUF')
@@ -50,7 +51,7 @@ def main():
     # Fail before downloads, dependency installation or payload mutation.
     problems = []
     try:
-        source_info = source_identity(ROOT)
+        source_info = source_identity(ROOT, candidate_commit=args.candidate_commit)
     except (ValueError, subprocess.CalledProcessError) as exc:
         problems.append(str(exc))
     if sys.version_info[:2] != (3, 11) or platform.machine().upper() not in ('AMD64', 'X86_64'):
@@ -147,7 +148,7 @@ def main():
     installed = subprocess.check_output([runtime / 'python.exe', '-c',
         'import importlib.metadata,json; print(json.dumps(sorted([(d.metadata["Name"],d.version) for d in importlib.metadata.distributions()])))'],
         cwd=payload, env=environment).decode('utf-8')
-    if source_identity(ROOT) != source_info:
+    if source_identity(ROOT, candidate_commit=args.candidate_commit) != source_info:
         raise SystemExit('Sources changed during build; no installer published. Payload preserved.')
     bundled_voice = (payload / 'offline-assets').is_dir()
     bundled_llm = (payload / 'offline-llm').is_dir()
