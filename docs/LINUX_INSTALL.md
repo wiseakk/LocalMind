@@ -66,37 +66,28 @@ env LOCALMIND_DATA_DIR="$PWD/.test-artifacts/linux-profile" OLLAMA_URL=http://12
   QT_QPA_PLATFORM=wayland .venv/bin/python -m localmind.desktop
 ```
 
-## Arch-пакет из checkout
+## Arch-пакет
 
-Начиная с `1.0.0rc3-3` архив содержит голосовой runtime для Python 3.14 x86_64.
-Установите готовый архив через `sudo pacman -U /путь/к/пакету.pkg.tar.zst`.
-Для пересборки нужен `base-devel`, `python-pip` и комплект wheel с хешами
-из `installer/linux/voice-wheels.lock`. Подготовьте его из корня checkout:
+Сборка rc3-5 использует системные зависимости и не включает голосовые
+библиотеки. Установите пакет через `sudo pacman -U ./localmind-1.0.0rc3-5-x86_64.pkg.tar.zst`.
+После установки откройте **LocalMind** из меню или выполните `localmind`.
+Чтобы проверить и воспроизвести сборку, см. [сборочные инструкции](PACKAGING.md).
+
+Для голоса используйте инструкции запуска из исходников выше или отдельное
+окружение рядом с установленной копией. Оно может использовать Qt и системные
+зависимости Arch:
 
 ```sh
-python -m pip download --no-deps --only-binary=:all: --require-hashes \
-  --extra-index-url https://download.pytorch.org/whl/cpu \
-  --dest .test-artifacts/rc3-runtime-wheels -r installer/linux/voice-wheels.lock
-makepkg -si
+voice_env="$HOME/.local/share/LocalMind/voice-env"
+python -m venv --system-site-packages "$voice_env"
+"$voice_env/bin/python" -m pip install faster-whisper 'av==18.1.0' piper-tts
+"$voice_env/bin/python" -m pip install --index-url https://download.pytorch.org/whl/cpu 'torch==2.15.0+cpu'
+cd /usr/lib/localmind
+"$voice_env/bin/python" -m localmind.desktop
 ```
 
-Повтор той же команды на новом checkout обновляет пакет. Если версия или
-релиз совпадают, локальную пересборку запускайте через `makepkg -fsi`.
-Пакет добавляет `/usr/bin/localmind`, desktop entry и иконку. В меню он
-называется **LocalMind**, команда запуска — `localmind`. Рецепт и payload
-проверены сборкой. Установка с системными зависимостями требует ручной
-приёмки на CachyOS.
-
-Для голоса в установленной копии откройте мастер и подготовьте модели.
-Пакет использует отдельный каталог зависимостей под `/usr/lib/localmind`.
-Модели сохраняются в пользовательском профиле. Вручную создавать venv для
-установленной копии больше не требуется.
-
-Обновление и удаление пакета меняют только файлы пакета.
-`sudo pacman -R localmind` оставляет профиль, историю и модели, размещённые
-под `$XDG_DATA_HOME/LocalMind` или `~/.local/share/LocalMind`, а также отдельное
-хранилище Ollama. Для автозапуска по явному выбору можно добавить копию
-desktop entry в `$XDG_CONFIG_HOME/autostart` или `~/.config/autostart`.
+После запуска подготовьте Whisper и Silero в интерфейсе. Профиль и модели
+сохраняются при удалении пакета через `sudo pacman -R localmind`.
 
 ## Диагностика
 
