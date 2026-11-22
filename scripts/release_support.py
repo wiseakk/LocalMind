@@ -7,7 +7,7 @@ import zipfile
 
 
 VERSION = '1.0.0-rc3'
-RELEASE_BASE = '3ead34b00f8ecc712693205f72d0188da349be4c'
+RELEASE_BASE = '87073d5db4f21ac352c26ba53fd1e1fad6867033'
 
 
 def validate_ui_payload(payload):
@@ -31,13 +31,15 @@ def git(root, *args):
     return subprocess.check_output(['git', '-C', str(root), *args]).decode('utf-8').strip()
 
 
-def source_identity(root):
+def source_identity(root, *, candidate_commit=None):
     commit = git(root, 'rev-parse', 'HEAD')
     branch = git(root, 'branch', '--show-current')
     if git(root, 'status', '--porcelain', '--untracked-files=all'):
         raise ValueError('Release requires a clean committed checkout, including untracked source files. See docs/RELEASE_RECOVERY.md.')
-    if branch != 'release/1.0.0-rc3':
-        raise ValueError('Build from release/1.0.0-rc3 after orchestrator integration; preserve RC1/RC2 and DevCrew worktrees.')
+    if candidate_commit is not None and candidate_commit != commit:
+        raise ValueError('Candidate build requires the full SHA of the active commit.')
+    if candidate_commit is None and branch != 'release/1.0.0-rc3':
+        raise ValueError('Build from release/1.0.0-rc3, or supply the exact commit for a candidate check.')
     try:
         git(root, 'merge-base', '--is-ancestor', RELEASE_BASE, commit)
     except subprocess.CalledProcessError:
