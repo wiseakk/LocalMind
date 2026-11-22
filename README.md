@@ -7,7 +7,7 @@
 | CachyOS / Arch x86_64 | Linux Alpha, пакет `1.0.0rc3-4`. Проверки проводились на CachyOS с Hyprland/Wayland. |
 | Windows 10/11 | RC3. Сохранены исходники, история и рецепты сборки. Микрофон и GPU для этой публикации не проверены. |
 
-[Установка Linux](docs/LINUX_INSTALL.md) · [Установка Windows](#windows-rc3) · [Материалы защиты](docs/PRESENTATION.md) · [Примечания к релизу](docs/GITHUB_RELEASE_NOTES.md)
+[Установка Linux](docs/LINUX_INSTALL.md) · [Установка Windows](#windows-rc3) · [Материалы защиты](docs/PRESENTATION.md) · [Релиз исходников](https://github.com/wiseakk/LocalMind/releases/tag/v1.0.0-rc3.4-source)
 
 ## Интерфейс
 
@@ -95,4 +95,4 @@ npm run test:dom
 
 ## Авторы и компоненты
 
-История Git сохраняет авторство проекта и вклад инструментов AI-assisted разработки. Встроенный UI использует Marked, KaTeX, DOMPurify и шрифты Onest и Unbounded. FastAPI, Qt/PySide6, Ollama, faster-whisper и Silero используются как отдельные компоненты. Веса моделей имеют собственные условия и загружаются отдельно. [Лицензии и статус распространения](docs/LICENSING.md)
+LocalMind разработал wiseakk с помощью Codex. Собственный код доступен по [MIT](LICENSE). Второй участник команды выступает на школьной защите. Встроенный UI использует Marked, KaTeX, DOMPurify и шрифты Onest и Unbounded. FastAPI, Qt/PySide6, Ollama, faster-whisper и Silero используются как отдельные компоненты. Веса моделей имеют собственные условия и загружаются отдельно. [Лицензии и статус распространения](docs/LICENSING.md)
