@@ -1,43 +1,67 @@
-# LocalMind
+<picture>
+  <source media="(max-width: 800px)" srcset="docs/brand/hero-mobile.svg">
+  <img width="100%" alt="LocalMind — Your computer. Your assistant. Your rules." src="docs/brand/hero.svg">
+</picture>
 
-![LocalMind — Your computer. Your assistant. Your rules.](docs/brand/localmind.svg)
+<div align="center">
 
-**Ваш компьютер. Ваш помощник. Ваши правила.** LocalMind отвечает на русском с помощью локальной модели и выполняет разрешённые действия с приложениями и файлами. Можно написать вопрос или произнести его. Расшифровку можно исправить до отправки.
+**Голосовой помощник для вашего компьютера.** Понимает русский, отвечает через локальную модель и работает с приложениями и файлами в рамках выданных разрешений.
 
-[Скачать LocalMind](https://github.com/wiseakk/LocalMind/releases) · [Установить](#установка) · [Сценарий демонстрации](docs/QUICK_DEMO.md) · [English](README.en.md)
+[**Скачать**](#скачать) &nbsp;·&nbsp; [Интерфейс](#интерфейс) &nbsp;·&nbsp; [Документация](#документация) &nbsp;·&nbsp; [English](README.en.md)
 
-![Работающий LocalMind. Главный экран с полем диалога, микрофоном и историей бесед](docs/screenshots/home.png)
+</div>
 
-## Попробуйте сами
+## Интерфейс
 
-| Сценарий | Что вы увидите |
-| --- | --- |
-| **Спросить голосом** | Whisper распознаёт речь после записи. Проверьте черновик, отправьте его и прослушайте ответ Silero, если голос подготовлен. [Настройки голоса](docs/screenshots/voice.png) |
-| **Поговорить с локальной моделью** | Спросите «Что такое алгоритм?». Ollama генерирует ответ на этом компьютере. Подтверждён пример с Gemma 4 12B. [Диалог](docs/screenshots/chat.png) |
-| **Открыть приложение** | Выберите установленное приложение, разрешите запуск и попросите его открыть. Результат зависит от доступного системного адаптера. [Каталог](docs/screenshots/apps.png) |
-| **Прочитать файл** | Разрешите чтение демонстрационной папки и укажите файл. Отзовите разрешение и повторите запрос, чтобы увидеть отказ. [Разрешения](docs/screenshots/permissions.png) |
+[![Рабочий экран LocalMind с историей бесед, полем ввода и микрофоном](docs/brand/workspace.webp)](docs/screenshots/home.png)
 
-## Установка
+<picture>
+  <source media="(max-width: 800px)" srcset="docs/brand/interface-mobile.webp">
+  <img width="100%" alt="Три реальных фрагмента LocalMind: настройки голоса, каталог приложений и правила доступа" src="docs/brand/interface.webp">
+</picture>
 
-| Платформа | Как начать |
-| --- | --- |
-| **CachyOS / Arch x86_64 · Linux Alpha** | Проверенная графическая среда — CachyOS с Hyprland/Wayland. Скачайте [пакет rc3-5 и SHA‑256](https://github.com/wiseakk/LocalMind/releases/tag/v1.0.0-rc3.5-arch). Установите через `pacman -U` и запустите `localmind`. Запуск из исходников и настройка голоса — в [инструкции Linux](docs/LINUX_INSTALL.md). |
-| **Windows 10/11 · RC3** | Доступны [исходники Windows](https://github.com/wiseakk/LocalMind/tree/release/1.0.0-rc3) и [запуск через PowerShell](docs/WINDOWS_INSTALL.md). Приёмка актуального установщика, микрофона и GPU остаётся отдельной задачей. |
+[Голос](docs/screenshots/voice.png) &nbsp;·&nbsp; [Приложения](docs/screenshots/apps.png) &nbsp;·&nbsp; [Разрешения](docs/screenshots/permissions.png) &nbsp;·&nbsp; [Диалог](docs/screenshots/chat.png)
 
-[Releases](https://github.com/wiseakk/LocalMind/releases) содержит исходники и доступные сборки. Для первого запуска с моделями обычно нужна сеть. После подготовки диалог и голос могут работать через loopback без внешнего подключения.
+<details>
+<summary><strong>Посмотреть в движении</strong> · короткое превью rc3-6</summary>
+<br>
+<img width="100%" alt="Запись тестового LocalMind rc3-6: запрос с отрицанием, локальный ответ и экран разрешений" src="docs/brand/rc3-6-preview.gif">
+<p>Запись тестового кандидата rc3-6. Доступный пакет Linux указан в разделе «Скачать».</p>
+</details>
 
-## Данные и разрешения
+## Возможности
 
-LocalMind хранит историю и настройки в локальном профиле и слушает только loopback. Запись начинается по кнопке. Для приложений и файлов действуют отдельные правила доступа. Изменения, требующие подтверждения, показывают точную цель перед выполнением. [Политика доступа](docs/ACCESS_POLICY.md) · [Сообщить об уязвимости](SECURITY.md)
+<picture>
+  <source media="(max-width: 800px)" srcset="docs/brand/features-mobile.svg">
+  <img width="100%" alt="Локальный AI на Ollama. Распознавание Whisper и озвучка Silero. Запуск приложений с разрешением. Чтение выбранных папок. История в локальном профиле. Офлайн после загрузки моделей." src="docs/brand/features.svg">
+</picture>
 
-## Под капотом
+## Как это ощущается
 
-Qt WebEngine показывает интерфейс, FastAPI принимает запрос, Ollama выполняет inference, а платформенный адаптер проверяет разрешения и результат. Whisper преобразует речь в текст, Silero озвучивает ответ, SQLite хранит историю.
+> **Вы** &ensp; «Открой калькулятор».<br>
+> **LocalMind** &ensp; Открывает установленный Калькулятор после выдачи разрешения.
 
-[Архитектура и схема потоков](docs/ARCHITECTURE.md) · [Проверки и измерения](docs/DEVELOPMENT_EVIDENCE.md) · [Материалы защиты](docs/PRESENTATION.md)
+Можно также спросить «Что такое алгоритм?» голосом, исправить расшифровку перед отправкой и прослушать ответ после настройки Silero. [Попробовать сценарии](docs/QUICK_DEMO.md)
 
-## Дальше
+## Скачать
 
-Повторная аппаратная приёмка Windows, измерение качества русской речи на согласованном наборе записей и проверка дополнительных Wayland-композиторов.
+**Linux · Alpha** — Arch и CachyOS x86_64. [Пакет rc3-5 и SHA-256](https://github.com/wiseakk/LocalMind/releases/tag/v1.0.0-rc3.5-arch) · [Установка](docs/LINUX_INSTALL.md)
 
-[Внести вклад](CONTRIBUTING.md) · [MIT](LICENSE) · [Лицензии зависимостей и моделей](docs/LICENSING.md)
+**Windows · RC3** — запуск из исходников через PowerShell. [Инструкция для Windows 10/11](docs/WINDOWS_INSTALL.md)
+
+## Документация
+
+[Архитектура](docs/ARCHITECTURE.md) &nbsp;·&nbsp; [Данные и разрешения](docs/ACCESS_POLICY.md) &nbsp;·&nbsp; [Ограничения](docs/KNOWN_LIMITATIONS.md) &nbsp;·&nbsp; [Проверки](docs/DEVELOPMENT_EVIDENCE.md)
+
+---
+
+<picture>
+  <source media="(max-width: 800px)" srcset="docs/brand/signature-mobile.svg">
+  <img width="100%" alt="LocalMind — Your computer. Your rules." src="docs/brand/signature.svg">
+</picture>
+
+<div align="center">
+
+[**wiseakk**](https://github.com/wiseakk) &nbsp;·&nbsp; [Внести вклад](CONTRIBUTING.md) &nbsp;·&nbsp; [Безопасность](SECURITY.md) &nbsp;·&nbsp; [MIT](LICENSE) &nbsp;·&nbsp; [Лицензии моделей](docs/LICENSING.md)
+
+</div>
