@@ -1,5 +1,5 @@
 <picture>
-  <source media="(max-width: 600px)" srcset="docs/brand/hero-mobile.svg">
+  <source media="(max-width: 800px)" srcset="docs/brand/hero-mobile.svg">
   <img width="100%" alt="LocalMind — Your computer. Your assistant. Your rules." src="docs/brand/hero.svg">
 </picture>
 
@@ -16,7 +16,7 @@
 [![Рабочий экран LocalMind с историей бесед, полем ввода и микрофоном](docs/brand/workspace.webp)](docs/screenshots/home.png)
 
 <picture>
-  <source media="(max-width: 600px)" srcset="docs/brand/interface-mobile.webp">
+  <source media="(max-width: 800px)" srcset="docs/brand/interface-mobile.webp">
   <img width="100%" alt="Три реальных фрагмента LocalMind: настройки голоса, каталог приложений и правила доступа" src="docs/brand/interface.webp">
 </picture>
 
@@ -32,7 +32,7 @@
 ## Возможности
 
 <picture>
-  <source media="(max-width: 600px)" srcset="docs/brand/features-mobile.svg">
+  <source media="(max-width: 800px)" srcset="docs/brand/features-mobile.svg">
   <img width="100%" alt="Локальный AI на Ollama. Распознавание Whisper и озвучка Silero. Запуск приложений с разрешением. Чтение выбранных папок. История в локальном профиле. Офлайн после загрузки моделей." src="docs/brand/features.svg">
 </picture>
 
@@ -55,7 +55,10 @@
 
 ---
 
-[![LocalMind — Your computer. Your rules.](docs/brand/signature.svg)](https://github.com/wiseakk/LocalMind)
+<picture>
+  <source media="(max-width: 800px)" srcset="docs/brand/signature-mobile.svg">
+  <img width="100%" alt="LocalMind — Your computer. Your rules." src="docs/brand/signature.svg">
+</picture>
 
 <div align="center">
 
