@@ -20,10 +20,10 @@
 
 ## Всё под рукой
 
-<a href="https://github.com/wiseakk/LocalMind/tree/main/docs/screenshots"><picture>
+<picture>
   <source media="(max-width: 620px)" srcset="docs/brand/showcase/localmind-interface-390.webp">
   <img width="100%" src="docs/brand/showcase/localmind-interface-1100.webp" alt="Реальные экраны: диалог, настройки голоса, каталог приложений и разрешения">
-</picture></a>
+</picture>
 
 [Диалог](https://github.com/wiseakk/LocalMind/blob/main/docs/screenshots/chat.png) · [Голос](https://github.com/wiseakk/LocalMind/blob/main/docs/screenshots/voice.png) · [Приложения](https://github.com/wiseakk/LocalMind/blob/main/docs/screenshots/apps.png) · [Разрешения](https://github.com/wiseakk/LocalMind/blob/main/docs/screenshots/permissions.png)
 
@@ -40,9 +40,9 @@
 
 ## Скачать
 
-<a href="https://github.com/wiseakk/LocalMind/releases"><picture>
+<picture>
   <source media="(max-width: 620px)" srcset="docs/brand/showcase/localmind-download-390.webp">
   <img width="100%" src="docs/brand/showcase/localmind-download-1100.webp" alt="Your computer. Your rules. Linux Alpha и Windows RC3">
-</picture></a>
+</picture>
 
 [Linux Alpha · Arch/CachyOS ↗](https://github.com/wiseakk/LocalMind/releases) · [Windows RC3 · из исходников ↗](https://github.com/wiseakk/LocalMind/blob/main/docs/WINDOWS_INSTALL.md) · [Документация ↗](https://github.com/wiseakk/LocalMind/tree/main/docs) · [English](https://github.com/wiseakk/LocalMind/blob/main/README.en.md)
