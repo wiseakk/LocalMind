@@ -1,67 +1,48 @@
 <picture>
-  <source media="(max-width: 800px)" srcset="docs/brand/hero-mobile.svg">
-  <img width="100%" alt="LocalMind — Your computer. Your assistant. Your rules." src="docs/brand/hero.svg">
+  <source media="(max-width: 620px)" srcset="docs/brand/showcase/localmind-hero-390.webp">
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/brand/showcase/localmind-hero-1100.webp">
+  <img width="100%" src="docs/brand/showcase/localmind-hero.gif" alt="LocalMind · Из голоса в ответ. Волна, локальное ядро и настоящий интерфейс">
 </picture>
 
-<div align="center">
+[**Скачать для Linux ↗**](https://github.com/wiseakk/LocalMind/releases) · [Windows RC3 ↗](https://github.com/wiseakk/LocalMind/blob/main/docs/WINDOWS_INSTALL.md) · [Интерфейс](#всё-под-рукой)
 
-**Голосовой помощник для вашего компьютера.** Понимает русский, отвечает через локальную модель и работает с приложениями и файлами в рамках выданных разрешений.
+*Your computer. Your assistant. Your rules.*
 
-[**Скачать**](#скачать) &nbsp;·&nbsp; [Интерфейс](#интерфейс) &nbsp;·&nbsp; [Документация](#документация) &nbsp;·&nbsp; [English](README.en.md)
-
-</div>
-
-## Интерфейс
-
-[![Рабочий экран LocalMind с историей бесед, полем ввода и микрофоном](docs/brand/workspace.webp)](docs/screenshots/home.png)
+## Голос → Намерение → Действие
 
 <picture>
-  <source media="(max-width: 800px)" srcset="docs/brand/interface-mobile.webp">
-  <img width="100%" alt="Три реальных фрагмента LocalMind: настройки голоса, каталог приложений и правила доступа" src="docs/brand/interface.webp">
+  <source media="(max-width: 620px)" srcset="docs/brand/showcase/localmind-flow-390.webp">
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/brand/showcase/localmind-flow-1100.webp">
+  <img width="100%" src="docs/brand/showcase/localmind-flow.gif" alt="Распознаёт фразу, определяет намерение, проверяет разрешение и открывает Калькулятор">
 </picture>
 
-[Голос](docs/screenshots/voice.png) &nbsp;·&nbsp; [Приложения](docs/screenshots/apps.png) &nbsp;·&nbsp; [Разрешения](docs/screenshots/permissions.png) &nbsp;·&nbsp; [Диалог](docs/screenshots/chat.png)
+Вы говорите «Открой калькулятор». LocalMind распознаёт речь, определяет, какое приложение нужно открыть, и проверяет разрешение. Если запуск разрешён, открывается Калькулятор.
 
-<details>
-<summary><strong>Посмотреть в движении</strong> · короткое превью rc3-6</summary>
-<br>
-<img width="100%" alt="Запись тестового LocalMind rc3-6: запрос с отрицанием, локальный ответ и экран разрешений" src="docs/brand/rc3-6-preview.gif">
-<p>Запись тестового кандидата rc3-6. Доступный пакет Linux указан в разделе «Скачать».</p>
-</details>
+## Всё под рукой
 
-## Возможности
+<a href="https://github.com/wiseakk/LocalMind/tree/main/docs/screenshots"><picture>
+  <source media="(max-width: 620px)" srcset="docs/brand/showcase/localmind-interface-390.webp">
+  <img width="100%" src="docs/brand/showcase/localmind-interface-1100.webp" alt="Реальные экраны: диалог, настройки голоса, каталог приложений и разрешения">
+</picture></a>
+
+[Диалог](https://github.com/wiseakk/LocalMind/blob/main/docs/screenshots/chat.png) · [Голос](https://github.com/wiseakk/LocalMind/blob/main/docs/screenshots/voice.png) · [Приложения](https://github.com/wiseakk/LocalMind/blob/main/docs/screenshots/apps.png) · [Разрешения](https://github.com/wiseakk/LocalMind/blob/main/docs/screenshots/permissions.png)
+
+## Остаётся на компьютере
 
 <picture>
-  <source media="(max-width: 800px)" srcset="docs/brand/features-mobile.svg">
-  <img width="100%" alt="Локальный AI на Ollama. Распознавание Whisper и озвучка Silero. Запуск приложений с разрешением. Чтение выбранных папок. История в локальном профиле. Офлайн после загрузки моделей." src="docs/brand/features.svg">
+  <source media="(max-width: 620px)" srcset="docs/brand/showcase/localmind-privacy-390.webp">
+  <img width="100%" src="docs/brand/showcase/localmind-privacy-1100.webp" alt="Запросы обрабатываются на устройстве. Для загрузки моделей и обновлений может понадобиться интернет.">
 </picture>
 
-## Как это ощущается
+Модель обрабатывает запросы на устройстве. Интернет может понадобиться для загрузки моделей и обновлений.
 
-> **Вы** &ensp; «Открой калькулятор».<br>
-> **LocalMind** &ensp; Открывает установленный Калькулятор после выдачи разрешения.
-
-Можно также спросить «Что такое алгоритм?» голосом, исправить расшифровку перед отправкой и прослушать ответ после настройки Silero. [Попробовать сценарии](docs/QUICK_DEMO.md)
+[Правила доступа ↗](https://github.com/wiseakk/LocalMind/blob/main/docs/ACCESS_POLICY.md)
 
 ## Скачать
 
-**Linux · Alpha** — Arch и CachyOS x86_64. [Пакет rc3-5 и SHA-256](https://github.com/wiseakk/LocalMind/releases/tag/v1.0.0-rc3.5-arch) · [Установка](docs/LINUX_INSTALL.md)
+<a href="https://github.com/wiseakk/LocalMind/releases"><picture>
+  <source media="(max-width: 620px)" srcset="docs/brand/showcase/localmind-download-390.webp">
+  <img width="100%" src="docs/brand/showcase/localmind-download-1100.webp" alt="Your computer. Your rules. Linux Alpha и Windows RC3">
+</picture></a>
 
-**Windows · RC3** — запуск из исходников через PowerShell. [Инструкция для Windows 10/11](docs/WINDOWS_INSTALL.md)
-
-## Документация
-
-[Архитектура](docs/ARCHITECTURE.md) &nbsp;·&nbsp; [Данные и разрешения](docs/ACCESS_POLICY.md) &nbsp;·&nbsp; [Ограничения](docs/KNOWN_LIMITATIONS.md) &nbsp;·&nbsp; [Проверки](docs/DEVELOPMENT_EVIDENCE.md)
-
----
-
-<picture>
-  <source media="(max-width: 800px)" srcset="docs/brand/signature-mobile.svg">
-  <img width="100%" alt="LocalMind — Your computer. Your rules." src="docs/brand/signature.svg">
-</picture>
-
-<div align="center">
-
-[**wiseakk**](https://github.com/wiseakk) &nbsp;·&nbsp; [Внести вклад](CONTRIBUTING.md) &nbsp;·&nbsp; [Безопасность](SECURITY.md) &nbsp;·&nbsp; [MIT](LICENSE) &nbsp;·&nbsp; [Лицензии моделей](docs/LICENSING.md)
-
-</div>
+[Linux Alpha · Arch/CachyOS ↗](https://github.com/wiseakk/LocalMind/releases) · [Windows RC3 · из исходников ↗](https://github.com/wiseakk/LocalMind/blob/main/docs/WINDOWS_INSTALL.md) · [Документация ↗](https://github.com/wiseakk/LocalMind/tree/main/docs) · [English](https://github.com/wiseakk/LocalMind/blob/main/README.en.md)
